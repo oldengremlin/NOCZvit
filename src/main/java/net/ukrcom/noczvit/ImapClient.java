@@ -3,7 +3,6 @@ package net.ukrcom.noczvit;
 import com.sun.mail.imap.IMAPFolder;
 import com.sun.mail.imap.IMAPStore;
 import jakarta.mail.*;
-import jakarta.mail.internet.MimeMultipart;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.ParseException;
@@ -38,10 +37,13 @@ public class ImapClient {
         if (message.isMimeType("text/plain")) {
             // Handle text/plain directly
             Object content = message.getContent();
-            if (content instanceof String) {
-                result = (String) content;
-            } else if (content instanceof InputStream) {
-                result = new String(((InputStream) content).readAllBytes(), "UTF-8");
+            switch (content) {
+                case String string ->
+                    result = string;
+                case InputStream inputStream ->
+                    result = new String(inputStream.readAllBytes(), "UTF-8");
+                default -> {
+                }
             }
         } else if (message.isMimeType("multipart/*")) {
             // Handle multipart messages
@@ -252,7 +254,6 @@ public class ImapClient {
                             } else if (config.isDebug()) {
                                 System.err.println("Skipping PD message due to time filter: unixDate=" + unixDate);
                             }
-                            continue;
                         } else if (subject.matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + (config.isDebug() ? "1-9" : "2-9") + "][0-9]*).*")) {
                             Map<String, Map<String, Map<Long, String>>> tempMsgLogGroup = new HashMap<>();
                             proceedSDH(isInteractive, subject, body, tempMsgLogGroup, unixDate, dateStr);
