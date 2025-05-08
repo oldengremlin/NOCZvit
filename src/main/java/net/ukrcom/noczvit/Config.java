@@ -151,7 +151,9 @@ public class Config {
         System.err.println("  email.toDebug=debug@example.com  Debug recipient email");
         System.err.println();
         System.err.println("  # SNMP settings");
-        System.err.println("  snmp.community=public   SNMP community string");
+        System.err.println("  snmp.community=public         SNMP community string (default for all devices)");
+        System.err.println("  snmp.community.celsius=public SNMP community string for temperature devices (falls back to snmp.community)");
+        System.err.println("  snmp.community.ramos=public   SNMP community string for Ramos devices (falls back to snmp.community)");
         System.err.println("  snmp.jnxOperatingDescr=.1.3.6.1.4.1.2636.3.1.13.1.5  SNMP OID for equipment description");
         System.err.println("  snmp.jnxOperatingTemp=.1.3.6.1.4.1.2636.3.1.13.1.7  SNMP OID for equipment temperature");
         System.err.println("  snmp.hosts=host1:desc=.1.3.6.1.4.1.2636.3.1.13.1.5;temp=.1.3.6.1.4.1.2636.3.1.13.1.7,host2:desc=...  Comma-separated list of hosts with OIDs (format: hostname:desc=OID;temp=OID)");
@@ -263,7 +265,19 @@ public class Config {
     }
 
     public String getSnmpCommunity() {
-        return properties.getProperty("snmp.community");
+        return properties.getProperty("snmp.community", "public");
+    }
+
+    public String getSnmpCommunityCelsius() {
+        return properties.getProperty("snmp.community.celsius", getSnmpCommunity());
+    }
+
+    public String getSnmpCommunityRamos() {
+        return properties.getProperty("snmp.community.ramos", getSnmpCommunity());
+    }
+
+    public String getSnmpHostsSuffix() {
+        return properties.getProperty("snmp.hosts.suffix", "");
     }
 
     public Map<String, Map<String, String>> getHosts() {
@@ -298,6 +312,11 @@ public class Config {
     }
 
     public boolean isValid() {
-        return getEmailFrom() != null && getEmailReplyTo() != null && !getEmailTo().isEmpty();
+        boolean isEmailValid = getEmailFrom() != null && getEmailReplyTo() != null && !getEmailTo().isEmpty();
+        boolean isSnmpValid = true;
+        if (isTemperatureEnabled() || isRamosEnabled()) {
+            isSnmpValid = getSnmpCommunity() != null || getSnmpCommunityCelsius() != null || getSnmpCommunityRamos() != null;
+        }
+        return isEmailValid && isSnmpValid;
     }
 }

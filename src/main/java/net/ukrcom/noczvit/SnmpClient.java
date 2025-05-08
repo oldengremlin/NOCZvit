@@ -47,13 +47,13 @@ public class SnmpClient {
 
         for (String hostname : hostnames) {
             String host = hostname.split(" ")[0];
-            String domain = "***REMOVED***";
+            String domain = config.getSnmpHostsSuffix();
 
             try (Snmp snmp = new Snmp(new DefaultUdpTransportMapping())) {
                 snmp.listen();
 
                 CommunityTarget<Address> target = new CommunityTarget<>();
-                target.setCommunity(new OctetString(config.getSnmpCommunity()));
+                target.setCommunity(new OctetString(config.getSnmpCommunityCelsius()));
                 target.setAddress(new UdpAddress(host + "." + domain + "/161"));
                 target.setVersion(SnmpConstants.version2c);
                 target.setTimeout(5000);
@@ -108,7 +108,7 @@ public class SnmpClient {
                 snmp.listen();
 
                 CommunityTarget<Address> target = new CommunityTarget<>();
-                target.setCommunity(new OctetString(config.getSnmpCommunity()));
+                target.setCommunity(new OctetString(config.getSnmpCommunityRamos()));
                 target.setAddress(new UdpAddress(host + "/161"));
                 target.setVersion(SnmpConstants.version2c);
                 target.setTimeout(5000);

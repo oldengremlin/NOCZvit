@@ -1,5 +1,7 @@
 *.properties
 *.txt
+*.sh
+source.txt
 
 # Compiled class file
 *.class

@@ -26,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Dictionary {
+
     private final Map<Pattern, String> pdDictionary;
     private final Map<Pattern, String> sdhDictionary;
 
@@ -61,7 +62,7 @@ public class Dictionary {
                 }
                 String[] parts = line.split("=", 2);
                 if (parts.length == 2) {
-                    String patternStr = "^" + parts[0].trim() + "$";
+                    String patternStr = parts[0].trim();
                     Pattern pattern = Pattern.compile(patternStr);
                     dictionary.put(pattern, parts[1].trim());
                 }
