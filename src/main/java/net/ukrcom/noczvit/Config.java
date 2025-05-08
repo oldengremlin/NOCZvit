@@ -317,6 +317,7 @@ public class Config {
         if (isTemperatureEnabled() || isRamosEnabled()) {
             isSnmpValid = getSnmpCommunity() != null || getSnmpCommunityCelsius() != null || getSnmpCommunityRamos() != null;
         }
+        
         return isEmailValid && isSnmpValid;
     }
 }
