@@ -56,8 +56,7 @@ public class NOCZvit {
             Map<String, Map<String, Map<Long, String>>> msgLogGroup = null;
             if (config.isIncidentsEnabled()) {
                 ImapClient imapClient = new ImapClient(config);
-                msgLogGroup = imapClient.prepareImapFolder(
-                        isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
+                msgLogGroup = imapClient.prepareImapFolder(isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
             }
 
             String subject;
@@ -75,12 +74,14 @@ public class NOCZvit {
                 }
             }
 
-            SnmpClient snmpClient = new SnmpClient(config);
-            if (config.isTemperatureEnabled()) {
-                message.append(snmpClient.getCelsius());
-            }
-            if (config.isRamosEnabled()) {
-                message.append(snmpClient.getRamos());
+            if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
+                SnmpClient snmpClient = new SnmpClient(config);
+                if (config.isTemperatureEnabled()) {
+                    message.append(snmpClient.getCelsius());
+                }
+                if (config.isRamosEnabled()) {
+                    message.append(snmpClient.getRamos());
+                }
             }
 
             message.append("</body></html>");
