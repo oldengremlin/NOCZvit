@@ -1,0 +1,29 @@
+# Mode
+incidents=true
+temperature=true
+ramos=false
+debug=false
+
+# IMAP Configuration
+mail.hostname=smtp.example.com
+mail.username=user
+mail.password=pass
+mail.ssl=false
+mail.zabbixFolder=INBOX.Zabbix
+
+# SNMP Configuration
+snmp.jnxOperatingDescr=.1.3.6.1.4.1.2636.3.1.13.1.5
+snmp.jnxOperatingTemp=.1.3.6.1.4.1.2636.3.1.13.1.7
+snmp.community=public
+snmp.community.celsius=public
+snmp.community.ramos=public
+snmp.hosts.suffix=example.com
+snmp.hosts=host1:desc=.1.3.6.1.4.1.2636.3.1.13.1.5.9.1.0.0;temp=.1.3.6.1.4.1.2636.3.1.13.1.7.9.1.0.0,\
+host2:desc=.1.3.6.1.4.1.2636.3.1.13.1.5.9.2.0.0;temp=.1.3.6.1.4.1.2636.3.1.13.1.7.9.2.0.0
+snmp.ramos=192.168.1.1:name=Ramos;temperatureSensorIndex=.1.3.6.1.4.1.3854.2.5.2.1.1;temperatureSensorDescription=.1.3.6.1.4.1.3854.2.5.2.1.2;temperatureSensorValue=1.3.6.1.4.1.3854.2.5.2.1.4;temperatureSensorUnit=.1.3.6.1.4.1.3854.2.5.2.1.5;temperatureSensorLowCritical=.1.3.6.1.4.1.3854.2.5.2.1.9;temperatureSensorLowWarning=.1.3.6.1.4.1.3854.2.5.2.1.10;temperatureSensorHighWarning=.1.3.6.1.4.1.3854.2.5.2.1.11;temperatureSensorHighCritical=.1.3.6.1.4.1.3854.2.5.2.1.12
+
+# Email Configuration
+email.from=Duty Report <noczvit@example.com>
+email.replyTo=Support <support@example.com>
+email.to=Duty Report <recipient1@example.com>,recipient2@example.com
+email.toDebug=admin@example.com
