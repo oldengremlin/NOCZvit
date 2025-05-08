@@ -63,7 +63,7 @@ public class EmailSender {
         multipart.addBodyPart(htmlPart);
 
         message.setContent(multipart);
-        message.setHeader("X-PoweredBy", "NOCZvit v1.0.1");
+        message.setHeader("X-PoweredBy", "NOCZvit v1.0.2");
 
         if (config.isDebug()) {
             System.err.println("Subject: " + subject);
