@@ -333,14 +333,15 @@ public class ImapClient {
 
         List<Incident> incidents = msgLogGroup.entrySet().stream()
                 .flatMap((var groupEntry) -> groupEntry.getValue().entrySet().stream()
-                .flatMap((var deviceEntry) -> deviceEntry.getValue().entrySet().stream()
-                .map((var timeEntry) -> new Incident(
-                groupEntry.getKey(),
-                deviceEntry.getKey(),
-                timeEntry.getKey(),
-                timeEntry.getValue()
-        ))
-                )
+                    .flatMap((var deviceEntry) -> deviceEntry.getValue().entrySet().stream()
+                        .map((var timeEntry) -> new Incident(
+                                groupEntry.getKey(),
+                                deviceEntry.getKey(),
+                                timeEntry.getKey(),
+                                timeEntry.getValue()
+                            )
+                        )
+                    )
                 )
                 .filter((var incident) -> incident.timestamp >= ctDutyBegin && incident.timestamp <= ctDutyEnd)
                 .sorted(Comparator.comparing(Incident::group)
@@ -381,6 +382,7 @@ public class ImapClient {
         if (incidents.isEmpty()) {
             html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
         }
+
          */
         record Incident(String group, String device, Long timestamp, String message) {
 
