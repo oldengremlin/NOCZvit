@@ -20,7 +20,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,20 +43,20 @@ public class Dictionary {
     private void loadDictionary(String filePath, String resourceName, Map<Pattern, String> dictionary) throws IOException {
         InputStream input;
         if (filePath != null) {
-            // Load from specified file path
             try {
                 input = new FileInputStream(filePath);
             } catch (IOException e) {
                 throw new IOException("Failed to load dictionary file: " + filePath, e);
             }
         } else {
-            // Load from default resource
             input = getClass().getClassLoader().getResourceAsStream(resourceName);
             if (input == null) {
                 throw new IOException("Default " + resourceName + " not found in resources");
             }
         }
 
+        // Тимчасовий список для сортування
+        List<Map.Entry<String, String>> entries = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -63,19 +66,32 @@ public class Dictionary {
                 String[] parts = line.split("=", 2);
                 if (parts.length == 2) {
                     String patternStr = parts[0].trim();
-                    Pattern pattern = Pattern.compile(patternStr);
-                    dictionary.put(pattern, parts[1].trim());
+                    String value = parts[1].trim();
+                    entries.add(Map.entry(patternStr, value));
                 }
             }
         } finally {
             input.close();
+        }
+
+        // Сортуємо за довжиною regex (довші спочатку)
+        entries.sort(Comparator.comparingInt((Map.Entry<String, String> e) -> e.getKey().length()).reversed());
+
+        // Заповнюємо словник
+        for (Map.Entry<String, String> entry : entries) {
+            try {
+                Pattern pattern = Pattern.compile(entry.getKey());
+                dictionary.put(pattern, entry.getValue());
+            } catch (Exception e) {
+                System.err.println("Invalid regex pattern in dictionary: " + entry.getKey() + ", error: " + e.getMessage());
+            }
         }
     }
 
     public String lookupPD(String key) {
         for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
             Matcher matcher = entry.getKey().matcher(key);
-            if (matcher.matches()) {
+            if (matcher.find()) {
                 return matcher.replaceAll(entry.getValue());
             }
         }
@@ -85,7 +101,7 @@ public class Dictionary {
     public String lookupSDH(String key) {
         for (Map.Entry<Pattern, String> entry : sdhDictionary.entrySet()) {
             Matcher matcher = entry.getKey().matcher(key);
-            if (matcher.matches()) {
+            if (matcher.find()) {
                 return matcher.replaceAll(entry.getValue());
             }
         }

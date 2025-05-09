@@ -24,6 +24,7 @@ public class ImapClient {
             Map.entry("May", "трав"), Map.entry("Jun", "черв"), Map.entry("Jul", "лип"), Map.entry("Aug", "серп"),
             Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
     );
+    private static final Pattern DEVICE_PREFIX_PATTERN = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
 
     private final Config config;
     private final Dictionary dictionary;
@@ -474,6 +475,14 @@ public class ImapClient {
             return;
         }
 
+        if (subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
+                || subject.contains("UVPN") || subject.contains("SDH-OSM") || subject.contains("astashov")
+                || subject.contains("console") || subject.contains("ramb-\\d+:")
+                || subject.matches(".*[dm]: NS\\d?.*")
+                || (subject.matches(".*: [ap][^:]+: [ap][^:]+ has.*") && !subject.contains("alca"))) {
+            return;
+        }
+
         boolean needCheck = false;
         String[] parts = subject.split("\\s+");
         String from = parts.length > 2 ? parts[2] : "";
@@ -483,18 +492,20 @@ public class ImapClient {
             return;
         }
 
+        String originalFromName = from.replaceAll(Pattern.compile(":$").pattern(), ""); // Preserve the original device name
+
         if (from.endsWith(":")) {
             if (!from.matches(".*-\\d+:$")) {
                 from = from.replace(":", "-65535:");
             }
             String[] fromParts = from.split(":");
             String fromName = fromParts[0];
-            String fromObject = fromName.matches(".*-\\d+$") ? fromName.replaceAll("^(?:[rsp]|(?:ies\\d?|alca)-)", "") : fromName;
+            String fromObject = fromName.matches(".*-\\d+$") ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "") : fromName;
             from = fromObject.replace("-65535", "");
             fromName = fromName.replace("-65535", "");
-            String originalFrom = from;
-            from = dictionary.lookupPD(from);
-            needCheck = originalFrom.equals(from);
+            String transformedFrom = dictionary.lookupPD(fromObject); // Lookup the full name including suffix
+            needCheck = fromObject.equals(transformedFrom);
+            from = transformedFrom;
         }
 
         String state = "Zabbix зареєстровано ";
@@ -522,13 +533,12 @@ public class ImapClient {
         msg = msg.replaceAll("\\s+", " ");
         dt = convertMonthNumToMnemo(dt);
 
-        String fromName = from;
         msgLogGroup.computeIfAbsent(from, k -> new HashMap<>())
-                .computeIfAbsent(fromName, k -> new HashMap<>())
+                .computeIfAbsent(originalFromName, k -> new HashMap<>())
                 .put(ts, dt + " : " + msg);
 
         if (isInteractive && config.isDebug()) {
-            System.err.println("PD stored: from=" + from + ", ts=" + ts + ", dt=" + dt + ", msg=" + msg);
+            System.err.println("PD stored: from=" + from + ", originalFromName=" + originalFromName + ", ts=" + ts + ", dt=" + dt + ", msg=" + msg);
         }
     }
 
@@ -652,6 +662,7 @@ public class ImapClient {
     }
 
     private String convertMonthNumToMnemo(String dt) {
+        dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\+\\d{4}$", "");
         Matcher matcher = MONTH_PATTERN.matcher(dt);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
