@@ -383,6 +383,13 @@ public class ImapClient {
          */
         record Incident(String group, String device, Long timestamp, String message) {
 
+            public String formattedMessage() {
+                var msg = !message.contains(" : OSM ")
+                        ? message + " [" + device + "]"
+                        : message;
+                return "<li style=\"margin-left: 75px;\">" + msg + "</li>";
+            }
+
         }
 
         List<Incident> incidents = msgLogGroup.entrySet().stream()
@@ -416,6 +423,7 @@ public class ImapClient {
                         Collectors.groupingBy(
                                 Incident::device,
                                 LinkedHashMap::new,
+                                /*
                                 Collectors.mapping(
                                         (var incident) -> {
                                             String msg = incident.message;
@@ -425,6 +433,14 @@ public class ImapClient {
                                         },
                                         Collectors.joining()
                                 )
+                                
+                                натомість при доданні formattedMessage() в Incident
+                                
+                                Collectors.mapping(incident -> incident.formattedMessage(), Collectors.joining())
+                                
+                                або так:
+                                 */
+                                Collectors.mapping(Incident::formattedMessage, Collectors.joining())
                         )
                 ))
                 .entrySet().stream()
