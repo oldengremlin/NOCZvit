@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class ImapClient {
 
@@ -178,7 +179,11 @@ public class ImapClient {
                 }
             }
         }
+
+        //
         ////////////////////////////////////////
+        //
+
         tempMsgLogGroup.forEach((group, devices)
                 -> devices.forEach((device, times)
                         -> times.entrySet().stream()
@@ -222,16 +227,15 @@ public class ImapClient {
                 .append("що відбувалися в період з ").append(dutyBegin.format(DATE_TIME_FORMATTER))
                 .append(" по ").append(dutyEnd.format(DATE_TIME_FORMATTER)).append("</small></small></h1>");
 
-        boolean prnGroup = false;
-        boolean prnDevice = false;
-        boolean prnNull = true;
-
-        List<String> groups = new ArrayList<>(msgLogGroup.keySet());
-        Collections.sort(groups);
-
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
+        /*        
+        boolean prnGroup = false;
+        boolean prnDevice = false;
+        boolean prnNull = true;
+        List<String> groups = new ArrayList<>(msgLogGroup.keySet());
+        Collections.sort(groups);
         for (String group : groups) {
             List<String> devices = new ArrayList<>(msgLogGroup.get(group).keySet());
             Collections.sort(devices);
@@ -263,6 +267,181 @@ public class ImapClient {
         }
 
         if (prnNull) {
+            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
+        }
+
+        //
+        ////////////////////////////////////////
+        //
+
+        boolean[] hasIncidents = {false}; // Масив для мутабельного стану
+        String reportContent = msgLogGroup.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()) // Сортування груп
+                .map((var groupEntry) -> {
+                    String group = groupEntry.getKey();
+                    StringBuilder groupHtml = new StringBuilder();
+                    boolean[] hasGroupContent = {false}; // Для відстеження контенту в групі
+
+                    groupHtml.append("<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі ")
+                            .append(group).append("</small></h2>");
+
+                    groupEntry.getValue().entrySet().stream()
+                            .sorted(Map.Entry.comparingByKey()) // Сортування пристроїв
+                            .forEach((var deviceEntry) -> {
+                                String device = deviceEntry.getKey();
+                                boolean[] hasDeviceContent = {false}; // Для відстеження контенту в пристрої
+                                deviceEntry.getValue().entrySet().stream()
+                                        .sorted(Map.Entry.comparingByKey()) // Сортування таймстемпів
+                                        .filter(entry -> entry.getKey() >= ctDutyBegin && entry.getKey() <= ctDutyEnd)
+                                        .forEach((var entry) -> {
+                                            String msg = entry.getValue();
+                                            if (!msg.contains(" : OSM ")) {
+                                                groupHtml.append("<li style=\"margin-left: 75px;\">")
+                                                        .append(msg).append(" [").append(device).append("]</li>");
+                                            } else {
+                                                groupHtml.append("<li style=\"margin-left: 75px;\">")
+                                                        .append(msg).append("</li>");
+                                            }
+                                            hasDeviceContent[0] = true;
+                                            hasGroupContent[0] = true;
+                                            hasIncidents[0] = true;
+                                        });
+                                if (hasDeviceContent[0]) {
+                                    groupHtml.append("<br>");
+                                }
+                            });
+
+                    return hasGroupContent[0] ? groupHtml.toString() : "";
+                })
+                .filter(htmlPart -> !htmlPart.isEmpty())
+                .collect(Collectors.joining());
+
+        html.append(reportContent);
+
+        if (!hasIncidents[0]) {
+            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
+        }
+
+        //
+        ////////////////////////////////////////
+        //
+
+        record Incident(String group, String device, Long timestamp, String message) {
+
+        }
+
+        List<Incident> incidents = msgLogGroup.entrySet().stream()
+                .flatMap((var groupEntry) -> groupEntry.getValue().entrySet().stream()
+                .flatMap((var deviceEntry) -> deviceEntry.getValue().entrySet().stream()
+                .map((var timeEntry) -> new Incident(
+                groupEntry.getKey(),
+                deviceEntry.getKey(),
+                timeEntry.getKey(),
+                timeEntry.getValue()
+        ))
+                )
+                )
+                .filter((var incident) -> incident.timestamp >= ctDutyBegin && incident.timestamp <= ctDutyEnd)
+                .sorted(Comparator.comparing(Incident::group)
+                        .thenComparing(Incident::device)
+                        .thenComparing(Incident::timestamp))
+                .toList();
+
+        var reportContent = incidents.stream()
+                .collect(Collectors.groupingBy(
+                        Incident::group,
+                        LinkedHashMap::new,
+                        Collectors.groupingBy(
+                                Incident::device,
+                                LinkedHashMap::new,
+                                Collectors.mapping(
+                                        (var incident) -> {
+                                            String msg = incident.message;
+                                            return !msg.contains(" : OSM ")
+                                            ? "<li style=\"margin-left: 75px;\">" + msg + " [" + incident.device + "]</li>"
+                                            : "<li style=\"margin-left: 75px;\">" + msg + "</li>";
+                                        },
+                                        Collectors.joining()
+                                )
+                        )
+                ))
+                .entrySet().stream()
+                .map((var groupEntry) -> {
+                    var groupContent = groupEntry.getValue().entrySet().stream()
+                            .map((var deviceEntry) -> deviceEntry.getValue() + "<br>")
+                            .collect(Collectors.joining());
+                    return "<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі "
+                            + groupEntry.getKey() + "</small></h2>" + groupContent;
+                })
+                .collect(Collectors.joining());
+
+        html.append(reportContent);
+
+        if (incidents.isEmpty()) {
+            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
+        }
+         */
+        record Incident(String group, String device, Long timestamp, String message) {
+
+        }
+
+        List<Incident> incidents = msgLogGroup.entrySet().stream()
+                .flatMap((var groupEntry) -> {
+                    return groupEntry.getValue().entrySet().stream()
+                            .flatMap((var deviceEntry) -> {
+                                return deviceEntry.getValue().entrySet().stream()
+                                        .map((var timeEntry) -> {
+                                            return new Incident(
+                                                    groupEntry.getKey(),
+                                                    deviceEntry.getKey(),
+                                                    timeEntry.getKey(),
+                                                    timeEntry.getValue()
+                                            );
+                                        });
+                            }
+                            );
+                }
+                )
+                .filter((var incident) -> {
+                    return incident.timestamp >= ctDutyBegin && incident.timestamp <= ctDutyEnd;
+                })
+                .sorted(Comparator.comparing(Incident::group)
+                        .thenComparing(Incident::device)
+                        .thenComparing(Incident::timestamp))
+                .toList();
+
+        var reportContent = incidents.stream()
+                .collect(Collectors.groupingBy((var incident) -> incident.group(),
+                        LinkedHashMap::new,
+                        Collectors.groupingBy(
+                                Incident::device,
+                                LinkedHashMap::new,
+                                Collectors.mapping(
+                                        (var incident) -> {
+                                            String msg = incident.message;
+                                            return !msg.contains(" : OSM ")
+                                            ? "<li style=\"margin-left: 75px;\">" + msg + " [" + incident.device + "]</li>"
+                                            : "<li style=\"margin-left: 75px;\">" + msg + "</li>";
+                                        },
+                                        Collectors.joining()
+                                )
+                        )
+                ))
+                .entrySet().stream()
+                .map((var groupEntry) -> {
+                    var groupContent = groupEntry.getValue().entrySet().stream()
+                            .map((var deviceEntry) -> {
+                                return deviceEntry.getValue() + "<br>";
+                            })
+                            .collect(Collectors.joining());
+                    return "<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі "
+                            + groupEntry.getKey() + "</small></h2>" + groupContent;
+                })
+                .collect(Collectors.joining());
+
+        html.append(reportContent);
+
+        if (incidents.isEmpty()) {
             html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
         }
 
