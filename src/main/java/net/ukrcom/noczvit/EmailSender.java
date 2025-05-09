@@ -22,9 +22,18 @@ import java.util.Properties;
 public class EmailSender {
 
     private final Config config;
+    private final String version;
 
-    public EmailSender(Config config) {
+    public EmailSender(Config config) throws IOException {
         this.config = config;
+        Properties versionProps = new Properties();
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("version.properties")) {
+            if (input == null) {
+                throw new IOException("version.properties not found in resources");
+            }
+            versionProps.load(input);
+        }
+        this.version = versionProps.getProperty("project.version", "unknown");
     }
 
     public void sendReport(String subject, String messageHtml) throws MessagingException, IOException {
@@ -63,7 +72,7 @@ public class EmailSender {
         multipart.addBodyPart(htmlPart);
 
         message.setContent(multipart);
-        message.setHeader("X-PoweredBy", "NOCZvit v1.0.2");
+        message.setHeader("X-PoweredBy", "NOCZvit v" + version);
 
         if (config.isDebug()) {
             System.err.println("Subject: " + subject);

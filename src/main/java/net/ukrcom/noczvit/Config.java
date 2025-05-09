@@ -14,9 +14,12 @@
  */
 package net.ukrcom.noczvit;
 
+import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +38,7 @@ public class Config {
     private String configPath;
     private String dictionaryPdPath;
     private String dictionarySdhPath;
+    private static final String HELP_PATH = "help.txt";
 
     public Config(String[] args) throws IOException {
         properties = new Properties();
@@ -114,71 +118,20 @@ public class Config {
     }
 
     private void printHelp() {
-        System.err.println("Usage: java -jar NOCZvit.jar [options]");
-        System.err.println("Options:");
-        System.err.println("  --config=<path>         Specify path to configuration file (default: noczvit.properties)");
-        System.err.println("  --dictionarypd=<path>   Specify path to PD dictionary file (default: dictionary_pd.txt)");
-        System.err.println("  --dictionarysdh=<path>  Specify path to SDH dictionary file (default: dictionary_sdh.txt)");
-        System.err.println("  --debug                 Enable debug mode (send report to email.toDebug)");
-        System.err.println("  --no-debug              Disable debug mode (send report to email.to)");
-        System.err.println("  --incidents             Include incidents section in the report");
-        System.err.println("  --no-incidents          Exclude incidents section from the report");
-        System.err.println("  --temperature           Include temperature section in the report");
-        System.err.println("  --no-temperature        Exclude temperature section from the report");
-        System.err.println("  --ramos                 Include Ramos temperature section in the report");
-        System.err.println("  --no-ramos              Exclude Ramos temperature section from the report");
-        System.err.println();
-        System.err.println("Configuration and dictionaries are loaded from resources by default. Command-line arguments override property values.");
-        System.err.println();
-        System.err.println("Configuration File Structure (noczvit.properties):");
-        System.err.println("  # General settings");
-        System.err.println("  debug=false             Enable/disable debug mode (true/false, default: false)");
-        System.err.println("  incidents=true          Enable/disable incidents section (true/false, default: true)");
-        System.err.println("  temperature=true        Enable/disable temperature section (true/false, default: true)");
-        System.err.println("  ramos=false             Enable/disable Ramos section (true/false, default: false)");
-        System.err.println();
-        System.err.println("  # Mail settings");
-        System.err.println("  mail.hostname=smtp.example.com  SMTP/IMAP server hostname");
-        System.err.println("  mail.username=user      Username for SMTP/IMAP authentication");
-        System.err.println("  mail.password=pass      Password for SMTP/IMAP authentication");
-        System.err.println("  mail.ssl=false          Enable/disable SSL for IMAP (true/false, default: false)");
-        System.err.println("  mail.zabbixFolder=INBOX.Zabbix  IMAP folder for Zabbix messages");
-        System.err.println();
-        System.err.println("  # Email settings");
-        System.err.println("  email.from=noczvit@example.com     Sender email address");
-        System.err.println("  email.replyTo=support@example.com  Reply-to email address");
-        System.err.println("  email.to=recipient1@example.com,recipient2@example.com  Comma-separated list of recipient emails");
-        System.err.println("  email.toDebug=debug@example.com    Debug recipient email");
-        System.err.println();
-        System.err.println("  # SNMP settings");
-        System.err.println("  snmp.community=public         SNMP community string (default for all devices)");
-        System.err.println("  snmp.community.celsius=public SNMP community string for temperature devices (falls back to snmp.community)");
-        System.err.println("  snmp.community.ramos=public   SNMP community string for Ramos devices (falls back to snmp.community)");
-        System.err.println("  snmp.hosts.suffix=example.com Domain suffix for SNMP hostnames");
-        System.err.println("  snmp.jnxOperatingDescr=.1.3.6.1.4.1.2636.3.1.13.1.5  SNMP OID for equipment description");
-        System.err.println("  snmp.jnxOperatingTemp=.1.3.6.1.4.1.2636.3.1.13.1.7   SNMP OID for equipment temperature");
-        System.err.println("  snmp.hosts=host1:desc=.1.3.6.1.4.1.2636.3.1.13.1.5;temp=.1.3.6.1.4.1.2636.3.1.13.1.7,host2:desc=...  Comma-separated list of hosts with OIDs (format: hostname:desc=OID;temp=OID)");
-        System.err.println("  snmp.ramos=ip1:name=Site1;temperatureSensorIndex=.1.3.6.1.4.1.318.1.1.10.4.2.3.1.3;...,ip2:...       Comma-separated list of Ramos devices (format: ip:name=Name;temperatureSensorIndex=OID;...)");
-        System.err.println();
-        System.err.println("Example noczvit.properties:");
-        System.err.println("  debug=false");
-        System.err.println("  incidents=true");
-        System.err.println("  temperature=true");
-        System.err.println("  ramos=false");
-        System.err.println("  mail.hostname=smtp.example.com");
-        System.err.println("  mail.username=noczvit");
-        System.err.println("  mail.password=secret");
-        System.err.println("  mail.ssl=false");
-        System.err.println("  mail.zabbixFolder=INBOX.Zabbix");
-        System.err.println("  email.from=noczvit@example.com");
-        System.err.println("  email.replyTo=support@example.com");
-        System.err.println("  email.to=duty-report@example.com,support@example.com");
-        System.err.println("  email.toDebug=root@example.com");
-        System.err.println("  snmp.community=public");
-        System.err.println("  snmp.jnxOperatingDescr=.1.3.6.1.4.1.2636.3.1.13.1.5");
-        System.err.println("  snmp.jnxOperatingTemp=.1.3.6.1.4.1.2636.3.1.13.1.7");
-        System.err.println("  snmp.hosts=switch1:desc=.1.3.6.1.4.1.2636.3.1.13.1.5;temp=.1.3.6.1.4.1.2636.3.1.13.1.7");
-        System.err.println("  snmp.ramos=192.168.1.100:name=Site1;temperatureSensorIndex=.1.3.6.1.4.1.318.1.1.10.4.2.3.1.3;temperatureSensorDescription=.1.3.6.1.4.1.318.1.1.10.4.2.3.1.4");
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream(HELP_PATH)) {
+            if (input == null) {
+                System.err.println("Error: Default " + HELP_PATH + " not found in resources");
+                return;
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.err.println(line);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error: Failed to read " + HELP_PATH + ": " + e.getMessage());
+        }
     }
 
     private void parseHosts() {
@@ -318,7 +271,7 @@ public class Config {
         if (isTemperatureEnabled() || isRamosEnabled()) {
             isSnmpValid = getSnmpCommunity() != null || getSnmpCommunityCelsius() != null || getSnmpCommunityRamos() != null;
         }
-        
+
         return isEmailValid && isSnmpValid;
     }
 }

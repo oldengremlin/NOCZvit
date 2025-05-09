@@ -3,8 +3,24 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.ukr-com</groupId>
   <artifactId>NOCZvit</artifactId>
-  <version>1.0.2</version>
+  <version>1.1.1</version>
   <build>
+    <resources>
+      <resource>
+        <filtering>true</filtering>
+        <directory>src/main/resources</directory>
+        <includes>
+          <include>noczvit.properties</include>
+          <include>dictionary_sdh.txt</include>
+          <include>dictionary_pd.txt</include>
+          <include>help.txt</include>
+          <include>version.properties</include>
+        </includes>
+        <excludes>
+          <exclude>**/*.sample</exclude>
+        </excludes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -39,6 +55,23 @@
                   <mainClass>net.ukrcom.noczvit.NOCZvit</mainClass>
                 </transformer>
               </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>copy-resources</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+              <resources />
             </configuration>
           </execution>
         </executions>
