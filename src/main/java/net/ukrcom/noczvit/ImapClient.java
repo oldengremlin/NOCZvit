@@ -436,11 +436,11 @@ public class ImapClient {
                                         },
                                         Collectors.joining()
                                 )
-                                
+
                                 натомість при доданні formattedMessage() в Incident
-                                
+
                                 Collectors.mapping(incident -> incident.formattedMessage(), Collectors.joining())
-                                
+
                                 або так:
                                  */
                                 Collectors.mapping(Incident::formattedMessage, Collectors.joining())
@@ -511,10 +511,12 @@ public class ImapClient {
         }
 
         String state = "Zabbix зареєстровано ";
-        if (subject.contains(" Resolved:")) {
-            state = "Zabbix зареєстровано кінець інциденту, ";
-        } else if (subject.contains(" Problem:")) {
-            state = "Zabbix зареєстровано початок інциденту, ";
+        if (!(subject.contains(" Problem:") && type.contains("been"))) {
+            if (subject.contains(" Resolved:")) {
+                state = "Zabbix зареєстровано кінець інциденту, ";
+            } else if (subject.contains(" Problem:")) {
+                state = "Zabbix зареєстровано початок інциденту, ";
+            }
         }
 
         String msg = state + switch (type) {
