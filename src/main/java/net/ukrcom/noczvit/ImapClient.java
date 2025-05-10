@@ -603,6 +603,8 @@ public class ImapClient {
         boolean trapValueFound = false;
         // Очищаємо body від \r і розбиваємо на рядки
         String[] lines = body.replace("\r", "").split("\n");
+        long tts = ts;
+        String tdt = dt;
         for (String line : lines) {
             if (line.startsWith("Trap value:")) {
                 if (config.isDebug()) {
@@ -617,12 +619,12 @@ public class ImapClient {
                         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.ENGLISH);
                         long newUnixDate = dateFormat.parse(trapDate).getTime() / 1000;
                         // Оновлюємо ts і dt
-                        ts = newUnixDate;
-                        dt = new SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
+                        tts = newUnixDate;
+                        tdt = new SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
                                 .format(new Date(newUnixDate * 1000));
                         trapValueFound = true;
                         if (config.isDebug()) {
-                            System.err.println("Found Trap value date: " + trapDate + ", updated ts=" + ts + ", updated dt=" + dt);
+                            System.err.println("Found Trap value date: " + trapDate + ", updated ts=" + tts + ", updated dt=" + tdt);
                         }
                     } catch (ParseException e) {
                         if (config.isDebug()) {
@@ -641,6 +643,9 @@ public class ImapClient {
         }
 
         msg = msg.replaceAll("\\s+", " ");
+        if (ts != tts) {
+            msg = msg.concat(", які відбулися "+tdt);
+        }
 
         if (needCheckFrom || (needCheckTo && !to.isEmpty())) {
             msg += " (<i>потребує коригування назви</i>";
