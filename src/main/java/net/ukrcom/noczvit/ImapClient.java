@@ -645,7 +645,7 @@ public class ImapClient {
         msg = msg.replaceAll("\\s+", " ");
         if (ts != tts) {
             tdt = convertMonthNumToMnemo(tdt);
-            msg = msg.concat(", які відбулися "+tdt);
+            msg = msg.concat(", який відбувся "+tdt);
         }
 
         if (needCheckFrom || (needCheckTo && !to.isEmpty())) {
