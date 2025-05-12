@@ -3,6 +3,7 @@ package net.ukrcom.noczvit;
 import com.sun.mail.imap.IMAPFolder;
 import com.sun.mail.imap.IMAPStore;
 import jakarta.mail.*;
+import jakarta.mail.search.SearchTerm;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.ParseException;
@@ -32,33 +33,6 @@ public class ImapClient {
     public ImapClient(Config config) throws IOException {
         this.config = config;
         this.dictionary = new Dictionary(config);
-    }
-
-    private String getTextFromMessage(Message message) throws MessagingException, IOException {
-        String result = "";
-        if (message.isMimeType("text/plain")) {
-            // Handle text/plain directly
-            Object content = message.getContent();
-            switch (content) {
-                case String string ->
-                    result = string;
-                case InputStream inputStream ->
-                    result = new String(inputStream.readAllBytes(), "UTF-8");
-                default -> {
-                }
-            }
-        } else if (message.isMimeType("multipart/*")) {
-            // Handle multipart messages
-            Multipart multipart = (Multipart) message.getContent();
-            for (int i = 0; i < multipart.getCount(); i++) {
-                BodyPart bodyPart = multipart.getBodyPart(i);
-                if (bodyPart.isMimeType("text/plain")) {
-                    result = (String) bodyPart.getContent();
-                    break;
-                }
-            }
-        }
-        return result;
     }
 
     public Map<String, Map<String, Map<Long, String>>> prepareImapFolder(boolean isInteractive,
@@ -103,7 +77,24 @@ public class ImapClient {
                         System.err.println("Filter period: ctPrevDutyBegin=" + ctPrevDutyBegin + " (" + prevDutyBegin + "), ctCurrDutyEnd=" + ctCurrDutyEnd + " (" + currDutyEnd + ")");
                     }
 
-                    for (Message msg : folder.getMessages()) {
+                    SearchTerm dateTerm = new SearchTerm() {
+                        @Override
+                        public boolean match(Message message) {
+                            try {
+                                Date sentDate = message.getSentDate();
+                                long unixDate = sentDate.getTime() / 1000;
+                                return unixDate >= ctPrevDutyBegin && unixDate <= ctCurrDutyEnd;
+                            } catch (MessagingException e) {
+                                return false;
+                            }
+                        }
+                    };
+                    if (config.isDebug() && isInteractive) {
+                        System.err.println("IMAP filter: [" + dateTerm.toString() + "] (sent >= " + ctPrevDutyBegin + " && sent <= " + ctCurrDutyEnd + ")");
+                    }
+
+                    // for (Message msg : folder.getMessages()) {
+                    for (Message msg : folder.search(dateTerm)) {
                         String dateStr = msg.getHeader("Date")[0];
                         String subject = msg.getSubject();
                         String body;
@@ -154,6 +145,33 @@ public class ImapClient {
             System.exit(2);
         }
         return msgLogGroup;
+    }
+
+    private String getTextFromMessage(Message message) throws MessagingException, IOException {
+        String result = "";
+        if (message.isMimeType("text/plain")) {
+            // Handle text/plain directly
+            Object content = message.getContent();
+            switch (content) {
+                case String string ->
+                    result = string;
+                case InputStream inputStream ->
+                    result = new String(inputStream.readAllBytes(), "UTF-8");
+                default -> {
+                }
+            }
+        } else if (message.isMimeType("multipart/*")) {
+            // Handle multipart messages
+            Multipart multipart = (Multipart) message.getContent();
+            for (int i = 0; i < multipart.getCount(); i++) {
+                BodyPart bodyPart = multipart.getBodyPart(i);
+                if (bodyPart.isMimeType("text/plain")) {
+                    result = (String) bodyPart.getContent();
+                    break;
+                }
+            }
+        }
+        return result;
     }
 
     private void filterAndMergeMessages(Map<String, Map<String, Map<Long, String>>> tempMsgLogGroup,
