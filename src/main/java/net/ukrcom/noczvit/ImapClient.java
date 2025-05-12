@@ -500,14 +500,6 @@ public class ImapClient {
             return;
         }
 
-        if (subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
-                || subject.contains("UVPN") || subject.contains("SDH-OSM") || subject.contains("astashov")
-                || subject.contains("console") || subject.contains("ramb-\\d+:")
-                || subject.matches(".*[dm]: NS\\d?.*")
-                || (subject.matches(".*: [ap][^:]+: [ap][^:]+ has.*") && !subject.contains("alca"))) {
-            return;
-        }
-
         boolean needCheck = false;
         String[] parts = subject.split("\\s+");
         String from = parts.length > 2 ? parts[2] : "";
