@@ -77,24 +77,29 @@ public class ImapClient {
                         System.err.println("Filter period: ctPrevDutyBegin=" + ctPrevDutyBegin + " (" + prevDutyBegin + "), ctCurrDutyEnd=" + ctCurrDutyEnd + " (" + currDutyEnd + ")");
                     }
 
-                    SearchTerm dateTerm = new SearchTerm() {
-                        @Override
-                        public boolean match(Message message) {
-                            try {
-                                Date sentDate = message.getSentDate();
-                                long unixDate = sentDate.getTime() / 1000;
-                                return unixDate >= ctPrevDutyBegin && unixDate <= ctCurrDutyEnd;
-                            } catch (MessagingException e) {
-                                return false;
+                    Message[] messages;
+                    if (config.isDebug()) {
+                        messages = folder.getMessages();
+                    } else {
+                        SearchTerm dateTerm = new SearchTerm() {
+                            @Override
+                            public boolean match(Message message) {
+                                try {
+                                    Date sentDate = message.getSentDate();
+                                    long unixDate = sentDate.getTime() / 1000;
+                                    return unixDate >= ctPrevDutyBegin && unixDate <= ctCurrDutyEnd;
+                                } catch (MessagingException e) {
+                                    return false;
+                                }
                             }
+                        };
+                        if (isInteractive) {
+                            System.err.println("IMAP filter: [" + dateTerm.toString() + "] (sent >= " + ctPrevDutyBegin + " && sent <= " + ctCurrDutyEnd + ")");
                         }
-                    };
-                    if (config.isDebug() && isInteractive) {
-                        System.err.println("IMAP filter: [" + dateTerm.toString() + "] (sent >= " + ctPrevDutyBegin + " && sent <= " + ctCurrDutyEnd + ")");
+                        messages = folder.search(dateTerm);
                     }
 
-                    // for (Message msg : folder.getMessages()) {
-                    for (Message msg : folder.search(dateTerm)) {
+                    for (Message msg : messages) {
                         String dateStr = msg.getHeader("Date")[0];
                         String subject = msg.getSubject();
                         String body;
