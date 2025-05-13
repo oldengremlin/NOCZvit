@@ -92,7 +92,8 @@ public class Dictionary {
         for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
             Matcher matcher = entry.getKey().matcher(key);
             if (matcher.find()) {
-                return matcher.replaceAll(entry.getValue());
+                //return matcher.replaceAll(entry.getValue());
+                return entry.getValue();
             }
         }
         return key;
@@ -102,7 +103,8 @@ public class Dictionary {
         for (Map.Entry<Pattern, String> entry : sdhDictionary.entrySet()) {
             Matcher matcher = entry.getKey().matcher(key);
             if (matcher.find()) {
-                return matcher.replaceAll(entry.getValue());
+                //return matcher.replaceAll(entry.getValue());
+                return entry.getValue();
             }
         }
         return key;
