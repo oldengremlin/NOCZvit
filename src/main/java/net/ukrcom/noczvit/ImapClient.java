@@ -208,6 +208,11 @@ public class ImapClient {
         }
          */
 
+        // Структура:
+        // - String (group): назва групи, наприклад, "Обухів, Малишка 2"
+        // - Map<String, ...> (device): мапа пристроїв, наприклад, "core1"
+        // - Map<Long, ...> (ts): мапа таймстемпів, наприклад, 1748549842 (Unix timestamp)
+        // - Map<Long, List<String>> (tts): мапа подій (tts) із списком повідомлень, наприклад, {1748528164: ["msg1", "msg2"]}
         tempMsgLogGroup
                 .entrySet().stream().flatMap(
                         groupEntry -> groupEntry.getValue()
@@ -250,6 +255,93 @@ public class ImapClient {
                                 + ", ts=" + ts + ", messages=" + existingTtsMap);
                     }
                 });
+
+        /*
+        tempMsgLogGroup
+                .entrySet() // Перетворює tempMsgLogGroup у набір пар {group, Map<device, Map<ts, ttsMap>>}
+                .stream() // Створює потік із цих пар
+                .flatMap(groupEntry
+                        -> 
+                        // groupEntry: пара {group, Map<device, Map<ts, ttsMap>>}
+                        // groupEntry.getKey(): String — назва групи (наприклад, "Обухів, Малишка 2")
+                        // groupEntry.getValue(): Map<String, Map<Long, Map<Long, List<String>>>> — мапа пристроїв
+                        groupEntry.getValue() // Беремо мапу пристроїв
+                        .entrySet() // Перетворюємо мапу пристроїв у набір пар {device, Map<ts, ttsMap>}
+                        .stream() // Створюємо потік із пар пристроїв
+                        .map(deviceEntry
+                                ->
+                                // deviceEntry: пара {device, Map<ts, ttsMap>}
+                                // deviceEntry.getKey(): String — назва пристрою (наприклад, "core1")
+                                // deviceEntry.getValue(): Map<Long, Map<Long, List<String>>> — мапа таймстемпів
+                                Map.entry(
+                                groupEntry.getKey(), // String: група (наприклад, "Обухів, Малишка 2")
+                                deviceEntry // Map.Entry<String, Map<Long, Map<Long, List<String>>>>: пара {device, Map<ts, ttsMap>}
+                        ) // Повертаємо пару {group, deviceEntry}
+                        ) // Отримуємо потік пар {group, deviceEntry}
+                ) // Розгортаємо в плоский потік пар {group, deviceEntry}
+                .flatMap(groupDevice
+                        -> 
+                        // groupDevice: пара {group, deviceEntry}
+                        // groupDevice.getKey(): String — група (наприклад, "Обухів, Малишка 2")
+                        // groupDevice.getValue(): Map.Entry<String, Map<Long, Map<Long, List<String>>>> — пара {device, Map<ts, ttsMap>}
+                        // groupDevice.getValue().getKey(): String — пристрій (наприклад, "core1")
+                        // groupDevice.getValue().getValue(): Map<Long, Map<Long, List<String>>> — мапа таймстемпів
+                        groupDevice.getValue().getValue() // Беремо мапу таймстемпів (Map<ts, ttsMap>)
+                        .entrySet() // Перетворюємо мапу таймстемпів у набір пар {ts, ttsMap}
+                        .stream() // Створюємо потік із пар таймстемпів
+                        .map(tsEntry
+                                ->
+                                // tsEntry: пара {ts, ttsMap}
+                                // tsEntry.getKey(): Long — таймстемп (наприклад, 1748549842)
+                                // tsEntry.getValue(): Map<Long, List<String>> — мапа подій (tts) із повідомленнями
+                                Map.entry(
+                                Map.entry(
+                                        groupDevice.getKey(), // String: група (наприклад, "Обухів, Малишка 2")
+                                        groupDevice.getValue().getKey() // String: пристрій (наприклад, "core1")
+                                ), // Map.Entry<String, String>: пара {group, device}
+                                tsEntry // Map.Entry<Long, Map<Long, List<String>>>: пара {ts, ttsMap}
+                        ) // Повертаємо пару {{group, device}, tsEntry}
+                        ) // Отримуємо потік пар {{group, device}, tsEntry}
+                ) // Розгортаємо в плоский потік пар {{group, device}, tsEntry}
+                .filter(groupDeviceTs -> {
+                    // groupDeviceTs: пара {{group, device}, tsEntry}
+                    // groupDeviceTs.getKey(): Map.Entry<String, String> — пара {group, device}
+                    // groupDeviceTs.getValue(): Map.Entry<Long, Map<Long, List<String>>> — пара {ts, ttsMap}
+                    Long ts = groupDeviceTs.getValue().getKey(); // Long: таймстемп (ts)
+                    return ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd; // Фільтруємо за періодом
+                }) // Залишаємо тільки пари, де ts у межах [ctPrevDutyBegin, ctCurrDutyEnd]
+                .forEach(groupDeviceTs -> {
+                    // groupDeviceTs: пара {{group, device}, tsEntry}
+                    // groupDeviceTs.getKey(): Map.Entry<String, String> — пара {group, device}
+                    // groupDeviceTs.getKey().getKey(): String — група (наприклад, "Обухів, Малишка 2")
+                    // groupDeviceTs.getKey().getValue(): String — пристрій (наприклад, "core1")
+                    // groupDeviceTs.getValue(): Map.Entry<Long, Map<Long, List<String>>> — пара {ts, ttsMap}
+                    // groupDeviceTs.getValue().getKey(): Long — таймстемп (ts)
+                    // groupDeviceTs.getValue().getValue(): Map<Long, List<String>> — мапа подій (ttsMap)
+                    String group = groupDeviceTs.getKey().getKey(); // Витягуємо групу
+                    String device = groupDeviceTs.getKey().getValue(); // Витягуємо пристрій
+                    Long ts = groupDeviceTs.getValue().getKey(); // Витягуємо таймстемп
+                    Map<Long, List<String>> ttsMap = groupDeviceTs.getValue().getValue(); // Витягуємо мапу подій
+
+                    // Отримуємо або створюємо мапу для зберігання повідомлень у msgLogGroup
+                    Map<Long, List<String>> existingTtsMap = msgLogGroup
+                            .computeIfAbsent(group, k -> new HashMap<>()) // Map<String, Map<Long, Map<Long, List<String>>>> для групи
+                            .computeIfAbsent(device, k -> new HashMap<>()) // Map<Long, Map<Long, List<String>>> для пристрою
+                            .computeIfAbsent(ts, k -> new HashMap<>()); // Map<Long, List<String>> для таймстемпа
+
+                    // Додаємо всі повідомлення з ttsMap до existingTtsMap
+                    ttsMap.forEach((tts, messages)
+                            -> // tts: Long — ідентифікатор події; messages: List<String> — список повідомлень
+                            existingTtsMap.computeIfAbsent(tts, k -> new ArrayList<>()).addAll(messages)
+                    );
+
+                    // Логуємо в дебаг-режимі
+                    if (config.isDebug()) {
+                        System.err.println("Merged messages: group=" + group + ", device=" + device
+                                + ", ts=" + ts + ", messages=" + existingTtsMap);
+                    }
+                }); // Обробляємо кожну відфільтровану пару
+         */
     }
 
     public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
