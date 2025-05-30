@@ -209,29 +209,22 @@ public class ImapClient {
          */
 
         tempMsgLogGroup
-                .entrySet()
-                .stream()
-                .flatMap(
+                .entrySet().stream().flatMap(
                         groupEntry -> groupEntry.getValue()
-                                .entrySet()
-                                .stream()
-                                .map(
+                                .entrySet().stream().map(
                                         deviceEntry -> Map.entry(
-                                                groupEntry.getKey(),
-                                                deviceEntry)
+                                                groupEntry.getKey(), deviceEntry
+                                        )
                                 )
                 ).flatMap(
                         groupDevice -> groupDevice
                                 .getValue()
                                 .getValue()
-                                .entrySet()
-                                .stream()
-                                .map(
+                                .entrySet().stream().map(
                                         tsEntry -> Map.entry(
                                                 Map.entry(
-                                                        groupDevice.getKey(),
-                                                        groupDevice.getValue().getKey()),
-                                                tsEntry
+                                                        groupDevice.getKey(), groupDevice.getValue().getKey()
+                                                ), tsEntry
                                         )
                                 )
                 ).filter(groupDeviceTs -> {
