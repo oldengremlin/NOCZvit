@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,7 +54,7 @@ public class NOCZvit {
             LocalDateTime currDutyBegin = LocalDateTime.parse(currentDate + " 08:00:00", DATE_TIME_FORMATTER);
             LocalDateTime currDutyEnd = LocalDateTime.parse(currentDate + " 19:59:59", DATE_TIME_FORMATTER);
 
-            Map<String, Map<String, Map<Long, String>>> msgLogGroup = null;
+            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = null;
             if (config.isIncidentsEnabled()) {
                 ImapClient imapClient = new ImapClient(config);
                 msgLogGroup = imapClient.prepareImapFolder(isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);

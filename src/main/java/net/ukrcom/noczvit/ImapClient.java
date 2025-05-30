@@ -35,12 +35,12 @@ public class ImapClient {
         this.dictionary = new Dictionary(config);
     }
 
-    public Map<String, Map<String, Map<Long, String>>> prepareImapFolder(boolean isInteractive,
+    public Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> prepareImapFolder(boolean isInteractive,
             LocalDateTime prevDutyBegin,
             LocalDateTime prevDutyEnd,
             LocalDateTime currDutyBegin,
             LocalDateTime currDutyEnd) {
-        Map<String, Map<String, Map<Long, String>>> msgLogGroup = new HashMap<>();
+        Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = new HashMap<>();
         Properties props = new Properties();
         props.put("mail.imap.ssl.enable", config.isMailSsl());
         props.put("mail.imap.host", config.getMailHostname());
@@ -134,7 +134,7 @@ public class ImapClient {
                                 System.err.println("Skipping PD message due to time filter: unixDate=" + unixDate);
                             }
                         } else if (subject.matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + (config.isDebug() ? "1-9" : "2-9") + "][0-9]*).*")) {
-                            Map<String, Map<String, Map<Long, String>>> tempMsgLogGroup = new HashMap<>();
+                            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup = new HashMap<>();
                             proceedSDH(isInteractive, subject, body, tempMsgLogGroup, unixDate, dateStr);
                             filterAndMergeMessages(tempMsgLogGroup, msgLogGroup, ctPrevDutyBegin, ctCurrDutyEnd, isInteractive, config);
                         }
@@ -179,8 +179,8 @@ public class ImapClient {
         return result;
     }
 
-    private void filterAndMergeMessages(Map<String, Map<String, Map<Long, String>>> tempMsgLogGroup,
-            Map<String, Map<String, Map<Long, String>>> msgLogGroup,
+    private void filterAndMergeMessages(Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup,
+            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup,
             long ctPrevDutyBegin,
             long ctCurrDutyEnd,
             boolean isInteractive,
@@ -190,62 +190,76 @@ public class ImapClient {
             for (String device : tempMsgLogGroup.get(group).keySet()) {
                 for (Long ts : tempMsgLogGroup.get(group).get(device).keySet()) {
                     if (ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd) {
-                        String message = tempMsgLogGroup.get(group).get(device).get(ts);
-                        msgLogGroup.computeIfAbsent(group, k -> new HashMap<>())
+                        Map<Long, List<String>> existingTtsMap = msgLogGroup
+                                .computeIfAbsent(group, k -> new HashMap<>())
                                 .computeIfAbsent(device, k -> new HashMap<>())
-                                .put(ts, message);
-                        if (config.isDebug()) {
-                            System.err.println("Added SDH message to report: group=" + group + ", device=" + device + ", ts=" + ts + ", message=" + message);
+                                .computeIfAbsent(ts, k -> new HashMap<>());
+                        // Додаємо всі tts-повідомлення
+                        for (Map.Entry<Long, List<String>> ttsEntry : tempMsgLogGroup.get(group).get(device).get(ts).entrySet()) {
+                            existingTtsMap.computeIfAbsent(ttsEntry.getKey(), k -> new ArrayList<>())
+                                    .addAll(ttsEntry.getValue());
                         }
-                    } else if (config.isDebug()) {
-                        System.err.println("Skipping SDH message due to time filter: group=" + group + ", device=" + device + ", ts=" + ts);
+                        if (config.isDebug()) {
+                            System.err.println("Merged messages: group=" + group + ", device=" + device + ", ts=" + ts + ", messages=" + existingTtsMap);
+                        }
                     }
                 }
             }
         }
-
-        //
-        ////////////////////////////////////////
-        //
-
-        tempMsgLogGroup.forEach((group, devices)
-                -> devices.forEach((device, times)
-                        -> times.entrySet().stream()
-                        .filter(entry -> entry.getKey() >= ctPrevDutyBegin && entry.getKey() <= ctCurrDutyEnd)
-                        .forEach(entry -> {
-                            String message = entry.getValue();
-                            msgLogGroup.computeIfAbsent(group, k -> new HashMap<>())
-                                    .computeIfAbsent(device, k -> new HashMap<>())
-                                    .put(entry.getKey(), message);
-                            if (config.isDebug()) {
-                                System.err.println("Added SDH message to report: group=" + group + ", device=" + device + ", ts=" + entry.getKey() + ", message=" + message);
-                            }
-                        })
-                )
-        );
          */
-        tempMsgLogGroup.forEach((group, devices)
-                -> {
-            devices.forEach((device, times)
-                    -> {
-                times.entrySet().stream()
-                        .filter(entry -> entry.getKey() >= ctPrevDutyBegin && entry.getKey() <= ctCurrDutyEnd)
-                        .forEach(entry -> {
-                            String message = entry.getValue();
-                            msgLogGroup.computeIfAbsent(group, k -> new HashMap<>())
-                                    .computeIfAbsent(device, k -> new HashMap<>())
-                                    .put(entry.getKey(), message);
-                            if (config.isDebug()) {
-                                System.err.println("Added SDH message to report: group=" + group + ", device=" + device + ", ts=" + entry.getKey() + ", message=" + message);
-                            }
-                        });
-            }
-            );
-        }
-        );
+
+        tempMsgLogGroup
+                .entrySet()
+                .stream()
+                .flatMap(
+                        groupEntry -> groupEntry.getValue()
+                                .entrySet()
+                                .stream()
+                                .map(
+                                        deviceEntry -> Map.entry(
+                                                groupEntry.getKey(),
+                                                deviceEntry)
+                                )
+                ).flatMap(
+                        groupDevice -> groupDevice
+                                .getValue()
+                                .getValue()
+                                .entrySet()
+                                .stream()
+                                .map(
+                                        tsEntry -> Map.entry(
+                                                Map.entry(
+                                                        groupDevice.getKey(),
+                                                        groupDevice.getValue().getKey()),
+                                                tsEntry
+                                        )
+                                )
+                ).filter(groupDeviceTs -> {
+                    Long ts = groupDeviceTs.getValue().getKey();
+                    return ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd;
+                })
+                .forEach(groupDeviceTs -> {
+                    String group = groupDeviceTs.getKey().getKey();
+                    String device = groupDeviceTs.getKey().getValue();
+                    Long ts = groupDeviceTs.getValue().getKey();
+                    Map<Long, List<String>> ttsMap = groupDeviceTs.getValue().getValue();
+
+                    Map<Long, List<String>> existingTtsMap = msgLogGroup
+                            .computeIfAbsent(group, k -> new HashMap<>())
+                            .computeIfAbsent(device, k -> new HashMap<>())
+                            .computeIfAbsent(ts, k -> new HashMap<>());
+
+                    ttsMap.forEach((tts, messages)
+                            -> existingTtsMap.computeIfAbsent(tts, k -> new ArrayList<>()).addAll(messages));
+
+                    if (config.isDebug()) {
+                        System.err.println("Merged messages: group=" + group + ", device=" + device
+                                + ", ts=" + ts + ", messages=" + existingTtsMap);
+                    }
+                });
     }
 
-    public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, String>>> msgLogGroup) {
+    public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
         StringBuilder html = new StringBuilder();
         html.append("<p><ol><h1><small><small>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
                 .append("що відбувалися в період з ").append(dutyBegin.format(DATE_TIME_FORMATTER))
@@ -254,160 +268,7 @@ public class ImapClient {
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
-        /*        
-        boolean prnGroup = false;
-        boolean prnDevice = false;
-        boolean prnNull = true;
-        List<String> groups = new ArrayList<>(msgLogGroup.keySet());
-        Collections.sort(groups);
-        for (String group : groups) {
-            List<String> devices = new ArrayList<>(msgLogGroup.get(group).keySet());
-            Collections.sort(devices);
-            for (String device : devices) {
-                List<Long> times = new ArrayList<>(msgLogGroup.get(group).get(device).keySet());
-                Collections.sort(times);
-                for (Long time : times) {
-                    if (time >= ctDutyBegin && time <= ctDutyEnd) {
-                        if (!prnGroup) {
-                            html.append("<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі ").append(group).append("</small></h2>");
-                            prnGroup = true;
-                        }
-                        String msg = msgLogGroup.get(group).get(device).get(time);
-                        if (!msg.contains(" : OSM ")) {
-                            html.append("<li style=\"margin-left: 75px;\">").append(msg).append(" [").append(device).append("]</li>");
-                        } else {
-                            html.append("<li style=\"margin-left: 75px;\">").append(msg).append("</li>");
-                        }
-                        prnDevice = true;
-                        prnNull = false;
-                    }
-                }
-                if (prnDevice) {
-                    html.append("<br>");
-                }
-            }
-            prnGroup = false;
-            prnDevice = false;
-        }
-
-        if (prnNull) {
-            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
-        }
-
-        //
-        ////////////////////////////////////////
-        //
-
-        boolean[] hasIncidents = {false}; // Масив для мутабельного стану
-        String reportContent = msgLogGroup.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey()) // Сортування груп
-                .map((var groupEntry) -> {
-                    String group = groupEntry.getKey();
-                    StringBuilder groupHtml = new StringBuilder();
-                    boolean[] hasGroupContent = {false}; // Для відстеження контенту в групі
-
-                    groupHtml.append("<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі ")
-                            .append(group).append("</small></h2>");
-
-                    groupEntry.getValue().entrySet().stream()
-                            .sorted(Map.Entry.comparingByKey()) // Сортування пристроїв
-                            .forEach((var deviceEntry) -> {
-                                String device = deviceEntry.getKey();
-                                boolean[] hasDeviceContent = {false}; // Для відстеження контенту в пристрої
-                                deviceEntry.getValue().entrySet().stream()
-                                        .sorted(Map.Entry.comparingByKey()) // Сортування таймстемпів
-                                        .filter(entry -> entry.getKey() >= ctDutyBegin && entry.getKey() <= ctDutyEnd)
-                                        .forEach((var entry) -> {
-                                            String msg = entry.getValue();
-                                            if (!msg.contains(" : OSM ")) {
-                                                groupHtml.append("<li style=\"margin-left: 75px;\">")
-                                                        .append(msg).append(" [").append(device).append("]</li>");
-                                            } else {
-                                                groupHtml.append("<li style=\"margin-left: 75px;\">")
-                                                        .append(msg).append("</li>");
-                                            }
-                                            hasDeviceContent[0] = true;
-                                            hasGroupContent[0] = true;
-                                            hasIncidents[0] = true;
-                                        });
-                                if (hasDeviceContent[0]) {
-                                    groupHtml.append("<br>");
-                                }
-                            });
-
-                    return hasGroupContent[0] ? groupHtml.toString() : "";
-                })
-                .filter(htmlPart -> !htmlPart.isEmpty())
-                .collect(Collectors.joining());
-
-        html.append(reportContent);
-
-        if (!hasIncidents[0]) {
-            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
-        }
-
-        //
-        ////////////////////////////////////////
-        //
-
-        record Incident(String group, String device, Long timestamp, String message) {
-
-        }
-
-        List<Incident> incidents = msgLogGroup.entrySet().stream()
-                .flatMap((var groupEntry) -> groupEntry.getValue().entrySet().stream()
-                    .flatMap((var deviceEntry) -> deviceEntry.getValue().entrySet().stream()
-                        .map((var timeEntry) -> new Incident(
-                                groupEntry.getKey(),
-                                deviceEntry.getKey(),
-                                timeEntry.getKey(),
-                                timeEntry.getValue()
-                            )
-                        )
-                    )
-                )
-                .filter((var incident) -> incident.timestamp >= ctDutyBegin && incident.timestamp <= ctDutyEnd)
-                .sorted(Comparator.comparing(Incident::group)
-                        .thenComparing(Incident::device)
-                        .thenComparing(Incident::timestamp))
-                .toList();
-
-        var reportContent = incidents.stream()
-                .collect(Collectors.groupingBy(
-                        Incident::group,
-                        LinkedHashMap::new,
-                        Collectors.groupingBy(
-                                Incident::device,
-                                LinkedHashMap::new,
-                                Collectors.mapping(
-                                        (var incident) -> {
-                                            String msg = incident.message;
-                                            return !msg.contains(" : OSM ")
-                                            ? "<li style=\"margin-left: 75px;\">" + msg + " [" + incident.device + "]</li>"
-                                            : "<li style=\"margin-left: 75px;\">" + msg + "</li>";
-                                        },
-                                        Collectors.joining()
-                                )
-                        )
-                ))
-                .entrySet().stream()
-                .map((var groupEntry) -> {
-                    var groupContent = groupEntry.getValue().entrySet().stream()
-                            .map((var deviceEntry) -> deviceEntry.getValue() + "<br>")
-                            .collect(Collectors.joining());
-                    return "<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі "
-                            + groupEntry.getKey() + "</small></h2>" + groupContent;
-                })
-                .collect(Collectors.joining());
-
-        html.append(reportContent);
-
-        if (incidents.isEmpty()) {
-            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
-        }
-
-         */
-        record Incident(String group, String device, Long timestamp, String message) {
+        record Incident(String group, String device, Long ts, Long tts, String message) {
 
             public String formattedMessage() {
                 var msg = !message.contains(" : OSM ")
@@ -423,58 +284,43 @@ public class ImapClient {
                     return groupEntry.getValue().entrySet().stream()
                             .flatMap((var deviceEntry) -> {
                                 return deviceEntry.getValue().entrySet().stream()
-                                        .map((var timeEntry) -> {
-                                            return new Incident(
-                                                    groupEntry.getKey(),
-                                                    deviceEntry.getKey(),
-                                                    timeEntry.getKey(),
-                                                    timeEntry.getValue()
-                                            );
+                                        .flatMap((var tsEntry) -> {
+                                            return tsEntry.getValue().entrySet().stream()
+                                                    .flatMap((var ttsEntry) -> {
+                                                        return ttsEntry.getValue().stream()
+                                                                .map((var msg) -> {
+                                                                    return new Incident(
+                                                                            groupEntry.getKey(),
+                                                                            deviceEntry.getKey(),
+                                                                            tsEntry.getKey(),
+                                                                            ttsEntry.getKey(),
+                                                                            msg
+                                                                    );
+                                                                });
+                                                    });
                                         });
-                            }
-                            );
-                }
-                )
-                .filter((var incident) -> {
-                    return incident.timestamp >= ctDutyBegin && incident.timestamp <= ctDutyEnd;
+                            });
                 })
-                .sorted(Comparator.comparing(Incident::group)
-                        .thenComparing(Incident::device)
-                        .thenComparing(Incident::timestamp))
+                .filter((var incident) -> {
+                    return incident.ts >= ctDutyBegin && incident.ts <= ctDutyEnd;
+                })
+                .sorted(Comparator.comparing(Incident::ts).thenComparing(Incident::tts))
                 .toList();
 
-        var reportContent = incidents.stream()
-                .collect(Collectors.groupingBy((var incident) -> incident.group(),
+        String reportContent = incidents.stream()
+                .collect(Collectors.groupingBy(
+                        Incident::group,
                         LinkedHashMap::new,
                         Collectors.groupingBy(
                                 Incident::device,
                                 LinkedHashMap::new,
-                                /*
-                                Collectors.mapping(
-                                        (var incident) -> {
-                                            String msg = incident.message;
-                                            return !msg.contains(" : OSM ")
-                                            ? "<li style=\"margin-left: 75px;\">" + msg + " [" + incident.device + "]</li>"
-                                            : "<li style=\"margin-left: 75px;\">" + msg + "</li>";
-                                        },
-                                        Collectors.joining()
-                                )
-
-                                натомість при доданні formattedMessage() в Incident
-
-                                Collectors.mapping(incident -> incident.formattedMessage(), Collectors.joining())
-
-                                або так:
-                                 */
                                 Collectors.mapping(Incident::formattedMessage, Collectors.joining())
                         )
                 ))
                 .entrySet().stream()
                 .map((var groupEntry) -> {
                     var groupContent = groupEntry.getValue().entrySet().stream()
-                            .map((var deviceEntry) -> {
-                                return deviceEntry.getValue() + "<br>";
-                            })
+                            .map((var deviceEntry) -> deviceEntry.getValue() + "<br>\n")
                             .collect(Collectors.joining());
                     return "<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі "
                             + groupEntry.getKey() + "</small></h2>" + groupContent;
@@ -491,7 +337,7 @@ public class ImapClient {
         return html.toString();
     }
 
-    private void proceedPD(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, String>>> msgLogGroup, long ts, String dt) {
+    private void proceedPD(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, long ts, String dt) {
         if (subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
                 || subject.contains("UVPN") || subject.contains("SDH-OSM") || subject.contains("astashov")
                 || subject.contains("console") || subject.contains("ramb-\\d+:")
@@ -554,14 +400,16 @@ public class ImapClient {
 
         msgLogGroup.computeIfAbsent(from, k -> new HashMap<>())
                 .computeIfAbsent(originalFromName, k -> new HashMap<>())
-                .put(ts, dt + " : " + msg);
+                .computeIfAbsent(ts, k -> new HashMap<>())
+                .computeIfAbsent(ts, k -> new ArrayList<>())
+                .add(dt + " : " + msg);
 
         if (isInteractive && config.isDebug()) {
             System.err.println("PD stored: from=" + from + ", originalFromName=" + originalFromName + ", ts=" + ts + ", dt=" + dt + ", msg=" + msg);
         }
     }
 
-    private void proceedSDH(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, String>>> msgLogGroup, long ts, String dt) {
+    private void proceedSDH(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, long ts, String dt) {
         if (config.isDebug()) {
             System.err.println("Processing SDH message: subject=" + subject + ", original ts=" + ts + ", original dt=" + dt);
             System.err.println("Raw body: " + body);
@@ -678,8 +526,10 @@ public class ImapClient {
 
         // Зберігаємо повідомлення з оновленим ts
         msgLogGroup.computeIfAbsent(from, k -> new HashMap<>())
-                .computeIfAbsent(to, k -> new HashMap<>())
-                .put(ts, dt + " : " + msg + appendix);
+                .computeIfAbsent("", k -> new HashMap<>())
+                .computeIfAbsent(ts, k -> new HashMap<>())
+                .computeIfAbsent(tts, k -> new ArrayList<>())
+                .add(dt + " : " + msg);
 
         if (isInteractive && config.isDebug()) {
             System.err.println("SDH stored: from=" + from + ", to=" + to + ", ts=" + ts + ", dt=" + dt + ", msg=" + msg);
