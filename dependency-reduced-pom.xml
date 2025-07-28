@@ -80,7 +80,7 @@
   </build>
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
-    <exec.mainClass>net.ukrcom.noczvit.NOCZvit</exec.mainClass>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <exec.mainClass>net.ukrcom.noczvit.NOCZvit</exec.mainClass>
   </properties>
 </project>
