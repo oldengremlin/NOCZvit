@@ -42,10 +42,10 @@ public class ImapClient {
     private static final Pattern DEVICE_PREFIX_PATTERN = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
 
 //    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+    private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
-    private static final DateTimeFormatter LDT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final DateTimeFormatter TDT = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+    private static final DateTimeFormatter TRAP_DATE_INPUT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter TRAP_DATE_OUTPUT_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
     private final Dictionary dictionary;
@@ -136,7 +136,7 @@ public class ImapClient {
                         try {
 //                            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 //                            unixDate = dateFormat.parse(dateStr).getTime() / 1000;
-                            OffsetDateTime odt = OffsetDateTime.parse(dateStr, FORMATTER);
+                            OffsetDateTime odt = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER);
                             unixDate = odt.toEpochSecond();
 //                        } catch (ParseException e) {
                         } catch (DateTimeParseException e) {
@@ -590,9 +590,9 @@ public class ImapClient {
                     String trapDate = matcher.group();
                     try {
 
-                        LocalDateTime ldt = LocalDateTime.parse(trapDate, LDT);
+                        LocalDateTime ldt = LocalDateTime.parse(trapDate, TRAP_DATE_INPUT_FORMATTER);
                         tts = ldt.atZone(ZoneId.systemDefault()).toEpochSecond();
-                        tdt = ldt.atZone(ZoneId.systemDefault()).format(TDT);
+                        tdt = ldt.atZone(ZoneId.systemDefault()).format(TRAP_DATE_OUTPUT_FORMATTER);
 
                         trapValueFound = true;
                         if (config.isDebug()) {
