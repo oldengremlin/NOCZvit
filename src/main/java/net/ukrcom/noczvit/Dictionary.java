@@ -41,23 +41,10 @@ public class Dictionary {
     }
 
     private void loadDictionary(String filePath, String resourceName, Map<Pattern, String> dictionary) throws IOException {
-        InputStream input;
-        if (filePath != null) {
-            try {
-                input = new FileInputStream(filePath);
-            } catch (IOException e) {
-                throw new IOException("Failed to load dictionary file: " + filePath, e);
-            }
-        } else {
-            input = getClass().getClassLoader().getResourceAsStream(resourceName);
-            if (input == null) {
-                throw new IOException("Default " + resourceName + " not found in resources");
-            }
-        }
 
         // Тимчасовий список для сортування
         List<Map.Entry<String, String>> entries = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+        try (InputStream input = openStream(filePath, resourceName); BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty() || line.startsWith("#")) {
@@ -70,8 +57,6 @@ public class Dictionary {
                     entries.add(Map.entry(patternStr, value));
                 }
             }
-        } finally {
-            input.close();
         }
 
         // Сортуємо за довжиною regex (довші спочатку)
@@ -86,6 +71,23 @@ public class Dictionary {
                 System.err.println("Invalid regex pattern in dictionary: " + entry.getKey() + ", error: " + e.getMessage());
             }
         }
+    }
+
+    private InputStream openStream(String filePath, String resourceName) throws IOException {
+        InputStream input;
+        if (filePath != null) {
+            try {
+                input = new FileInputStream(filePath);
+            } catch (IOException e) {
+                throw new IOException("Failed to load dictionary file: " + filePath, e);
+            }
+        } else {
+            input = getClass().getClassLoader().getResourceAsStream(resourceName);
+            if (input == null) {
+                throw new IOException("Default " + resourceName + " not found in resources");
+            }
+        }
+        return input;
     }
 
     public String lookupPD(String key) {
