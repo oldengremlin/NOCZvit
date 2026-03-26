@@ -2,7 +2,13 @@ package net.ukrcom.noczvit;
 
 import com.sun.mail.imap.IMAPFolder;
 import com.sun.mail.imap.IMAPStore;
-import jakarta.mail.*;
+import jakarta.mail.BodyPart;
+import jakarta.mail.Folder;
+import jakarta.mail.Message;
+import jakarta.mail.MessagingException;
+import jakarta.mail.Multipart;
+import jakarta.mail.Session;
+//import jakarta.mail.*;
 import jakarta.mail.search.SearchTerm;
 import java.io.IOException;
 import java.io.InputStream;
