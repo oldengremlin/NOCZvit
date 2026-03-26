@@ -134,11 +134,8 @@ public class ImapClient {
 
                         long unixDate;
                         try {
-//                            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
-//                            unixDate = dateFormat.parse(dateStr).getTime() / 1000;
                             OffsetDateTime odt = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER);
                             unixDate = odt.toEpochSecond();
-//                        } catch (ParseException e) {
                         } catch (DateTimeParseException e) {
                             if (config.isDebug()) {
                                 System.err.println("Failed to parse date: " + dateStr);
