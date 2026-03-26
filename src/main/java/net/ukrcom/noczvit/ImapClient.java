@@ -197,7 +197,7 @@ public class ImapClient {
                 }
             }
         }
-        return StringEscapeUtils.escapeHtml4(result);
+        return result;
     }
 
     private void filterAndMergeMessages(Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup,
@@ -400,7 +400,7 @@ public class ImapClient {
                                                                             deviceEntry.getKey(),
                                                                             tsEntry.getKey(),
                                                                             ttsEntry.getKey(),
-                                                                            msg
+                                                                            StringEscapeUtils.escapeHtml4(msg)
                                                                     );
                                                                 });
                                                     });
@@ -591,8 +591,8 @@ public class ImapClient {
                         long newUnixDate = dateFormat.parse(trapDate).getTime() / 1000;
                         // Оновлюємо ts і dt
                         tts = newUnixDate;
-                        tdt = new SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
-                                .format(new Date(newUnixDate * 1000));
+//                        tdt = new SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
+                        tdt = dateFormat.format(new Date(newUnixDate * 1000));
                         trapValueFound = true;
                         if (config.isDebug()) {
                             System.err.println("Found Trap value date: " + trapDate + ", updated ts=" + tts + ", updated dt=" + tdt);

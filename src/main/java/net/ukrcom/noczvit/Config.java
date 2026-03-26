@@ -143,8 +143,10 @@ public class Config {
                     String hostName = parts[0].trim();
                     Map<String, String> hostData = new HashMap<>();
                     for (String attr : parts[1].split(";")) {
-                        String[] kv = attr.split("=");
-                        hostData.put(kv[0].trim(), kv[1].trim());
+                        String[] kv = attr.split("=", 2);
+                        if (kv.length > 1) {
+                            hostData.put(kv[0].trim(), kv[1].trim());
+                        }
                     }
                     hosts.put(hostName, hostData);
                 }
@@ -161,8 +163,10 @@ public class Config {
                     String ip = parts[0].trim();
                     Map<String, String> ramosData = new HashMap<>();
                     for (String attr : parts[1].split(";")) {
-                        String[] kv = attr.split("=");
-                        ramosData.put(kv[0].trim(), kv[1].trim());
+                        String[] kv = attr.split("=", 2);
+                        if (kv.length > 1) {
+                            ramosData.put(kv[0].trim(), kv[1].trim());
+                        }
                     }
                     ramos.put(ip, ramosData);
                 }
