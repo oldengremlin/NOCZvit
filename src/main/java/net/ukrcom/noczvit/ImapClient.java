@@ -11,8 +11,6 @@ import jakarta.mail.search.SearchTerm;
 import jakarta.mail.Session;
 import java.io.InputStream;
 import java.io.IOException;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.LocalDateTime;
@@ -42,8 +40,12 @@ public class ImapClient {
             Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
     );
     private static final Pattern DEVICE_PREFIX_PATTERN = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
+
 //    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+
+    private static final DateTimeFormatter LDT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter TDT = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
     private final Dictionary dictionary;
@@ -587,17 +589,16 @@ public class ImapClient {
                 if (matcher.find()) {
                     String trapDate = matcher.group();
                     try {
-                        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.ENGLISH);
-                        long newUnixDate = dateFormat.parse(trapDate).getTime() / 1000;
-                        // Оновлюємо ts і dt
-                        tts = newUnixDate;
-//                        tdt = new SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
-                        tdt = dateFormat.format(new Date(newUnixDate * 1000));
+
+                        LocalDateTime ldt = LocalDateTime.parse(trapDate, LDT);
+                        tts = ldt.atZone(ZoneId.systemDefault()).toEpochSecond();
+                        tdt = ldt.atZone(ZoneId.systemDefault()).format(TDT);
+
                         trapValueFound = true;
                         if (config.isDebug()) {
                             System.err.println("Found Trap value date: " + trapDate + ", updated ts=" + tts + ", updated dt=" + tdt);
                         }
-                    } catch (ParseException e) {
+                    } catch (DateTimeParseException e) {
                         if (config.isDebug()) {
                             System.err.println("Failed to parse Trap value date: " + trapDate + ", error: " + e.getMessage());
                         }
