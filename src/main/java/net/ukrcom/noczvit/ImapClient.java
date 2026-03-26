@@ -10,11 +10,23 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+//import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import org.apache.commons.text.StringEscapeUtils;
 
 public class ImapClient {
 
@@ -26,6 +38,8 @@ public class ImapClient {
             Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
     );
     private static final Pattern DEVICE_PREFIX_PATTERN = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
+//    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
     private final Dictionary dictionary;
@@ -114,9 +128,12 @@ public class ImapClient {
 
                         long unixDate;
                         try {
-                            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
-                            unixDate = dateFormat.parse(dateStr).getTime() / 1000;
-                        } catch (ParseException e) {
+//                            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+//                            unixDate = dateFormat.parse(dateStr).getTime() / 1000;
+                            OffsetDateTime odt = OffsetDateTime.parse(dateStr, FORMATTER);
+                            unixDate = odt.toEpochSecond();
+//                        } catch (ParseException e) {
+                        } catch (DateTimeParseException e) {
                             if (config.isDebug()) {
                                 System.err.println("Failed to parse date: " + dateStr);
                             }
@@ -176,7 +193,7 @@ public class ImapClient {
                 }
             }
         }
-        return result;
+        return StringEscapeUtils.escapeHtml4(result);
     }
 
     private void filterAndMergeMessages(Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup,
@@ -500,11 +517,13 @@ public class ImapClient {
             System.err.println("Raw body: " + body);
         }
 
-        String appendix = "";
+        String appendix;
         if (subject.contains("Air Conditioning")) {
             appendix = " (кондиціонер)";
         } else if (subject.contains("Diesel Generator")) {
             appendix = " (генератор)";
+        } else {
+            appendix = "";
         }
 
         String[] parts = subject.split("\\s+");
@@ -513,8 +532,8 @@ public class ImapClient {
 
         String from = geo;
         String to = "";
-        boolean needCheckFrom = true;
-        boolean needCheckTo = true;
+//        boolean needCheckFrom = true;
+//        boolean needCheckTo = true;
 
         if ("STM".equals(type)) {
             String[] geoParts = geo.split("__");
@@ -524,11 +543,11 @@ public class ImapClient {
 
         String originalFrom = from;
         from = dictionary.lookupSDH(from);
-        needCheckFrom = originalFrom.equals(from);
+        boolean needCheckFrom = originalFrom.equals(from);
 
         String originalTo = to;
         to = dictionary.lookupSDH(to);
-        needCheckTo = originalTo.equals(to);
+        boolean needCheckTo = originalTo.equals(to);
 
         String geoMsg;
         if ("STM".equals(type)) {

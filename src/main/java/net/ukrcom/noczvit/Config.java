@@ -138,14 +138,16 @@ public class Config {
         String hostsStr = properties.getProperty("snmp.hosts");
         if (hostsStr != null) {
             for (String hostEntry : hostsStr.split(",")) {
-                String[] parts = hostEntry.split(":");
-                String hostName = parts[0].trim();
-                Map<String, String> hostData = new HashMap<>();
-                for (String attr : parts[1].split(";")) {
-                    String[] kv = attr.split("=");
-                    hostData.put(kv[0].trim(), kv[1].trim());
+                String[] parts = hostEntry.split(":", 2);
+                if (parts.length > 1) {
+                    String hostName = parts[0].trim();
+                    Map<String, String> hostData = new HashMap<>();
+                    for (String attr : parts[1].split(";")) {
+                        String[] kv = attr.split("=");
+                        hostData.put(kv[0].trim(), kv[1].trim());
+                    }
+                    hosts.put(hostName, hostData);
                 }
-                hosts.put(hostName, hostData);
             }
         }
     }
@@ -154,14 +156,16 @@ public class Config {
         String ramosStr = properties.getProperty("snmp.ramos");
         if (ramosStr != null) {
             for (String ramosEntry : ramosStr.split(",")) {
-                String[] parts = ramosEntry.split(":");
-                String ip = parts[0].trim();
-                Map<String, String> ramosData = new HashMap<>();
-                for (String attr : parts[1].split(";")) {
-                    String[] kv = attr.split("=");
-                    ramosData.put(kv[0].trim(), kv[1].trim());
+                String[] parts = ramosEntry.split(":", 2);
+                if (parts.length > 1) {
+                    String ip = parts[0].trim();
+                    Map<String, String> ramosData = new HashMap<>();
+                    for (String attr : parts[1].split(";")) {
+                        String[] kv = attr.split("=");
+                        ramosData.put(kv[0].trim(), kv[1].trim());
+                    }
+                    ramos.put(ip, ramosData);
                 }
-                ramos.put(ip, ramosData);
             }
         }
     }
