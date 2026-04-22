@@ -73,10 +73,9 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
                     message.append(ImapClient.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup));
                 }
-            }
-
-            if (config.isDebtorsEnabled()) {
-                message.append(new Debtors(config));
+                if (config.isDebtorsEnabled()) {
+                    message.append(new Debtors(config));
+                }
             }
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
