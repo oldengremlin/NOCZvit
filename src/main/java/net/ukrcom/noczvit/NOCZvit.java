@@ -75,6 +75,10 @@ public class NOCZvit {
                 }
             }
 
+            if (config.isDebug()) {
+                message.append(new Debtors());
+            }
+
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
                 SnmpClient snmpClient = new SnmpClient(config);
                 if (config.isTemperatureEnabled()) {
