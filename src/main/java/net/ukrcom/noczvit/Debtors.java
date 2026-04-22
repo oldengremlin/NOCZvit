@@ -14,6 +14,10 @@
  */
 package net.ukrcom.noczvit;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -23,7 +27,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import org.apache.commons.text.StringEscapeUtils;
 
 public class Debtors {
@@ -63,23 +66,75 @@ public class Debtors {
         returnMessage.append("</ol><p>");
     }
 
+    // Resolves FreeTDS server alias from freetds.conf to [host, port].
+    // Falls back to [serverName, "1433"] if not found.
+    private String[] resolveServer(String serverName) {
+        String[] searchPaths = {
+            System.getProperty("user.home") + "/.freetds.conf",
+            "/etc/freetds/freetds.conf",
+            "/etc/freetds.conf"
+        };
+        for (String path : searchPaths) {
+            String[] result = parseFreeTdsConf(path, serverName);
+            if (result != null) {
+                return result;
+            }
+        }
+        return new String[]{serverName, "1433"};
+    }
+
+    private String[] parseFreeTdsConf(String path, String serverName) {
+        File file = new File(path);
+        if (!file.exists()) {
+            return null;
+        }
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            boolean inSection = false;
+            String host = null;
+            String port = "1433";
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("[") && line.endsWith("]")) {
+                    if (inSection && host != null) {
+                        return new String[]{host, port};
+                    }
+                    inSection = line.equals("[" + serverName + "]");
+                    host = null;
+                    port = "1433";
+                } else if (inSection && line.contains("=")) {
+                    String[] kv = line.split("=", 2);
+                    switch (kv[0].trim()) {
+                        case "host" -> host = kv[1].trim();
+                        case "port" -> port = kv[1].trim();
+                    }
+                }
+            }
+            if (inSection && host != null) {
+                return new String[]{host, port};
+            }
+        } catch (IOException ignored) {
+        }
+        return null;
+    }
+
     private Connection connectTo(String server, String database, String user, String password) throws SQLException {
-        String url = "jdbc:sqlserver://" + server + ";databaseName=" + database;
-        Properties props = new Properties();
-        props.setProperty("user", user);
-        props.setProperty("password", password);
-        props.setProperty("encrypt", "false");
-        props.setProperty("trustServerCertificate", "true");
-        return DriverManager.getConnection(url, props);
+        String[] hostPort = resolveServer(server);
+        String url = "jdbc:jtds:sqlserver://" + hostPort[0] + ":" + hostPort[1] + "/" + database;
+        if (config.isDebug()) {
+            System.err.println("Debtors connecting: " + url);
+        }
+        return DriverManager.getConnection(url, user, password);
     }
 
     private Map<Integer, Map<String, String>> buildAccountMap() throws SQLException {
         Map<Integer, Map<String, String>> accountMap = new HashMap<>();
         try (Connection conn = connectTo(
                 config.getAccountMssqlServer(), config.getAccountMssqlDatabase(),
-                config.getAccountMssqlUser(), config.getAccountMssqlPassword()); PreparedStatement stmt = conn.prepareStatement(
-             "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]"); ResultSet rs = stmt.executeQuery()) {
-            System.out.println("buildAccountMap");
+                config.getAccountMssqlUser(), config.getAccountMssqlPassword());
+             PreparedStatement stmt = conn.prepareStatement(
+                "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]");
+             ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 int customerId = rs.getInt("Customer_id");
                 String firmId = rs.getString("FirmId");
@@ -95,9 +150,10 @@ public class Debtors {
         List<String> result = new ArrayList<>();
         try (Connection conn = connectTo(
                 config.getAccequipmentMssqlServer(), config.getAccequipmentMssqlDatabase(),
-                config.getAccequipmentMssqlUser(), config.getAccequipmentMssqlPassword()); PreparedStatement stmt = conn.prepareStatement(
-             "SELECT TOP 1 [ParamValue] FROM [dbo].[AccEqu.Parameters]"
-             + " WHERE [ParamName] = ? ORDER BY [ParamDate] DESC")) {
+                config.getAccequipmentMssqlUser(), config.getAccequipmentMssqlPassword());
+             PreparedStatement stmt = conn.prepareStatement(
+                "SELECT TOP 1 [ParamValue] FROM [dbo].[AccEqu.Parameters]"
+                + " WHERE [ParamName] = ? ORDER BY [ParamDate] DESC")) {
             stmt.setString(1, "ServicesLastState");
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -109,7 +165,7 @@ public class Debtors {
     }
 
     // ServicesLastState format: [{"Key":firmId,"Value":customerId},...]
-    // After splitting by "," gives alternating {"Key":N and "Value":M} fragments
+    // Splitting by "," gives alternating {"Key":N and "Value":M} fragments
     private List<String> parseServicesLastState(String paramValue, Map<Integer, Map<String, String>> accountMap) {
         List<String> result = new ArrayList<>();
         if (paramValue == null || paramValue.length() < 2) {
