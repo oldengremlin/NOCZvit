@@ -76,7 +76,7 @@ public class NOCZvit {
             }
 
             if (config.isDebug()) {
-                message.append(new Debtors());
+                message.append(new Debtors(config));
             }
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {

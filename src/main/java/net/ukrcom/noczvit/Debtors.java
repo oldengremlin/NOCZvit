@@ -10,9 +10,11 @@ package net.ukrcom.noczvit;
  */
 public class Debtors {
 
-    private StringBuilder returnMessage;
+    private final StringBuilder returnMessage;
+    private final Config config;
 
-    public Debtors() {
+    public Debtors(Config _config) {
+        this.config = _config;
         this.returnMessage = new StringBuilder();
         this.getDebtors();
     }
