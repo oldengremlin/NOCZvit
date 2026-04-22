@@ -14,6 +14,11 @@
  */
 package net.ukrcom.noczvit;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -164,37 +169,28 @@ public class Debtors {
     }
 
     // ServicesLastState format: [{"Key":firmId,"Value":customerId},...]
-    // Splitting by "," gives alternating {"Key":N and "Value":M} fragments
     private List<String> parseServicesLastState(String paramValue, Map<Integer, Map<String, String>> accountMap) {
         List<String> result = new ArrayList<>();
-        if (paramValue == null || paramValue.length() < 2) {
+        if (paramValue == null || paramValue.isBlank()) {
             return result;
         }
-        if (paramValue.startsWith("[") && paramValue.endsWith("]")) {
-            paramValue = paramValue.substring(1, paramValue.length() - 1);
-        }
-
-        String currentFirmId = null;
-        for (String item : paramValue.split(",")) {
-            item = item.trim();
-            if (item.startsWith("{\"Key\":")) {
-                currentFirmId = item.substring("{\"Key\":".length()).replaceAll("\\}$", "").trim();
-            } else if (item.startsWith("\"Value\":")) {
-                String customerIdStr = item.substring("\"Value\":".length()).replaceAll("\\}$", "").trim();
-                if (currentFirmId != null) {
-                    try {
-                        int customerId = Integer.parseInt(customerIdStr);
-                        Map<String, String> firmMap = accountMap.get(customerId);
-                        if (firmMap != null) {
-                            String title = firmMap.get(currentFirmId);
-                            if (title != null) {
-                                result.add(customerId + ", " + title);
-                            }
-                        }
-                    } catch (NumberFormatException ignored) {
+        try {
+            JsonArray array = JsonParser.parseString(paramValue).getAsJsonArray();
+            for (JsonElement element : array) {
+                JsonObject obj = element.getAsJsonObject();
+                String firmId = obj.get("Key").getAsString();
+                int customerId = obj.get("Value").getAsInt();
+                Map<String, String> firmMap = accountMap.get(customerId);
+                if (firmMap != null) {
+                    String title = firmMap.get(firmId);
+                    if (title != null) {
+                        result.add(customerId + ", " + title);
                     }
                 }
-                currentFirmId = null;
+            }
+        } catch (JsonSyntaxException e) {
+            if (config.isDebug()) {
+                System.err.println("Debtors JSON parse error: " + e.getMessage());
             }
         }
         return result;
