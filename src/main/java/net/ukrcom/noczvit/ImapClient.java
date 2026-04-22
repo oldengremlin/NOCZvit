@@ -56,10 +56,10 @@ public class ImapClient {
     }
 
     public Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> prepareImapFolder(boolean isInteractive,
-            LocalDateTime prevDutyBegin,
-            LocalDateTime prevDutyEnd,
-            LocalDateTime currDutyBegin,
-            LocalDateTime currDutyEnd) {
+                                                                                          LocalDateTime prevDutyBegin,
+                                                                                          LocalDateTime prevDutyEnd,
+                                                                                          LocalDateTime currDutyBegin,
+                                                                                          LocalDateTime currDutyEnd) {
         Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = new HashMap<>();
         Properties props = new Properties();
         props.put("mail.imap.ssl.enable", config.isMailSsl());
@@ -200,11 +200,11 @@ public class ImapClient {
     }
 
     private void filterAndMergeMessages(Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup,
-            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup,
-            long ctPrevDutyBegin,
-            long ctCurrDutyEnd,
-            boolean isInteractive,
-            Config config) {
+                                        Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup,
+                                        long ctPrevDutyBegin,
+                                        long ctCurrDutyEnd,
+                                        boolean isInteractive,
+                                        Config config) {
         /*
         for (String group : tempMsgLogGroup.keySet()) {
             for (String device : tempMsgLogGroup.get(group).keySet()) {
@@ -377,8 +377,8 @@ public class ImapClient {
 
             public String formattedMessage() {
                 var msg = !message.contains(" : OSM ")
-                        ? message + " [" + device + "]"
-                        : message;
+                      ? message + " [" + device + "]"
+                      : message;
                 return "<li style=\"margin-left: 75px;\">" + msg + "</li>";
             }
 
