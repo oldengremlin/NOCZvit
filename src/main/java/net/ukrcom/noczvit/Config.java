@@ -40,6 +40,15 @@ public class Config {
     private String dictionarySdhPath;
     private static final String HELP_PATH = "help.txt";
 
+    private String accountMssqlUser;
+    private String accountMssqlPassword;
+    private String accountMssqlServer;
+    private String accountMssqlDatabase;
+    private String accequipmentMssqlUser;
+    private String accequipmentMssqlPassword;
+    private String accequipmentMssqlServer;
+    private String accequipmentMssqlDatabase;
+
     public Config(String[] args) throws IOException {
         properties = new Properties();
         hosts = new HashMap<>();
@@ -60,6 +69,16 @@ public class Config {
         parseArgs(args);
         parseHosts();
         parseRamos();
+
+        accountMssqlUser = properties.getProperty("account-mssql-user", "");
+        accountMssqlPassword = properties.getProperty("account-mssql-password", "");
+        accountMssqlServer = properties.getProperty("account-mssql-server", "");
+        accountMssqlDatabase = properties.getProperty("account-mssql-database", "");
+        accequipmentMssqlUser = properties.getProperty("accequipment-mssql-user", "");
+        accequipmentMssqlPassword = properties.getProperty("accequipment-mssql-password", "");
+        accequipmentMssqlServer = properties.getProperty("accequipment-mssql-server", "");
+        accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
+
     }
 
     private void loadProperties() throws IOException {
@@ -282,4 +301,37 @@ public class Config {
 
         return isEmailValid && isSnmpValid;
     }
+
+    public String getAccountMssqlUser() {
+        return accountMssqlUser;
+    }
+
+    public String getAccountMssqlPassword() {
+        return accountMssqlPassword;
+    }
+
+    public String getAccountMssqlServer() {
+        return accountMssqlServer;
+    }
+
+    public String getAccountMssqlDatabase() {
+        return accountMssqlDatabase;
+    }
+
+    public String getAccequipmentMssqlUser() {
+        return accequipmentMssqlUser;
+    }
+
+    public String getAccequipmentMssqlPassword() {
+        return accequipmentMssqlPassword;
+    }
+
+    public String getAccequipmentMssqlServer() {
+        return accequipmentMssqlServer;
+    }
+
+    public String getAccequipmentMssqlDatabase() {
+        return accequipmentMssqlDatabase;
+    }
+
 }
