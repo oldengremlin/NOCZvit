@@ -105,8 +105,10 @@ public class Debtors {
                 } else if (inSection && line.contains("=")) {
                     String[] kv = line.split("=", 2);
                     switch (kv[0].trim()) {
-                        case "host" -> host = kv[1].trim();
-                        case "port" -> port = kv[1].trim();
+                        case "host" ->
+                            host = kv[1].trim();
+                        case "port" ->
+                            port = kv[1].trim();
                     }
                 }
             }
@@ -131,10 +133,8 @@ public class Debtors {
         Map<Integer, Map<String, String>> accountMap = new HashMap<>();
         try (Connection conn = connectTo(
                 config.getAccountMssqlServer(), config.getAccountMssqlDatabase(),
-                config.getAccountMssqlUser(), config.getAccountMssqlPassword());
-             PreparedStatement stmt = conn.prepareStatement(
-                "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]");
-             ResultSet rs = stmt.executeQuery()) {
+                config.getAccountMssqlUser(), config.getAccountMssqlPassword()); PreparedStatement stmt = conn.prepareStatement(
+             "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]"); ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 int customerId = rs.getInt("Customer_id");
                 String firmId = rs.getString("FirmId");
@@ -150,10 +150,9 @@ public class Debtors {
         List<String> result = new ArrayList<>();
         try (Connection conn = connectTo(
                 config.getAccequipmentMssqlServer(), config.getAccequipmentMssqlDatabase(),
-                config.getAccequipmentMssqlUser(), config.getAccequipmentMssqlPassword());
-             PreparedStatement stmt = conn.prepareStatement(
-                "SELECT TOP 1 [ParamValue] FROM [dbo].[AccEqu.Parameters]"
-                + " WHERE [ParamName] = ? ORDER BY [ParamDate] DESC")) {
+                config.getAccequipmentMssqlUser(), config.getAccequipmentMssqlPassword()); PreparedStatement stmt = conn.prepareStatement(
+             "SELECT TOP 1 [ParamValue] FROM [dbo].[AccEqu.Parameters]"
+             + " WHERE [ParamName] = ? ORDER BY [ParamDate] DESC")) {
             stmt.setString(1, "ServicesLastState");
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
