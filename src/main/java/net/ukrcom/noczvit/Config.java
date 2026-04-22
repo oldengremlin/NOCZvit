@@ -292,6 +292,11 @@ public class Config {
         return properties.getProperty("email.toDebug");
     }
 
+    public boolean isDebtorsEnabled() {
+        return !accountMssqlServer.isEmpty() && !accountMssqlDatabase.isEmpty()
+                && !accequipmentMssqlServer.isEmpty() && !accequipmentMssqlDatabase.isEmpty();
+    }
+
     public boolean isValid() {
         boolean isEmailValid = getEmailFrom() != null && getEmailReplyTo() != null && !getEmailTo().isEmpty();
         boolean isSnmpValid = true;

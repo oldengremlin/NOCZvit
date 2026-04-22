@@ -40,7 +40,7 @@ public class NOCZvit {
             }
 
             // Check if all sections are disabled
-            if (!config.isIncidentsEnabled() && !config.isTemperatureEnabled() && !config.isRamosEnabled()) {
+            if (!config.isIncidentsEnabled() && !config.isTemperatureEnabled() && !config.isRamosEnabled() && !config.isDebtorsEnabled()) {
                 System.err.println("All report sections are disabled, skipping email sending.");
                 return;
             }
@@ -75,7 +75,7 @@ public class NOCZvit {
                 }
             }
 
-            if (config.isDebug()) {
+            if (config.isDebtorsEnabled()) {
                 message.append(new Debtors(config));
             }
 

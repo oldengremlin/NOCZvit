@@ -32,6 +32,11 @@
             <artifactId>commons-text</artifactId>
             <version>1.15.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>12.10.0.jre11</version>
+        </dependency>
     </dependencies>
     <build>
         <resources>
