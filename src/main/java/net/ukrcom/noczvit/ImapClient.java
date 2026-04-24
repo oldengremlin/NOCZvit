@@ -230,6 +230,56 @@ public class ImapClient {
                 }
             }
         }
+
+        /*
+        // Структура:
+        // - String (group): назва групи, наприклад, "Обухів, Малишка 2"
+        // - Map<String, ...> (device): мапа пристроїв, наприклад, "core1"
+        // - Map<Long, ...> (ts): мапа таймстемпів, наприклад, 1748549842 (Unix timestamp)
+        // - Map<Long, List<String>> (tts): мапа подій (tts) із списком повідомлень, наприклад, {1748528164: ["msg1", "msg2"]}
+        tempMsgLogGroup
+                .entrySet().stream().flatMap(
+                        groupEntry -> groupEntry.getValue()
+                                .entrySet().stream().map(
+                                        deviceEntry -> Map.entry(
+                                                groupEntry.getKey(), deviceEntry
+                                        )
+                                )
+                ).flatMap(
+                        groupDevice -> groupDevice
+                                .getValue()
+                                .getValue()
+                                .entrySet().stream().map(
+                                        tsEntry -> Map.entry(
+                                                Map.entry(
+                                                        groupDevice.getKey(), groupDevice.getValue().getKey()
+                                                ), tsEntry
+                                        )
+                                )
+                ).filter(groupDeviceTs -> {
+                    Long ts = groupDeviceTs.getValue().getKey();
+                    return ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd;
+                })
+                .forEach(groupDeviceTs -> {
+                    String group = groupDeviceTs.getKey().getKey();
+                    String device = groupDeviceTs.getKey().getValue();
+                    Long ts = groupDeviceTs.getValue().getKey();
+                    Map<Long, List<String>> ttsMap = groupDeviceTs.getValue().getValue();
+
+                    Map<Long, List<String>> existingTtsMap = msgLogGroup
+                            .computeIfAbsent(group, k -> new HashMap<>())
+                            .computeIfAbsent(device, k -> new HashMap<>())
+                            .computeIfAbsent(ts, k -> new HashMap<>());
+
+                    ttsMap.forEach((tts, messages)
+                            -> existingTtsMap.computeIfAbsent(tts, k -> new ArrayList<>()).addAll(messages));
+
+                    if (config.isDebug()) {
+                        System.err.println("Merged messages: group=" + group + ", device=" + device
+                                + ", ts=" + ts + ", messages=" + existingTtsMap);
+                    }
+                });
+         */
     }
 
     public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
