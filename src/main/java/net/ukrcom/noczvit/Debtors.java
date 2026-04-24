@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.commons.text.StringEscapeUtils;
 
 public class Debtors {
@@ -55,12 +56,40 @@ public class Debtors {
 
         if (config.isDebtorsEnabled()) {
             try {
+//
+//              ІМПЕРАТИВНИЙ СТИЛЬ
+//
+                /*
                 Map<Integer, Map<String, String>> accountMap = buildAccountMap();
                 for (String debtor : fetchDebtors(accountMap)) {
                     returnMessage.append("<li style=\"margin-left: 50px;\">")
                             .append(StringEscapeUtils.escapeHtml4(debtor))
                             .append("</li>");
                 }
+                 */
+//
+//              АНТИПАТЕРН ФУНКЦІОНАЛЬНОГО СТИЛЮ (АЛЕ ТАКОЖ ПРАЦЮЄ)
+//
+                /*
+                fetchDebtors(buildAccountMap()).stream()
+                        .forEach(
+                                debtor -> returnMessage.append("<li style=\"margin-left: 50px;\">")
+                                        .append(StringEscapeUtils.escapeHtml4(debtor))
+                                        .append("</li>")
+                        );
+                 */
+//
+//              ФУНКЦІОНАЛЬНИЙ СТИЛЬ
+//
+                String debtorsHtml = fetchDebtors(buildAccountMap()).stream()
+                        .map(
+                                debtor -> "<li style=\"margin-left: 50px;\">"
+                                        .concat(StringEscapeUtils.escapeHtml4(debtor))
+                                        .concat("</li>")
+                        )
+                        .collect(Collectors.joining());
+                returnMessage.append(debtorsHtml);
+
             } catch (SQLException e) {
                 if (config.isDebug()) {
                     System.err.println("Debtors DB error: " + e.getMessage());
