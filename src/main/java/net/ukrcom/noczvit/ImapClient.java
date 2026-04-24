@@ -302,6 +302,34 @@ public class ImapClient {
 
         }
 
+//
+//      ІМПЕРАТИВНИЙ СТИЛЬ
+//
+        List<Incident> incidents = new ArrayList<>();
+        for (var groupEntry : msgLogGroup.entrySet()) {
+            for (var deviceEntry : groupEntry.getValue().entrySet()) {
+                for (var tsEntry : deviceEntry.getValue().entrySet()) {
+                    if (tsEntry.getKey() < ctDutyBegin || tsEntry.getKey() > ctDutyEnd) {
+                        continue;
+                    }
+                    for (var ttsEntry : tsEntry.getValue().entrySet()) {
+                        for (String msg : ttsEntry.getValue()) {
+                            incidents.add(new Incident(
+                                    groupEntry.getKey(), deviceEntry.getKey(),
+                                    tsEntry.getKey(), ttsEntry.getKey(),
+                                    StringEscapeUtils.escapeHtml4(msg)
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        incidents.sort(Comparator.comparing(Incident::ts).thenComparing(Incident::tts));
+
+//
+//      ФУНКЦІОНАЛЬНИЙ СТИЛЬ (В ДАНОМУ ВИПАДКУ НЕ ВИПРАВДАНО)
+//
+        /*
         List<Incident> incidents = msgLogGroup.entrySet().stream()
                 .flatMap((var groupEntry) -> {
                     return groupEntry.getValue().entrySet().stream()
@@ -329,7 +357,13 @@ public class ImapClient {
                 })
                 .sorted(Comparator.comparing(Incident::ts).thenComparing(Incident::tts))
                 .toList();
-
+         */
+//
+//      Групування та HTML — groupingBy + collect(joining()).
+//      Це вже розумне застосування функціонального стилю
+//      — він коротший і виразніший за аналогічний цикл з
+//      LinkedHashMap і StringBuilder.
+//
         String reportContent = incidents.stream()
                 .collect(Collectors.groupingBy(
                         Incident::group,
