@@ -25,16 +25,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import lombok.Getter;
+import lombok.AccessLevel;
 
+@Getter
 public class Config {
 
+    @Getter(AccessLevel.NONE)
     private final Properties properties;
     private final Map<String, Map<String, String>> hosts;
     private final Map<String, Map<String, String>> ramos;
-    private boolean debugEnabled;
+    private boolean debug;
     private boolean incidentsEnabled;
     private boolean temperatureEnabled;
     private boolean ramosEnabled;
+    @Getter(AccessLevel.NONE)
     private String configPath;
     private String dictionaryPdPath;
     private String dictionarySdhPath;
@@ -53,19 +58,15 @@ public class Config {
         properties = new Properties();
         hosts = new HashMap<>();
         ramos = new HashMap<>();
-        // Initialize paths to default resource values
-        configPath = null; // Will load from resources by default
-        dictionaryPdPath = null; // Will load from resources by default
-        dictionarySdhPath = null; // Will load from resources by default
-        // Parse args to override paths and settings
+        configPath = null;
+        dictionaryPdPath = null;
+        dictionarySdhPath = null;
         parseArgs(args);
         loadProperties();
-        // Initialize settings from properties
-        debugEnabled = Boolean.parseBoolean(properties.getProperty("debug", "false"));
+        debug = Boolean.parseBoolean(properties.getProperty("debug", "false"));
         incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
-        // Parse args again to override settings (ensures args take precedence)
         parseArgs(args);
         parseHosts();
         parseRamos();
@@ -78,19 +79,16 @@ public class Config {
         accequipmentMssqlPassword = properties.getProperty("accequipment-mssql-password", "");
         accequipmentMssqlServer = properties.getProperty("accequipment-mssql-server", "");
         accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
-
     }
 
     private void loadProperties() throws IOException {
         if (configPath != null) {
-            // Load from specified file path
             try (InputStream input = new FileInputStream(configPath)) {
                 properties.load(input);
             } catch (IOException e) {
                 throw new IOException("Failed to load configuration file: " + configPath, e);
             }
         } else {
-            // Load from default resource
             try (InputStream input = getClass().getClassLoader().getResourceAsStream("noczvit.properties")) {
                 if (input == null) {
                     throw new IOException("Default noczvit.properties not found in resources");
@@ -123,9 +121,9 @@ public class Config {
                     case "--no-ramos" ->
                         ramosEnabled = false;
                     case "--debug" ->
-                        debugEnabled = true;
+                        debug = true;
                     case "--no-debug" ->
-                        debugEnabled = false;
+                        debug = false;
                     default -> {
                         printHelp();
                         System.err.println("Error: Unknown argument: " + arg);
@@ -194,29 +192,10 @@ public class Config {
     }
 
     public boolean isDebug() {
-        return debugEnabled;
+        return getDebug();
     }
 
-    public boolean isIncidentsEnabled() {
-        return incidentsEnabled;
-    }
-
-    public boolean isTemperatureEnabled() {
-        return temperatureEnabled;
-    }
-
-    public boolean isRamosEnabled() {
-        return ramosEnabled;
-    }
-
-    public String getDictionaryPdPath() {
-        return dictionaryPdPath;
-    }
-
-    public String getDictionarySdhPath() {
-        return dictionarySdhPath;
-    }
-
+    
     public String getMailHostname() {
         return properties.getProperty("mail.hostname");
     }
@@ -261,14 +240,6 @@ public class Config {
         return properties.getProperty("snmp.hosts.suffix", "");
     }
 
-    public Map<String, Map<String, String>> getHosts() {
-        return hosts;
-    }
-
-    public Map<String, Map<String, String>> getRamos() {
-        return ramos;
-    }
-
     public String getEmailFrom() {
         return properties.getProperty("email.from");
     }
@@ -303,40 +274,6 @@ public class Config {
         if (isTemperatureEnabled() || isRamosEnabled()) {
             isSnmpValid = getSnmpCommunity() != null || getSnmpCommunityCelsius() != null || getSnmpCommunityRamos() != null;
         }
-
         return isEmailValid && isSnmpValid;
     }
-
-    public String getAccountMssqlUser() {
-        return accountMssqlUser;
-    }
-
-    public String getAccountMssqlPassword() {
-        return accountMssqlPassword;
-    }
-
-    public String getAccountMssqlServer() {
-        return accountMssqlServer;
-    }
-
-    public String getAccountMssqlDatabase() {
-        return accountMssqlDatabase;
-    }
-
-    public String getAccequipmentMssqlUser() {
-        return accequipmentMssqlUser;
-    }
-
-    public String getAccequipmentMssqlPassword() {
-        return accequipmentMssqlPassword;
-    }
-
-    public String getAccequipmentMssqlServer() {
-        return accequipmentMssqlServer;
-    }
-
-    public String getAccequipmentMssqlDatabase() {
-        return accequipmentMssqlDatabase;
-    }
-
 }
