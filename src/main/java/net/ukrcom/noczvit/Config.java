@@ -45,14 +45,14 @@ public class Config {
     private String dictionarySdhPath;
     private static final String HELP_PATH = "help.txt";
 
-    private String accountMssqlUser;
-    private String accountMssqlPassword;
-    private String accountMssqlServer;
-    private String accountMssqlDatabase;
-    private String accequipmentMssqlUser;
-    private String accequipmentMssqlPassword;
-    private String accequipmentMssqlServer;
-    private String accequipmentMssqlDatabase;
+    private final String accountMssqlUser;
+    private final String accountMssqlPassword;
+    private final String accountMssqlServer;
+    private final String accountMssqlDatabase;
+    private final String accequipmentMssqlUser;
+    private final String accequipmentMssqlPassword;
+    private final String accequipmentMssqlServer;
+    private final String accequipmentMssqlDatabase;
 
     public Config(String[] args) throws IOException {
         properties = new Properties();
