@@ -45,6 +45,24 @@ public class Config {
     private String dictionarySdhPath;
     private static final String HELP_PATH = "help.txt";
 
+    private final String mailHostname;
+    private final String mailUsername;
+    private final String mailPassword;
+    private final boolean mailSsl;
+    private final String zabbixFolder;
+
+    private final String jnxOperatingDescr;
+    private final String jnxOperatingTemp;
+    private final String snmpCommunity;
+    private final String snmpCommunityCelsius;
+    private final String snmpCommunityRamos;
+    private final String snmpHostsSuffix;
+
+    private final String emailFrom;
+    private final String emailReplyTo;
+    private final List<String> emailTo;
+    private final String emailToDebug;
+
     private final String accountMssqlUser;
     private final String accountMssqlPassword;
     private final String accountMssqlServer;
@@ -70,6 +88,31 @@ public class Config {
         parseArgs(args);
         parseHosts();
         parseRamos();
+
+        mailHostname = properties.getProperty("mail.hostname");
+        mailUsername = properties.getProperty("mail.username");
+        mailPassword = properties.getProperty("mail.password");
+        mailSsl = Boolean.parseBoolean(properties.getProperty("mail.ssl", "false"));
+        zabbixFolder = properties.getProperty("mail.zabbixFolder");
+
+        jnxOperatingDescr = properties.getProperty("snmp.jnxOperatingDescr");
+        jnxOperatingTemp = properties.getProperty("snmp.jnxOperatingTemp");
+        snmpCommunity = properties.getProperty("snmp.community", "public");
+        snmpCommunityCelsius = properties.getProperty("snmp.community.celsius", snmpCommunity);
+        snmpCommunityRamos = properties.getProperty("snmp.community.ramos", snmpCommunity);
+        snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
+
+        emailFrom = properties.getProperty("email.from");
+        emailReplyTo = properties.getProperty("email.replyTo");
+        emailToDebug = properties.getProperty("email.toDebug");
+        List<String> toList = new ArrayList<>();
+        String toStr = properties.getProperty("email.to");
+        if (toStr != null) {
+            for (String email : toStr.split(",")) {
+                toList.add(email.trim());
+            }
+        }
+        emailTo = toList;
 
         accountMssqlUser = properties.getProperty("account-mssql-user", "");
         accountMssqlPassword = properties.getProperty("account-mssql-password", "");
@@ -191,83 +234,16 @@ public class Config {
         }
     }
 
-    public String getMailHostname() {
-        return properties.getProperty("mail.hostname");
-    }
-
-    public String getMailUsername() {
-        return properties.getProperty("mail.username");
-    }
-
-    public String getMailPassword() {
-        return properties.getProperty("mail.password");
-    }
-
-    public boolean isMailSsl() {
-        return Boolean.parseBoolean(properties.getProperty("mail.ssl", "false"));
-    }
-
-    public String getZabbixFolder() {
-        return properties.getProperty("mail.zabbixFolder");
-    }
-
-    public String getJnxOperatingDescr() {
-        return properties.getProperty("snmp.jnxOperatingDescr");
-    }
-
-    public String getJnxOperatingTemp() {
-        return properties.getProperty("snmp.jnxOperatingTemp");
-    }
-
-    public String getSnmpCommunity() {
-        return properties.getProperty("snmp.community", "public");
-    }
-
-    public String getSnmpCommunityCelsius() {
-        return properties.getProperty("snmp.community.celsius", getSnmpCommunity());
-    }
-
-    public String getSnmpCommunityRamos() {
-        return properties.getProperty("snmp.community.ramos", getSnmpCommunity());
-    }
-
-    public String getSnmpHostsSuffix() {
-        return properties.getProperty("snmp.hosts.suffix", "");
-    }
-
-    public String getEmailFrom() {
-        return properties.getProperty("email.from");
-    }
-
-    public String getEmailReplyTo() {
-        return properties.getProperty("email.replyTo");
-    }
-
-    public List<String> getEmailTo() {
-        List<String> toList = new ArrayList<>();
-        String toStr = properties.getProperty("email.to");
-        if (toStr != null) {
-            for (String email : toStr.split(",")) {
-                toList.add(email.trim());
-            }
-        }
-        return toList;
-    }
-
-    public String getEmailToDebug() {
-        return properties.getProperty("email.toDebug");
-    }
-
     public boolean isDebtorsEnabled() {
         return !accountMssqlServer.isEmpty() && !accountMssqlDatabase.isEmpty()
                 && !accequipmentMssqlServer.isEmpty() && !accequipmentMssqlDatabase.isEmpty();
     }
 
     public boolean isValid() {
-        boolean isEmailValid = getEmailFrom() != null && getEmailReplyTo() != null && !getEmailTo().isEmpty();
+        boolean isEmailValid = emailFrom != null && emailReplyTo != null && !emailTo.isEmpty();
         boolean isSnmpValid = true;
         if (isTemperatureEnabled() || isRamosEnabled()) {
-            isSnmpValid = getSnmpCommunity() != null || getSnmpCommunityCelsius() != null || getSnmpCommunityRamos() != null;
+            isSnmpValid = snmpCommunity != null || snmpCommunityCelsius != null || snmpCommunityRamos != null;
         }
         return isEmailValid && isSnmpValid;
     }
