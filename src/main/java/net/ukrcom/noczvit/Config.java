@@ -27,7 +27,12 @@ import java.util.Map;
 import java.util.Properties;
 import lombok.Getter;
 import lombok.AccessLevel;
+import lombok.EqualsAndHashCode;
+import lombok.NonNull;
+import lombok.ToString;
 
+@ToString(includeFieldNames = true)
+@EqualsAndHashCode
 @Getter
 public class Config {
 
@@ -40,36 +45,60 @@ public class Config {
     private boolean temperatureEnabled;
     private boolean ramosEnabled;
     @Getter(AccessLevel.NONE)
+    @NonNull
     private String configPath;
+    @NonNull
     private String dictionaryPdPath;
+    @NonNull
     private String dictionarySdhPath;
     private static final String HELP_PATH = "help.txt";
 
+    @NonNull
     private final String mailHostname;
+    @NonNull
     private final String mailUsername;
+    @NonNull
     private final String mailPassword;
     private final boolean mailSsl;
+    @NonNull
     private final String zabbixFolder;
 
+    @NonNull
     private final String jnxOperatingDescr;
+    @NonNull
     private final String jnxOperatingTemp;
+    @NonNull
     private final String snmpCommunity;
+    @NonNull
     private final String snmpCommunityCelsius;
+    @NonNull
     private final String snmpCommunityRamos;
+    @NonNull
     private final String snmpHostsSuffix;
 
+    @NonNull
     private final String emailFrom;
+    @NonNull
     private final String emailReplyTo;
+    @NonNull
     private final List<String> emailTo;
     private final String emailToDebug;
 
+    @NonNull
     private final String accountMssqlUser;
+    @NonNull
     private final String accountMssqlPassword;
+    @NonNull
     private final String accountMssqlServer;
+    @NonNull
     private final String accountMssqlDatabase;
+    @NonNull
     private final String accequipmentMssqlUser;
+    @NonNull
     private final String accequipmentMssqlPassword;
+    @NonNull
     private final String accequipmentMssqlServer;
+    @NonNull
     private final String accequipmentMssqlDatabase;
 
     public Config(String[] args) throws IOException {
