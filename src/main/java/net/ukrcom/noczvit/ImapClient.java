@@ -47,8 +47,8 @@ public class ImapClient {
     private static final DateTimeFormatter TRAP_DATE_INPUT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter TRAP_DATE_OUTPUT_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
-    private final String patternOriginalFromName = Pattern.compile(":$").pattern();
-    private final Pattern datePattern = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
+    private final String PATTERN_ORIGINALFROMNAME = Pattern.compile(":$").pattern();
+    private final Pattern PATTERN_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
 
     private final Config config;
     private final Dictionary dictionary;
@@ -415,7 +415,7 @@ public class ImapClient {
             return;
         }
 
-        String originalFromName = from.replaceAll(patternOriginalFromName, ""); // Preserve the original device name
+        String originalFromName = from.replaceAll(PATTERN_ORIGINALFROMNAME, ""); // Preserve the original device name
 
         if (from.endsWith(":")) {
             if (!from.matches(".*-\\d+:$")) {
@@ -536,7 +536,7 @@ public class ImapClient {
                     System.err.println("Trap value line: " + line);
                 }
                 // Шукаємо дату у форматі yyyy-MM-dd'T'HH:mm:ss
-                Matcher matcher = datePattern.matcher(line);
+                Matcher matcher = PATTERN_DATE.matcher(line);
                 if (matcher.find()) {
                     String trapDate = matcher.group();
                     try {
