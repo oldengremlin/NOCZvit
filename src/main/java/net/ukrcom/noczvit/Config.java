@@ -191,11 +191,6 @@ public class Config {
         }
     }
 
-    public boolean isDebug() {
-        return getDebug();
-    }
-
-    
     public String getMailHostname() {
         return properties.getProperty("mail.hostname");
     }
