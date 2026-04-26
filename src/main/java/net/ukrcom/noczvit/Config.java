@@ -37,9 +37,9 @@ import lombok.ToString;
 public class Config {
 
     @Getter(AccessLevel.NONE)
-    private final Properties properties;
-    private final Map<String, Map<String, String>> hosts;
-    private final Map<String, Map<String, String>> ramos;
+    private Properties properties;
+    private Map<String, Map<String, String>> hosts;
+    private Map<String, Map<String, String>> ramos;
     private boolean debug;
     private boolean incidentsEnabled;
     private boolean temperatureEnabled;
@@ -54,103 +54,72 @@ public class Config {
     private static final String HELP_PATH = "help.txt";
 
     @NonNull
-    private final String mailHostname;
+    private String mailHostname;
     @NonNull
-    private final String mailUsername;
+    private String mailUsername;
     @NonNull
-    private final String mailPassword;
-    private final boolean mailSsl;
+    private String mailPassword;
+    private boolean mailSsl;
     @NonNull
-    private final String zabbixFolder;
+    private String zabbixFolder;
 
     @NonNull
-    private final String jnxOperatingDescr;
+    private String jnxOperatingDescr;
     @NonNull
-    private final String jnxOperatingTemp;
+    private String jnxOperatingTemp;
     @NonNull
-    private final String snmpCommunity;
+    private String snmpCommunity;
     @NonNull
-    private final String snmpCommunityCelsius;
+    private String snmpCommunityCelsius;
     @NonNull
-    private final String snmpCommunityRamos;
+    private String snmpCommunityRamos;
     @NonNull
-    private final String snmpHostsSuffix;
+    private String snmpHostsSuffix;
 
     @NonNull
-    private final String emailFrom;
+    private String emailFrom;
     @NonNull
-    private final String emailReplyTo;
+    private String emailReplyTo;
     @NonNull
-    private final List<String> emailTo;
-    private final String emailToDebug;
+    private List<String> emailTo;
+    private String emailToDebug;
 
     @NonNull
-    private final String accountMssqlUser;
+    private String accountMssqlUser;
     @NonNull
-    private final String accountMssqlPassword;
+    private String accountMssqlPassword;
     @NonNull
-    private final String accountMssqlServer;
+    private String accountMssqlServer;
     @NonNull
-    private final String accountMssqlDatabase;
+    private String accountMssqlDatabase;
     @NonNull
-    private final String accequipmentMssqlUser;
+    private String accequipmentMssqlUser;
     @NonNull
-    private final String accequipmentMssqlPassword;
+    private String accequipmentMssqlPassword;
     @NonNull
-    private final String accequipmentMssqlServer;
+    private String accequipmentMssqlServer;
     @NonNull
-    private final String accequipmentMssqlDatabase;
+    private String accequipmentMssqlDatabase;
 
     public Config(String[] args) throws IOException {
+        initValues();
+        loadProperties();
+        parseArgs(args);
+        generalProperties();
+        hostsProperties();
+        ramosProperties();
+        celsiusProperties();
+        emailProperties();
+        mssqlProperties();
+    }
+
+    private void initValues() {
         properties = new Properties();
         hosts = new HashMap<>();
         ramos = new HashMap<>();
         configPath = null;
         dictionaryPdPath = null;
         dictionarySdhPath = null;
-        parseArgs(args);
-        loadProperties();
-        debug = Boolean.parseBoolean(properties.getProperty("debug", "false"));
-        incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
-        temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
-        ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
-        parseArgs(args);
-        parseHosts();
-        parseRamos();
-
-        mailHostname = properties.getProperty("mail.hostname");
-        mailUsername = properties.getProperty("mail.username");
-        mailPassword = properties.getProperty("mail.password");
-        mailSsl = Boolean.parseBoolean(properties.getProperty("mail.ssl", "false"));
-        zabbixFolder = properties.getProperty("mail.zabbixFolder");
-
-        jnxOperatingDescr = properties.getProperty("snmp.jnxOperatingDescr");
-        jnxOperatingTemp = properties.getProperty("snmp.jnxOperatingTemp");
-        snmpCommunity = properties.getProperty("snmp.community", "public");
-        snmpCommunityCelsius = properties.getProperty("snmp.community.celsius", snmpCommunity);
-        snmpCommunityRamos = properties.getProperty("snmp.community.ramos", snmpCommunity);
-        snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
-
-        emailFrom = properties.getProperty("email.from");
-        emailReplyTo = properties.getProperty("email.replyTo");
-        emailToDebug = properties.getProperty("email.toDebug");
-        List<String> toList = new ArrayList<>();
-        String toStr = properties.getProperty("email.to");
-        if (toStr != null) {
-            for (String email : toStr.split(",")) {
-                toList.add(email.trim());
-            }
-        }
-        emailTo = toList;
-
-        accountMssqlUser = properties.getProperty("account-mssql-user", "");
-        accountMssqlPassword = properties.getProperty("account-mssql-password", "");
-        accountMssqlServer = properties.getProperty("account-mssql-server", "");
-        accountMssqlDatabase = properties.getProperty("account-mssql-database", "");
-        accequipmentMssqlUser = properties.getProperty("accequipment-mssql-user", "");
-        accequipmentMssqlPassword = properties.getProperty("accequipment-mssql-password", "");
-        accequipmentMssqlServer = properties.getProperty("accequipment-mssql-server", "");
-        accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
     }
 
     private void loadProperties() throws IOException {
@@ -223,7 +192,14 @@ public class Config {
         }
     }
 
-    private void parseHosts() {
+    private void generalProperties() {
+        debug = Boolean.parseBoolean(properties.getProperty("debug", "false"));
+        incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
+        temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
+        ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
+    }
+
+    private void hostsProperties() {
         String hostsStr = properties.getProperty("snmp.hosts");
         if (hostsStr != null) {
             for (String hostEntry : hostsStr.split(",")) {
@@ -243,7 +219,7 @@ public class Config {
         }
     }
 
-    private void parseRamos() {
+    private void ramosProperties() {
         String ramosStr = properties.getProperty("snmp.ramos");
         if (ramosStr != null) {
             for (String ramosEntry : ramosStr.split(",")) {
@@ -261,6 +237,46 @@ public class Config {
                 }
             }
         }
+    }
+
+    private void celsiusProperties() {
+        jnxOperatingDescr = properties.getProperty("snmp.jnxOperatingDescr");
+        jnxOperatingTemp = properties.getProperty("snmp.jnxOperatingTemp");
+        snmpCommunity = properties.getProperty("snmp.community", "public");
+        snmpCommunityCelsius = properties.getProperty("snmp.community.celsius", snmpCommunity);
+        snmpCommunityRamos = properties.getProperty("snmp.community.ramos", snmpCommunity);
+        snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
+    }
+
+    private void mssqlProperties() {
+        accountMssqlUser = properties.getProperty("account-mssql-user", "");
+        accountMssqlPassword = properties.getProperty("account-mssql-password", "");
+        accountMssqlServer = properties.getProperty("account-mssql-server", "");
+        accountMssqlDatabase = properties.getProperty("account-mssql-database", "");
+        accequipmentMssqlUser = properties.getProperty("accequipment-mssql-user", "");
+        accequipmentMssqlPassword = properties.getProperty("accequipment-mssql-password", "");
+        accequipmentMssqlServer = properties.getProperty("accequipment-mssql-server", "");
+        accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
+    }
+
+    private void emailProperties() {
+        mailHostname = properties.getProperty("mail.hostname");
+        mailUsername = properties.getProperty("mail.username");
+        mailPassword = properties.getProperty("mail.password");
+        mailSsl = Boolean.parseBoolean(properties.getProperty("mail.ssl", "false"));
+        zabbixFolder = properties.getProperty("mail.zabbixFolder");
+
+        emailFrom = properties.getProperty("email.from");
+        emailReplyTo = properties.getProperty("email.replyTo");
+        emailToDebug = properties.getProperty("email.toDebug");
+        List<String> toList = new ArrayList<>();
+        String toStr = properties.getProperty("email.to");
+        if (toStr != null) {
+            for (String email : toStr.split(",")) {
+                toList.add(email.trim());
+            }
+        }
+        emailTo = toList;
     }
 
     public boolean isDebtorsEnabled() {
