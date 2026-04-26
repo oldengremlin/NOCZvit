@@ -54,7 +54,9 @@ public class ImapClient {
     private final Config config;
     private final Dictionary dictionary;
 
-    record MessageHeader(String dateStr, long unixDate, String subject, String body) {}
+    record MessageHeader(String dateStr, long unixDate, String subject, String body) {
+
+    }
 
     public ImapClient(Config config) throws IOException {
         this.config = config;
