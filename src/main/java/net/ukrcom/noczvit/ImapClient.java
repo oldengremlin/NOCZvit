@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,15 +54,7 @@ public class ImapClient {
     private final Config config;
     private final Dictionary dictionary;
 
-    record MessageHeader(
-            String dateStr,
-            long unixDate,
-            String subject,
-            String body,
-            boolean toBeContinue
-            ) {
-
-    }
+    record MessageHeader(String dateStr, long unixDate, String subject, String body) {}
 
     public ImapClient(Config config) throws IOException {
         this.config = config;
@@ -133,25 +126,25 @@ public class ImapClient {
                     }
 
                     for (Message msg : messages) {
-                        MessageHeader parseMessageHeader = parseMessageHeader(msg);
-
-                        if (parseMessageHeader == null || parseMessageHeader.toBeContinue) {
+                        Optional<MessageHeader> mhOpt = parseMessageHeader(msg);
+                        if (mhOpt.isEmpty()) {
                             continue;
                         }
+                        MessageHeader mh = mhOpt.get();
 
                         if (config.isDebug()) {
-                            System.err.println("Processing message: subject=" + parseMessageHeader.subject + ", unixDate=" + parseMessageHeader.unixDate);
+                            System.err.println("Processing message: subject=" + mh.subject() + ", unixDate=" + mh.unixDate());
                         }
 
-                        if (parseMessageHeader.subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*")) {
-                            if (parseMessageHeader.unixDate >= ctPrevDutyBegin && parseMessageHeader.unixDate <= ctCurrDutyEnd) {
-                                proceedPD(isInteractive, parseMessageHeader.subject, null, msgLogGroup, parseMessageHeader.unixDate, parseMessageHeader.dateStr);
+                        if (mh.subject().matches(".*(?:Unavailable by ICMP ping|has been restarted).*")) {
+                            if (mh.unixDate() >= ctPrevDutyBegin && mh.unixDate() <= ctCurrDutyEnd) {
+                                proceedPD(isInteractive, mh.subject(), null, msgLogGroup, mh.unixDate(), mh.dateStr());
                             } else if (config.isDebug()) {
-                                System.err.println("Skipping PD message due to time filter: unixDate=" + parseMessageHeader.unixDate);
+                                System.err.println("Skipping PD message due to time filter: unixDate=" + mh.unixDate());
                             }
-                        } else if (parseMessageHeader.subject.matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + (config.isDebug() ? "1-9" : "2-9") + "][0-9]*).*")) {
+                        } else if (mh.subject().matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + (config.isDebug() ? "1-9" : "2-9") + "][0-9]*).*")) {
                             Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup = new HashMap<>();
-                            proceedSDH(isInteractive, parseMessageHeader.subject, parseMessageHeader.body, tempMsgLogGroup, parseMessageHeader.unixDate, parseMessageHeader.dateStr);
+                            proceedSDH(isInteractive, mh.subject(), mh.body(), tempMsgLogGroup, mh.unixDate(), mh.dateStr());
                             filterAndMergeMessages(tempMsgLogGroup, msgLogGroup, ctPrevDutyBegin, ctCurrDutyEnd, isInteractive, config);
                         }
                     }
@@ -600,40 +593,33 @@ public class ImapClient {
         return sb.toString();
     }
 
-    private MessageHeader parseMessageHeader(Message msg) {
+    private Optional<MessageHeader> parseMessageHeader(Message msg) {
         try {
-            boolean toBeContinue = false;
-            long unixDate = 0;
-
             String dateStr = msg.getHeader("Date")[0];
             String subject = msg.getSubject();
-            String body = "";
+            String body;
             try {
                 body = getTextFromMessage(msg);
             } catch (MessagingException | IOException e) {
                 if (config.isDebug()) {
                     System.err.println("Failed to get message body: " + e.getMessage());
                 }
-                toBeContinue = true;
+                return Optional.empty();
             }
-
-            if (!toBeContinue) {
-                try {
-                    OffsetDateTime odt = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER);
-                    unixDate = odt.toEpochSecond();
-                } catch (DateTimeParseException e) {
-                    if (config.isDebug()) {
-                        System.err.println("Failed to parse date: " + dateStr);
-                    }
-                    toBeContinue = true;
+            long unixDate;
+            try {
+                unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
+            } catch (DateTimeParseException e) {
+                if (config.isDebug()) {
+                    System.err.println("Failed to parse date: " + dateStr);
                 }
+                return Optional.empty();
             }
-
-            return new MessageHeader(dateStr, unixDate, subject, body, toBeContinue);
+            return Optional.of(new MessageHeader(dateStr, unixDate, subject, body));
         } catch (MessagingException ex) {
             System.getLogger(ImapClient.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
+            return Optional.empty();
         }
-        return null;
     }
 
 }
