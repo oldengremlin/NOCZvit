@@ -103,9 +103,10 @@ public class Config {
 
     public Config(String[] args) throws IOException {
         initValues();
+        parsePathArgs(args);
         loadProperties();
-        parseArgs(args);
         generalProperties();
+        parseFlagArgs(args);
         hostsProperties();
         ramosProperties();
         celsiusProperties();
@@ -139,7 +140,7 @@ public class Config {
         }
     }
 
-    private void parseArgs(String[] args) {
+    private void parsePathArgs(String[] args) {
         for (String arg : args) {
             if (arg.startsWith("--config=")) {
                 configPath = arg.substring("--config=".length()).trim();
@@ -147,29 +148,36 @@ public class Config {
                 dictionaryPdPath = arg.substring("--dictionarypd=".length()).trim();
             } else if (arg.startsWith("--dictionarysdh=")) {
                 dictionarySdhPath = arg.substring("--dictionarysdh=".length()).trim();
-            } else {
-                switch (arg) {
-                    case "--incidents" ->
-                        incidentsEnabled = true;
-                    case "--no-incidents" ->
-                        incidentsEnabled = false;
-                    case "--temperature" ->
-                        temperatureEnabled = true;
-                    case "--no-temperature" ->
-                        temperatureEnabled = false;
-                    case "--ramos" ->
-                        ramosEnabled = true;
-                    case "--no-ramos" ->
-                        ramosEnabled = false;
-                    case "--debug" ->
-                        debug = true;
-                    case "--no-debug" ->
-                        debug = false;
-                    default -> {
-                        printHelp();
-                        System.err.println("Error: Unknown argument: " + arg);
-                        System.exit(1);
-                    }
+            }
+        }
+    }
+
+    private void parseFlagArgs(String[] args) {
+        for (String arg : args) {
+            if (arg.startsWith("--config=") || arg.startsWith("--dictionarypd=") || arg.startsWith("--dictionarysdh=")) {
+                continue;
+            }
+            switch (arg) {
+                case "--incidents" ->
+                    incidentsEnabled = true;
+                case "--no-incidents" ->
+                    incidentsEnabled = false;
+                case "--temperature" ->
+                    temperatureEnabled = true;
+                case "--no-temperature" ->
+                    temperatureEnabled = false;
+                case "--ramos" ->
+                    ramosEnabled = true;
+                case "--no-ramos" ->
+                    ramosEnabled = false;
+                case "--debug" ->
+                    debug = true;
+                case "--no-debug" ->
+                    debug = false;
+                default -> {
+                    printHelp();
+                    System.err.println("Error: Unknown argument: " + arg);
+                    System.exit(1);
                 }
             }
         }
