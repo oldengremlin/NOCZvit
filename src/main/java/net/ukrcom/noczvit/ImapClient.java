@@ -47,7 +47,7 @@ import org.apache.commons.text.StringEscapeUtils;
 
 public class ImapClient {
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    //private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
     private static final Map<String, String> MONTH_MAP = Map.ofEntries(
             Map.entry("Jan", "січ"), Map.entry("Feb", "лют"), Map.entry("Mar", "бер"), Map.entry("Apr", "квіт"),
@@ -290,8 +290,8 @@ public class ImapClient {
     public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
         StringBuilder html = new StringBuilder();
         html.append("<p><ol><h1><small><small>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
-                .append("що відбувалися в період з ").append(dutyBegin.format(DATE_TIME_FORMATTER))
-                .append(" по ").append(dutyEnd.format(DATE_TIME_FORMATTER)).append("</small></small></h1>");
+                .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER)).append("</small></small></h1>");
 
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
