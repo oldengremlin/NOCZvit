@@ -322,7 +322,8 @@ public class ImapClient {
                             incidents.add(new Incident(
                                     groupEntry.getKey(), deviceEntry.getKey(),
                                     tsEntry.getKey(), ttsEntry.getKey(),
-                                    StringEscapeUtils.escapeHtml4(msg)
+                                    //StringEscapeUtils.escapeHtml4(msg)
+                                    msg
                             ));
                         }
                     }
@@ -442,7 +443,7 @@ public class ImapClient {
             }
         }
 
-        String msg = state + switch (type) {
+        String msg = StringEscapeUtils.escapeHtml4(state + switch (type) {
             case "ICMP" ->
                 "зникнення зв'язку з обладнанням на ";
             case "Unavailable", "by" ->
@@ -451,10 +452,10 @@ public class ImapClient {
                 "перезавантаження обладнання ";
             default ->
                 type + " ";
-        } + from;
+        } + from);
 
         if (needCheck) {
-            msg += " (<i>потребує коригування назви</i> '<b>" + from + "</b>')";
+            msg += " (<i>потребує коригування назви</i> '<b>" + StringEscapeUtils.escapeHtml4(from) + "</b>')";
         }
 
         msg = msg.replaceAll("\\s+", " ");
@@ -572,14 +573,15 @@ public class ImapClient {
             tdt = convertMonthNumToMnemo(tdt);
             msg = msg.concat(", який відбувся " + tdt);
         }
+        msg = StringEscapeUtils.escapeHtml4(msg);
 
         if (needCheckFrom || (needCheckTo && !to.isEmpty())) {
             msg += " (<i>потребує коригування назви</i>";
             if (needCheckFrom) {
-                msg += " '<b>" + from + "</b>'";
+                msg += " '<b>" + StringEscapeUtils.escapeHtml4(from) + "</b>'";
             }
             if (needCheckTo && !to.isEmpty()) {
-                msg += (needCheckFrom ? " та" : "") + " '<b>" + to + "</b>'";
+                msg += (needCheckFrom ? " та" : "") + " '<b>" + StringEscapeUtils.escapeHtml4(to) + "</b>'";
             }
             msg += ")";
         }
