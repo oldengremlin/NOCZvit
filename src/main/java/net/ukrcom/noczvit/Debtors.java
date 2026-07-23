@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.apache.commons.text.StringEscapeUtils;
 
@@ -52,7 +53,12 @@ public class Debtors {
     }
 
     private void getDebtors() {
-        returnMessage.append("<p><ol><h1><small><small>Список тимчасово заблокованих абонентів</small></small></h1>");
+        returnMessage.append("<p>\n<h1>Список тимчасово заблокованих абонентів</h1>\n")
+                .append("<table class=\"table-debtors\" width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<thead><tr>")
+                .append("<th style=\"width:30px\">№</th>")
+                .append("<th>Абонент</th>")
+                .append("</tr></thead><tbody>\n");
 
         if (config.isDebtorsEnabled()) {
             try {
@@ -60,33 +66,31 @@ public class Debtors {
 //              ІМПЕРАТИВНИЙ СТИЛЬ
 //
                 /*
+                int n = 0;
                 Map<Integer, Map<String, String>> accountMap = buildAccountMap();
                 for (String debtor : fetchDebtors(accountMap)) {
-                    returnMessage.append("<li style=\"margin-left: 50px;\">")
-                            .append(StringEscapeUtils.escapeHtml4(debtor))
-                            .append("</li>");
+                    returnMessage.append("<tr><td>").append(++n).append(".</td>")
+                            .append("<td>").append(StringEscapeUtils.escapeHtml4(debtor)).append("</td></tr>\n");
                 }
                  */
 //
 //              АНТИПАТЕРН ФУНКЦІОНАЛЬНОГО СТИЛЮ (АЛЕ ТАКОЖ ПРАЦЮЄ)
 //
                 /*
+                AtomicInteger n = new AtomicInteger(0);
                 fetchDebtors(buildAccountMap()).stream()
-                        .forEach(
-                                debtor -> returnMessage.append("<li style=\"margin-left: 50px;\">")
-                                        .append(StringEscapeUtils.escapeHtml4(debtor))
-                                        .append("</li>")
+                        .forEach(debtor ->
+                                returnMessage.append("<tr><td>").append(n.incrementAndGet()).append(".</td>")
+                                        .append("<td>").append(StringEscapeUtils.escapeHtml4(debtor)).append("</td></tr>\n")
                         );
                  */
 //
 //              ФУНКЦІОНАЛЬНИЙ СТИЛЬ
 //
+                AtomicInteger n = new AtomicInteger(0);
                 String debtorsHtml = fetchDebtors(buildAccountMap()).stream()
-                        .map(
-                                debtor -> "<li style=\"margin-left: 50px;\">"
-                                        .concat(StringEscapeUtils.escapeHtml4(debtor))
-                                        .concat("</li>")
-                        )
+                        .map(debtor -> "<tr><td>" + n.incrementAndGet() + ".</td>"
+                                + "<td>" + StringEscapeUtils.escapeHtml4(debtor) + "</td></tr>\n")
                         .collect(Collectors.joining());
                 returnMessage.append(debtorsHtml);
 
@@ -97,7 +101,7 @@ public class Debtors {
             }
         }
 
-        returnMessage.append("</ol><p>");
+        returnMessage.append("</tbody></table>\n");
     }
 
     // Resolves FreeTDS server alias from freetds.conf to [host, port].
