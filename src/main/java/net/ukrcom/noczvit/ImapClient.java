@@ -42,6 +42,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.apache.commons.text.StringEscapeUtils;
 
@@ -288,21 +289,37 @@ public class ImapClient {
     }
 
     public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
+        final String TABLE_STYLE = "width=\"75%\" cellspacing=\"0\" cellpadding=\"5\" border=\"1\" "
+                + "style=\"border-collapse: collapse; box-shadow: 2px 3px 8px rgba(0,0,0,0.25); margin: 10px 0;\"";
+
         StringBuilder html = new StringBuilder();
-        html.append("<p><ol><h1><small><small>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
+        html.append("<p><table ").append(TABLE_STYLE).append(">")
+                .append("<caption><h1><small><small>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
                 .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
-                .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER)).append("</small></small></h1>");
+                .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append("</small></small></h1></caption></table>\n");
 
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
         record Incident(String group, String device, Long ts, Long tts, String message) {
 
-            public String formattedMessage() {
-                var msg = !message.contains(" : OSM ")
-                      ? message + " [" + device + "]"
-                      : message;
-                return "<li style=\"margin-left: 75px;\">" + msg + "</li>";
+            public String toTableCells() {
+                String[] parts = message.split(" : ", 2);
+                String dateStr = parts.length > 1 ? parts[0] : "";
+                String msgText = parts.length > 1 ? parts[1] : message;
+                return "<td valign=\"top\" style=\"white-space: nowrap;\">" + dateStr + "</td>"
+                     + "<td valign=\"top\">" + msgText + "</td>"
+                     + "<td valign=\"top\">" + (device.isEmpty() ? "" : device) + "</td>";
+            }
+
+            public String rowStyle() {
+                if (message.contains("початок інциденту")) {
+                    return " style=\"background-color: #fff0f0;\"";
+                } else if (message.contains("кінець інциденту")) {
+                    return " style=\"background-color: #f0fff0;\"";
+                }
+                return "";
             }
 
         }
@@ -364,39 +381,36 @@ public class ImapClient {
                 .sorted(Comparator.comparing(Incident::ts).thenComparing(Incident::tts))
                 .toList();
          */
-//
-//      Групування та HTML — groupingBy + collect(joining()).
-//      Це вже розумне застосування функціонального стилю
-//      — він коротший і виразніший за аналогічний цикл з
-//      LinkedHashMap і StringBuilder.
-//
-        String reportContent = incidents.stream()
-                .collect(Collectors.groupingBy(
-                        Incident::group,
-                        LinkedHashMap::new,
-                        Collectors.groupingBy(
-                                Incident::device,
-                                LinkedHashMap::new,
-                                Collectors.mapping(Incident::formattedMessage, Collectors.joining())
-                        )
-                ))
-                .entrySet().stream()
-                .map((var groupEntry) -> {
-                    var groupContent = groupEntry.getValue().entrySet().stream()
-                            .map((var deviceEntry) -> deviceEntry.getValue() + "<br>\n")
-                            .collect(Collectors.joining());
-                    return "<h2 style=\"margin-left: 25px;\"><small>Зареєстровані інциденти на виносі "
-                            + groupEntry.getKey() + "</small></h2>" + groupContent;
-                })
-                .collect(Collectors.joining());
-
-        html.append(reportContent);
 
         if (incidents.isEmpty()) {
-            html.append("<h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>");
+            html.append("<p><h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>\n");
+            html.append("<p>");
+            return html.toString();
         }
 
-        html.append("</ol><p>");
+//
+//      Групування за локацією + побудова таблиць.
+//      Функціональне groupingBy для групування, forEach з AtomicInteger
+//      для глобального лічильника рядків — чистіше за вкладені streams.
+//
+        Map<String, List<Incident>> byGroup = incidents.stream()
+                .collect(Collectors.groupingBy(Incident::group, LinkedHashMap::new, Collectors.toList()));
+
+        AtomicInteger n = new AtomicInteger(0);
+        byGroup.forEach((group, groupIncidents) -> {
+            html.append("<table ").append(TABLE_STYLE).append(">")
+                    .append("<caption><h2>Зареєстровані інциденти на виносі ").append(group).append("</h2></caption>")
+                    .append("<tbody>\n");
+            groupIncidents.forEach(inc ->
+                    html.append("<tr").append(inc.rowStyle()).append(">")
+                            .append("<td valign=\"top\" style=\"width: 30px;\">").append(n.incrementAndGet()).append(".</td>")
+                            .append(inc.toTableCells())
+                            .append("</tr>\n")
+            );
+            html.append("</tbody></table>\n");
+        });
+
+        html.append("<p>");
         return html.toString();
     }
 
