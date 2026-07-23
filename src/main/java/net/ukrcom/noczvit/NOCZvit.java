@@ -73,6 +73,7 @@ public class NOCZvit {
                 + "tr.row-end td{background:#f0fff0}"
                 + "tr.row-critical td{background:#fff0f0}"
                 + ".section{margin-bottom:20px}"
+                + ".table-debtors{box-shadow:0 0 0 2px #ef9a9a,2px 2px 6px rgba(0,0,0,.2)}"
                 + "</style></head><body>");
 
             if (LocalDateTime.now().getHour() < 12) {
