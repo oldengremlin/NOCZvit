@@ -6,6 +6,13 @@
 
 ---
 
+## [1.4.4] — 2026-07-23
+
+### Змінено
+- Закруглені кути таблиць (`border-radius:5px`) — перехід на `border-collapse:separate; border-spacing:0; overflow:hidden`; Outlook ігнорує без наслідків
+
+---
+
 ## [1.4.3] — 2026-07-23
 
 ### Змінено
