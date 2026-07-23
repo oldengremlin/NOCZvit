@@ -1,0 +1,71 @@
+# CHANGELOG
+
+Всі важливі зміни цього проекту фіксуються тут.
+Формат засновано на [Keep a Changelog](https://keepachangelog.com/uk/1.0.0/).
+Проект дотримується [Semantic Versioning](https://semver.org/).
+
+---
+
+## [1.4.0] — 2026-07-23
+
+### Додано
+- Паралельне SNMP-опитування хостів у `SnmpClient` через `Executors.newVirtualThreadPerTaskExecutor()` + `Semaphore(10)` — замість послідовного обходу; усуває "затик" при таймаутах
+
+### Змінено
+- Версія переведена на нумерацію `1.4.x` для відображення нової функціональності
+- README.md оновлено: актуальні версії залежностей, опис параметрів CLI, структура проекту, опис версіонування
+- CHANGELOG.md — запроваджено
+
+---
+
+## [1.3.4] — 2026-04-26
+
+### Змінено
+- `ImapClient`: рефакторинг — `record MessageHeader` тепер без поля `toBeContinue`; метод `parseMessageHeader` повертає `Optional<MessageHeader>` замість `null` + булевого прапора
+- Перейменовано константи патернів у `UPPER_SNAKE_CASE`
+
+### Виправлено
+- Порядок ініціалізації у `Config`: `parsePathArgs` тепер викликається до `loadProperties()`, `parseFlagArgs` — після `generalProperties()`, щоб параметри CLI мали пріоритет над файлом конфігурації
+- Параметр `--config=` тепер коректно перехоплюється до завантаження `noczvit.properties`
+
+---
+
+## [1.3.3] — 2026-04-25
+
+### Додано
+- Lombok (`org.projectlombok:lombok:1.18.46`) інтегровано в `Config`: `@Getter`, `@ToString`, `@EqualsAndHashCode`, `@NonNull`; усі ручні геттери видалено
+- `annotationProcessorPaths` у `maven-compiler-plugin` для надійного виявлення Lombok на всіх середовищах збирання
+
+### Виправлено
+- Lombok 1.18.36 → 1.18.46: усунуто `TypeTag::UNKNOWN` на JDK 24+
+
+---
+
+## [1.3.2] — 2026-04-22
+
+### Додано
+- Модуль `Debtors`: отримання списку заблокованих абонентів із двох MSSQL-баз (Accounting + Equipment)
+- Перехід з `mssql-jdbc` на `jTDS` + резолвер псевдонімів FreeTDS
+- Заміна ручного парсингу JSON на бібліотеку Gson у `parseServicesLastState`
+- Maven Shade Plugin: виключення підписаних JAR-маніфестів (`META-INF/*.SF`, `*.DSA`, `*.RSA`) для усунення `SecurityException`
+
+---
+
+## [1.3.1] — 2025-05-12
+
+### Додано
+- Перший публічний реліз у репозиторії
+- IMAP-клієнт для читання повідомлень Zabbix та OSM
+- SNMP-клієнт: `getCelsius()` (температура обладнання) та `getRamos()` (датчики Ramos)
+- Формування HTML-звіту та відправка через Jakarta Mail
+- Конфігурація через `noczvit.properties` з підтримкою параметрів CLI
+- Словники `dictionary_pd.txt` / `dictionary_sdh.txt` для класифікації інцидентів
+- Версія автоматично підставляється в `version.properties` через Maven filtering
+
+---
+
+[1.4.0]: https://github.com/oldengremlin/noczvit/compare/v1.3.4...v1.4.0
+[1.3.4]: https://github.com/oldengremlin/noczvit/compare/v1.3.3...v1.3.4
+[1.3.3]: https://github.com/oldengremlin/noczvit/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/oldengremlin/noczvit/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/oldengremlin/noczvit/releases/tag/v1.3.1
