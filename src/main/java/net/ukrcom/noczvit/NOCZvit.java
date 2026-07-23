@@ -69,9 +69,11 @@ public class NOCZvit {
                 + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
                 + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
                 + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
+                + "tr:nth-child(even) td{background:#f5f7fa}"
                 + "tr.row-start td{background:#fff0f0}"
                 + "tr.row-end td{background:#f0fff0}"
                 + "tr.row-critical td{background:#fff0f0}"
+                + "tr:hover td{background:#e8ecf5}"
                 + ".section{margin-bottom:20px}"
                 + ".table-debtors{box-shadow:0 0 0 2px #ef9a9a,2px 2px 6px rgba(0,0,0,.2)}"
                 + "</style></head><body>");
