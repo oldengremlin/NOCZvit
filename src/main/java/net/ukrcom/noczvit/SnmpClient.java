@@ -39,6 +39,9 @@ public class SnmpClient {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_CONCURRENT_SNMP = 10;
+    private static final String TABLE_STYLE = "width=\"75%\" cellspacing=\"0\" cellpadding=\"5\" border=\"1\" "
+            + "style=\"border-collapse: collapse; box-shadow: 2px 3px 8px rgba(0,0,0,0.25); margin: 10px 0;\"";
+
     private final Config config;
 
     public SnmpClient(Config config) {
@@ -47,8 +50,10 @@ public class SnmpClient {
 
     public String getCelsius() {
         StringBuilder html = new StringBuilder();
-        html.append("<p><ol><h1><small><small>Температура обладнання на виносах, станом на ")
-                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER)).append("</small></small></h1>");
+        html.append("<p><table ").append(TABLE_STYLE).append(">")
+                .append("<caption><h1><small><small>Температура обладнання на виносах, станом на ")
+                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
+                .append("</small></small></h1></caption><tbody>\n");
 
         List<String> hostnames = new ArrayList<>(config.getHosts().keySet());
         Collections.sort(hostnames);
@@ -69,9 +74,12 @@ public class SnmpClient {
             }
         }
 
+        int n = 0;
         for (Future<String> future : futures) {
             try {
-                html.append(future.get());
+                n++;
+                html.append("<tr><td valign=\"top\" style=\"width: 30px;\">").append(n)
+                        .append(".</td>").append(future.get()).append("</tr>\n");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
@@ -81,7 +89,7 @@ public class SnmpClient {
             }
         }
 
-        html.append("</ol><p>");
+        html.append("</tbody></table><p>");
         return html.toString();
     }
 
@@ -110,7 +118,8 @@ public class SnmpClient {
                 if (config.isDebug()) {
                     System.err.println("ERROR: " + error);
                 }
-                return "<li style=\"margin-left: 50px;\">" + host + " - не вдалося отримати доступ у зв'язку з '<b>" + error + "</b>'</li>";
+                return "<td valign=\"top\"><b>" + host + "</b></td>"
+                     + "<td valign=\"top\" colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>";
             }
 
             String desc = response.getVariable(new OID(config.getHosts().get(hostname).get("desc"))).toString();
@@ -121,19 +130,21 @@ public class SnmpClient {
                 System.err.printf("%s -> %s -> %s%n", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
             }
 
-            return "<li style=\"margin-left: 75px;\"><b>" + host + "." + domain + "</b> [" + desc + "] — <b>" + temp + "</b>°C</li>";
+            return "<td valign=\"top\"><b>" + host + "." + domain + "</b></td>"
+                 + "<td valign=\"top\">" + desc + "</td>"
+                 + "<td valign=\"top\"><b>" + temp + "</b>°C</td>";
         } catch (IOException e) {
             if (config.isDebug()) {
                 System.err.println("ERROR: " + e.getMessage());
             }
-            return "<li style=\"margin-left: 50px;\">" + host + " - не вдалося отримати доступ у зв'язку з '<b>" + e.getMessage() + "</b>'</li>";
+            return "<td valign=\"top\"><b>" + host + "</b></td>"
+                 + "<td valign=\"top\" colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>";
         }
     }
 
     public String getRamos() {
         StringBuilder html = new StringBuilder();
-        html.append("<p><ol><h1><small><small>Температурні показники Ramos, станом на ")
-                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER)).append("</small></small></h1>");
+        html.append("<p>");
 
         List<String> hosts = new ArrayList<>(config.getRamos().keySet());
         Collections.sort(hosts);
@@ -166,12 +177,15 @@ public class SnmpClient {
             }
         }
 
-        html.append("</ol><p>");
+        html.append("<p>");
         return html.toString();
     }
 
     private String queryHostRamos(String host) {
         StringBuilder fragment = new StringBuilder();
+        fragment.append("<table ").append(TABLE_STYLE).append(">")
+                .append("<caption><h2>Майданчик ").append(config.getRamos().get(host).get("name")).append("</h2></caption>")
+                .append("<tbody>\n");
 
         try (Snmp snmp = new Snmp(new DefaultUdpTransportMapping())) {
             snmp.listen();
@@ -183,18 +197,18 @@ public class SnmpClient {
             target.setTimeout(5000);
             target.setRetries(2);
 
-            fragment.append("<h2 style=\"margin-left: 25px;\"><small>Майданчик ").append(config.getRamos().get(host).get("name")).append("</small></h2>");
-
             String temperatureSensorIndex = config.getRamos().get(host).get("temperatureSensorIndex");
             PDU pdu = new PDU();
             pdu.add(new VariableBinding(new OID(temperatureSensorIndex)));
             pdu.setType(PDU.GETNEXT);
 
+            int n = 0;
             while (true) {
                 PDU response = snmp.send(pdu, target).getResponse();
                 if (response == null || response.getErrorStatus() != PDU.noError) {
                     String error = response != null ? response.getErrorStatusText() : "Timeout";
-                    fragment.append("<li style=\"margin-left: 50px;\">").append(host).append(" - не вдалося отримати доступ у зв'язку з '<b>").append(error).append("</b>'</li>");
+                    fragment.append("<tr><td colspan=\"3\"><i>").append(host)
+                            .append(" - не вдалося отримати доступ: ").append(error).append("</i></td></tr>\n");
                     if (config.isDebug()) {
                         System.err.println("ERROR: " + error);
                     }
@@ -217,13 +231,15 @@ public class SnmpClient {
                 String hc = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorHighCritical") + "." + sensorIndex);
 
                 if (config.isDebug()) {
-                    System.err.printf("%s = %s : desc=%s, unit=%s, value=%s, lw=%s, hw=%s, lc=%s, hc=%s%n", oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
+                    System.err.printf("%s = %s : desc=%s, unit=%s, value=%s, lw=%s, hw=%s, lc=%s, hc=%s%n",
+                            oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
                 }
 
                 desc = desc.replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
                         .replaceAll("(?i)(cold\\s*zone)", "<font color=darkblue>$1</font>");
 
-                String color = "black";
+                String valueColor = "inherit";
+                String rowStyle = "";
                 try {
                     double val = Double.parseDouble(value);
                     double lowWarn = Double.parseDouble(lw);
@@ -232,25 +248,34 @@ public class SnmpClient {
                     double highCrit = Double.parseDouble(hc);
 
                     if (val >= lowWarn && val <= highWarn) {
-                        color = "darkgrey";
+                        valueColor = "darkgrey";
                     } else if (val >= lowCrit && val <= highCrit) {
-                        color = "red";
+                        valueColor = "darkred";
+                        rowStyle = " style=\"background-color: #fff0f0;\"";
                     }
                 } catch (NumberFormatException ignored) {
                 }
 
-                fragment.append("<li style=\"margin-left: 75px;\">").append(desc).append(" — <b><font color=\"").append(color).append("\">").append(value).append("</font></b>°").append(unit).append("</li>");
+                n++;
+                fragment.append("<tr").append(rowStyle).append(">")
+                        .append("<td valign=\"top\" style=\"width: 30px;\">").append(n).append(".</td>")
+                        .append("<td valign=\"top\">").append(desc).append("</td>")
+                        .append("<td valign=\"top\" style=\"color: ").append(valueColor).append("; white-space: nowrap;\">")
+                        .append("<b>").append(value).append("</b>°").append(unit).append("</td>")
+                        .append("</tr>\n");
 
                 pdu.clear();
                 pdu.add(new VariableBinding(oid));
             }
         } catch (IOException e) {
-            fragment.append("<li style=\"margin-left: 50px;\">").append(host).append(" - не вдалося отримати доступ у зв'язку з '<b>").append(e.getMessage()).append("</b>'</li>");
+            fragment.append("<tr><td colspan=\"3\"><i>").append(host)
+                    .append(" - не вдалося отримати доступ: ").append(e.getMessage()).append("</i></td></tr>\n");
             if (config.isDebug()) {
                 System.err.println("ERROR: " + e.getMessage());
             }
         }
 
+        fragment.append("</tbody></table>\n");
         return fragment.toString();
     }
 
