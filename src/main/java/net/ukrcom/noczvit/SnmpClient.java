@@ -39,8 +39,6 @@ public class SnmpClient {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_CONCURRENT_SNMP = 10;
-    private static final String TABLE_STYLE = "width=\"75%\" cellspacing=\"0\" cellpadding=\"5\" border=\"1\" "
-            + "style=\"border-collapse: collapse; box-shadow: 2px 3px 8px rgba(0,0,0,0.25); margin: 10px 0;\"";
 
     private final Config config;
 
@@ -50,10 +48,16 @@ public class SnmpClient {
 
     public String getCelsius() {
         StringBuilder html = new StringBuilder();
-        html.append("<p><table ").append(TABLE_STYLE).append(">")
-                .append("<caption><h1><small><small>Температура обладнання на виносах, станом на ")
+        html.append("<p>\n<h1>Температура обладнання на виносах, станом на ")
                 .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
-                .append("</small></small></h1></caption><tbody>\n");
+                .append("</h1>\n")
+                .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<thead><tr>")
+                .append("<th style=\"width:30px\">№</th>")
+                .append("<th>Обладнання</th>")
+                .append("<th>Компонент</th>")
+                .append("<th>Температура</th>")
+                .append("</tr></thead><tbody>\n");
 
         List<String> hostnames = new ArrayList<>(config.getHosts().keySet());
         Collections.sort(hostnames);
@@ -78,8 +82,8 @@ public class SnmpClient {
         for (Future<String> future : futures) {
             try {
                 n++;
-                html.append("<tr><td valign=\"top\" style=\"width: 30px;\">").append(n)
-                        .append(".</td>").append(future.get()).append("</tr>\n");
+                html.append("<tr><td>").append(n).append(".</td>")
+                        .append(future.get()).append("</tr>\n");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
@@ -89,7 +93,7 @@ public class SnmpClient {
             }
         }
 
-        html.append("</tbody></table><p>");
+        html.append("</tbody></table>\n");
         return html.toString();
     }
 
@@ -118,8 +122,8 @@ public class SnmpClient {
                 if (config.isDebug()) {
                     System.err.println("ERROR: " + error);
                 }
-                return "<td valign=\"top\"><b>" + host + "</b></td>"
-                     + "<td valign=\"top\" colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>";
+                return "<td><b>" + host + "</b></td>"
+                     + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>";
             }
 
             String desc = response.getVariable(new OID(config.getHosts().get(hostname).get("desc"))).toString();
@@ -130,21 +134,23 @@ public class SnmpClient {
                 System.err.printf("%s -> %s -> %s%n", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
             }
 
-            return "<td valign=\"top\"><b>" + host + "." + domain + "</b></td>"
-                 + "<td valign=\"top\">" + desc + "</td>"
-                 + "<td valign=\"top\"><b>" + temp + "</b>°C</td>";
+            return "<td><b>" + host + "." + domain + "</b></td>"
+                 + "<td>" + desc + "</td>"
+                 + "<td><b>" + temp + "</b>°C</td>";
         } catch (IOException e) {
             if (config.isDebug()) {
                 System.err.println("ERROR: " + e.getMessage());
             }
-            return "<td valign=\"top\"><b>" + host + "</b></td>"
-                 + "<td valign=\"top\" colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>";
+            return "<td><b>" + host + "</b></td>"
+                 + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>";
         }
     }
 
     public String getRamos() {
         StringBuilder html = new StringBuilder();
-        html.append("<p>");
+        html.append("<p>\n<h1>Температурні показники Ramos, станом на ")
+                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
+                .append("</h1>\n");
 
         List<String> hosts = new ArrayList<>(config.getRamos().keySet());
         Collections.sort(hosts);
@@ -177,15 +183,19 @@ public class SnmpClient {
             }
         }
 
-        html.append("<p>");
         return html.toString();
     }
 
     private String queryHostRamos(String host) {
         StringBuilder fragment = new StringBuilder();
-        fragment.append("<table ").append(TABLE_STYLE).append(">")
-                .append("<caption><h2>Майданчик ").append(config.getRamos().get(host).get("name")).append("</h2></caption>")
-                .append("<tbody>\n");
+        fragment.append("<div class=\"section\">\n")
+                .append("<h2>Майданчик ").append(config.getRamos().get(host).get("name")).append("</h2>\n")
+                .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<thead><tr>")
+                .append("<th style=\"width:30px\">№</th>")
+                .append("<th>Датчик</th>")
+                .append("<th>Показник</th>")
+                .append("</tr></thead><tbody>\n");
 
         try (Snmp snmp = new Snmp(new DefaultUdpTransportMapping())) {
             snmp.listen();
@@ -239,7 +249,7 @@ public class SnmpClient {
                         .replaceAll("(?i)(cold\\s*zone)", "<font color=darkblue>$1</font>");
 
                 String valueColor = "inherit";
-                String rowStyle = "";
+                String rowClass = "";
                 try {
                     double val = Double.parseDouble(value);
                     double lowWarn = Double.parseDouble(lw);
@@ -251,16 +261,16 @@ public class SnmpClient {
                         valueColor = "darkgrey";
                     } else if (val >= lowCrit && val <= highCrit) {
                         valueColor = "darkred";
-                        rowStyle = " style=\"background-color: #fff0f0;\"";
+                        rowClass = " class=\"row-critical\"";
                     }
                 } catch (NumberFormatException ignored) {
                 }
 
                 n++;
-                fragment.append("<tr").append(rowStyle).append(">")
-                        .append("<td valign=\"top\" style=\"width: 30px;\">").append(n).append(".</td>")
-                        .append("<td valign=\"top\">").append(desc).append("</td>")
-                        .append("<td valign=\"top\" style=\"color: ").append(valueColor).append("; white-space: nowrap;\">")
+                fragment.append("<tr").append(rowClass).append(">")
+                        .append("<td>").append(n).append(".</td>")
+                        .append("<td>").append(desc).append("</td>")
+                        .append("<td style=\"color:").append(valueColor).append("\">")
                         .append("<b>").append(value).append("</b>°").append(unit).append("</td>")
                         .append("</tr>\n");
 
@@ -275,7 +285,7 @@ public class SnmpClient {
             }
         }
 
-        fragment.append("</tbody></table>\n");
+        fragment.append("</tbody></table>\n</div>\n");
         return fragment.toString();
     }
 

@@ -289,15 +289,11 @@ public class ImapClient {
     }
 
     public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
-        final String TABLE_STYLE = "width=\"75%\" cellspacing=\"0\" cellpadding=\"5\" border=\"1\" "
-                + "style=\"border-collapse: collapse; box-shadow: 2px 3px 8px rgba(0,0,0,0.25); margin: 10px 0;\"";
-
         StringBuilder html = new StringBuilder();
-        html.append("<p><table ").append(TABLE_STYLE).append(">")
-                .append("<caption><h1><small><small>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
+        html.append("<p><h1>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
                 .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
                 .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER))
-                .append("</small></small></h1></caption></table>\n");
+                .append("</h1>\n");
 
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
@@ -308,16 +304,16 @@ public class ImapClient {
                 String[] parts = message.split(" : ", 2);
                 String dateStr = parts.length > 1 ? parts[0] : "";
                 String msgText = parts.length > 1 ? parts[1] : message;
-                return "<td valign=\"top\" style=\"white-space: nowrap;\">" + dateStr + "</td>"
-                     + "<td valign=\"top\">" + msgText + "</td>"
-                     + "<td valign=\"top\">" + (device.isEmpty() ? "" : device) + "</td>";
+                return "<td>" + dateStr + "</td>"
+                     + "<td>" + msgText + "</td>"
+                     + "<td>" + (device.isEmpty() ? "" : device) + "</td>";
             }
 
-            public String rowStyle() {
+            public String rowClass() {
                 if (message.contains("початок інциденту")) {
-                    return " style=\"background-color: #fff0f0;\"";
+                    return "row-start";
                 } else if (message.contains("кінець інциденту")) {
-                    return " style=\"background-color: #f0fff0;\"";
+                    return "row-end";
                 }
                 return "";
             }
@@ -383,7 +379,7 @@ public class ImapClient {
          */
 
         if (incidents.isEmpty()) {
-            html.append("<p><h2 style=\"margin-left: 50px;\"><small>Інцидентів не зареєстровано</small></h2>\n");
+            html.append("<p><i>Інцидентів не зареєстровано</i>\n");
             html.append("<p>");
             return html.toString();
         }
@@ -398,16 +394,23 @@ public class ImapClient {
 
         AtomicInteger n = new AtomicInteger(0);
         byGroup.forEach((group, groupIncidents) -> {
-            html.append("<table ").append(TABLE_STYLE).append(">")
-                    .append("<caption><h2>Зареєстровані інциденти на виносі ").append(group).append("</h2></caption>")
-                    .append("<tbody>\n");
-            groupIncidents.forEach(inc ->
-                    html.append("<tr").append(inc.rowStyle()).append(">")
-                            .append("<td valign=\"top\" style=\"width: 30px;\">").append(n.incrementAndGet()).append(".</td>")
-                            .append(inc.toTableCells())
-                            .append("</tr>\n")
-            );
-            html.append("</tbody></table>\n");
+            html.append("<div class=\"section\">\n")
+                    .append("<h2>Зареєстровані інциденти на виносі ").append(group).append("</h2>\n")
+                    .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                    .append("<thead><tr>")
+                    .append("<th style=\"width:30px\">№</th>")
+                    .append("<th>Дата та час</th>")
+                    .append("<th>Інцидент</th>")
+                    .append("<th>Обладнання</th>")
+                    .append("</tr></thead><tbody>\n");
+            groupIncidents.forEach(inc -> {
+                String cls = inc.rowClass();
+                html.append("<tr").append(cls.isEmpty() ? "" : " class=\"" + cls + "\"").append(">")
+                        .append("<td>").append(n.incrementAndGet()).append(".</td>")
+                        .append(inc.toTableCells())
+                        .append("</tr>\n");
+            });
+            html.append("</tbody></table>\n</div>\n");
         });
 
         html.append("<p>");
