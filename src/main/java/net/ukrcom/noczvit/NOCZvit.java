@@ -61,7 +61,19 @@ public class NOCZvit {
             }
 
             String subject;
-            StringBuilder message = new StringBuilder("<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"></head><body>");
+            StringBuilder message = new StringBuilder(
+                "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><style>"
+                + "body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222;margin:0;padding:16px}"
+                + "h1{font-size:16px;color:#1a1a2e;margin:8px 0 4px}"
+                + "h2{font-size:13px;color:#16213e;margin:24px 0 6px;background:#e8eaf0;padding:5px 10px;border-left:4px solid #37474f}"
+                + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
+                + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
+                + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
+                + "tr.row-start td{background:#fff0f0}"
+                + "tr.row-end td{background:#f0fff0}"
+                + "tr.row-critical td{background:#fff0f0}"
+                + ".section{margin-bottom:20px}"
+                + "</style></head><body>");
 
             if (LocalDateTime.now().getHour() < 12) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
