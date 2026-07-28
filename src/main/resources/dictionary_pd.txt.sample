@@ -1,3 +1,10 @@
 ^spas36=Спаська 36
 ^sosn17=Сосніних 17
 ^sos6=Сосюри 6
+
+# adlink dry-contact lines: key = device:card:port:line → event description
+# ^adlink-hoh15-1:0:0:0=зникнення живлення на кондиціонери (лінія 0)
+# ^adlink-hoh15-1:0:0:1=зникнення живлення на кондиціонери (лінія 1)
+
+# adlink devices: key = device → location name (used for report section grouping)
+# ^adlink-hoh15-1=Г.Джонса 15

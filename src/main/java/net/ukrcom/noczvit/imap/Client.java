@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
@@ -38,6 +39,7 @@ public class Client {
     private final PdIncidentParser pdParser;
     private final OsmIncidentParser osmParser;
     private final OspfIncidentParser ospfParser;
+    private final AdlinkIncidentParser adlinkParser;
 
     public Client(Config config) throws IOException {
         this.config = config;
@@ -46,6 +48,7 @@ public class Client {
         this.pdParser = new PdIncidentParser(dictionary);
         this.osmParser = new OsmIncidentParser(dictionary);
         this.ospfParser = new OspfIncidentParser(dictionary);
+        this.adlinkParser = new AdlinkIncidentParser(dictionary);
     }
 
     /**
@@ -71,8 +74,10 @@ public class Client {
             throw new RuntimeException("IMAP error: " + e.getMessage(), e);
         }
 
+        List<RawMessage> deduped = deduplicateAdlink(rawMessages);
+
         List<Incident> incidents = new ArrayList<>();
-        for (RawMessage msg : rawMessages) {
+        for (RawMessage msg : deduped) {
             if (isPdMessage(msg.subject())) {
                 if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
                     pdParser.parse(msg).ifPresent(incidents::add);
@@ -85,6 +90,12 @@ public class Client {
                 } else {
                     log.debug("Skipping OSPF message (time filter): unixDate={}", msg.unixDate());
                 }
+            } else if (isAdlinkMessage(msg.subject())) {
+                if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
+                    adlinkParser.parse(msg).ifPresent(incidents::add);
+                } else {
+                    log.debug("Skipping adlink message (time filter): unixDate={}", msg.unixDate());
+                }
             } else if (isOsmMessage(msg.subject())) {
                 osmParser.parse(msg)
                         .filter(i -> i.messageTs() >= fromEpoch && i.messageTs() <= toEpoch)
@@ -96,12 +107,46 @@ public class Client {
         return incidents;
     }
 
+    /**
+     * Removes duplicate adlink alerts: Zabbix sends each alert twice within seconds.
+     * Keeps the first occurrence of each (subject, status) pair within a 60-second window.
+     * Deduplication runs before duty-period filtering so cross-boundary duplicates
+     * (e.g. 07:59:59 and 08:00:03) are correctly collapsed into the earlier shift.
+     */
+    private List<RawMessage> deduplicateAdlink(List<RawMessage> messages) {
+        List<RawMessage> sorted = new ArrayList<>(messages);
+        sorted.sort(Comparator.comparingLong(RawMessage::unixDate));
+
+        List<RawMessage> result = new ArrayList<>();
+        List<RawMessage> seenAdlinks = new ArrayList<>();
+        for (RawMessage msg : sorted) {
+            if (!isAdlinkMessage(msg.subject())) {
+                result.add(msg);
+                continue;
+            }
+            boolean isDuplicate = seenAdlinks.stream().anyMatch(seen ->
+                    seen.subject().equals(msg.subject())
+                    && msg.unixDate() - seen.unixDate() <= 60);
+            if (!isDuplicate) {
+                result.add(msg);
+                seenAdlinks.add(msg);
+            } else {
+                log.debug("Deduplicating adlink message: subject={}, ts={}", msg.subject(), msg.unixDate());
+            }
+        }
+        return result;
+    }
+
     private boolean isPdMessage(String subject) {
         return subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*");
     }
 
     private boolean isOspfMessage(String subject) {
         return subject.contains("ospfNbrStateChange");
+    }
+
+    private boolean isAdlinkMessage(String subject) {
+        return subject.contains("adlink") && subject.contains("- Fault");
     }
 
     private boolean isOsmMessage(String subject) {

@@ -39,7 +39,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
 @Slf4j
-public class ZabbixClient {
+public class Client {
 
     private static final DateTimeFormatter DT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final AtomicInteger ID_GEN = new AtomicInteger(1);
@@ -52,7 +52,7 @@ public class ZabbixClient {
     private final ConcurrentHashMap<String, String> hostIdCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> graphIdCache = new ConcurrentHashMap<>();
 
-    public ZabbixClient(Config config) {
+    public Client(Config config) {
         this.config = config;
         // CookieManager stores the zbx_sessionid from web login and sends it automatically
         // with every subsequent request (including chart2.php).
