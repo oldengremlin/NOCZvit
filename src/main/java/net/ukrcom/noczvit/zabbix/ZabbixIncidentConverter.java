@@ -19,7 +19,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
@@ -46,11 +45,6 @@ public class ZabbixIncidentConverter {
         "лип", "серп", "вер", "жовт", "лист", "груд"
     };
 
-    // Аналог PdIncidentParser.DEVICE_PREFIX_PATTERN: знімаємо r/s/p та ies*/alca- перед пошуком у словнику
-    private static final Pattern HOST_PREFIX = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
-    // Знімаємо суфікс виду «-1», «-2» тощо (порядковий номер вузла)
-    private static final Pattern HOST_SUFFIX = Pattern.compile("-\\d+$");
-
     private final Dictionary dictionary;
 
     public ZabbixIncidentConverter(Dictionary dictionary) {
@@ -65,14 +59,8 @@ public class ZabbixIncidentConverter {
      */
     public List<Incident> convert(ZabbixProblem p) {
         String host = p.host();
-
-        // Перетворення hostname перед пошуком у словнику:
-        //   rhoh15-1 → hoh15-1 → hoh15   (^hoh15=Ґарета Джонса 15)
-        //   r234-1   → 234-1   → 234     (^234=АТС-234)
-        String lookupKey = HOST_SUFFIX.matcher(
-                HOST_PREFIX.matcher(host).replaceFirst("")).replaceFirst("");
-        String location = dictionary.lookupPD(lookupKey);
-        boolean needsReview = location.equals(lookupKey);
+        String location = dictionary.lookupPD(host);
+        boolean needsReview = location.equals(host);
         List<String> reviewNames = needsReview ? List.of(host) : List.of();
 
         String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
