@@ -36,7 +36,6 @@ import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
-import net.ukrcom.noczvit.zabbix.ZabbixClient;
 
 @Slf4j
 public class Client {
@@ -52,7 +51,7 @@ public class Client {
         this.config = config;
     }
 
-    public String getCelsius(LocalDateTime from, LocalDateTime to, ZabbixClient zabbix) {
+    public String getCelsius(LocalDateTime from, LocalDateTime to, net.ukrcom.noczvit.zabbix.Client zabbix) {
         StringBuilder html = new StringBuilder();
         html.append("<p>\n<h1>Температура обладнання на виносах, станом на ")
                 .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
@@ -103,7 +102,7 @@ public class Client {
         return html.toString();
     }
 
-    private CelsiusResult queryHostCelsius(String hostname, LocalDateTime from, LocalDateTime to, ZabbixClient zabbix) {
+    private CelsiusResult queryHostCelsius(String hostname, LocalDateTime from, LocalDateTime to, net.ukrcom.noczvit.zabbix.Client zabbix) {
         String host = hostname.split(" ")[0];
         String domain = config.getSnmpHostsSuffix();
 

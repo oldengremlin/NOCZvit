@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.NOCZvit;
 import net.ukrcom.noczvit.model.Incident;
-import net.ukrcom.noczvit.zabbix.ZabbixClient;
+import net.ukrcom.noczvit.zabbix.Client;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
@@ -48,7 +48,7 @@ public class IncidentSectionBuilder {
      * @param dutyEnd      end of the duty period to display
      * @return HTML fragment (never null)
      */
-    public String build(List<Incident> allIncidents, ZabbixClient zabbix,
+    public String build(List<Incident> allIncidents, Client zabbix,
                         LocalDateTime dutyBegin, LocalDateTime dutyEnd) {
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd   = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
@@ -122,7 +122,7 @@ public class IncidentSectionBuilder {
     }
 
     private void appendPingGraphs(StringBuilder html, List<Incident> group,
-                                  ZabbixClient zabbix, LocalDateTime from, LocalDateTime to) {
+                                  Client zabbix, LocalDateTime from, LocalDateTime to) {
         List<String> pingDevices = group.stream()
                 .map(Incident::device)
                 .filter(d -> !d.isEmpty())
