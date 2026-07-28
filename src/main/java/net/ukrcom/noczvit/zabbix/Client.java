@@ -152,6 +152,8 @@ public class Client {
             JsonObject params = new JsonObject();
             params.addProperty("time_from", ctFrom);
             params.addProperty("time_till", ctTo);
+            // Лише Середні (3), Високі (4) та Критичні (5) — решту ігноруємо
+            params.add("severities", GSON.toJsonTree(new int[]{3, 4, 5}));
             params.add("output", GSON.toJsonTree(new String[]{"eventid", "name", "clock", "r_clock"}));
             params.add("selectHosts", GSON.toJsonTree(new String[]{"host"}));
 
