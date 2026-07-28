@@ -26,12 +26,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class Dictionary {
+
+    // Нормалізація ключа перед пошуком у PD-словнику:
+    //   знімаємо префікс r/s/p та ies*/alca- (як у PdIncidentParser.DEVICE_PREFIX_PATTERN)
+    //   і лише якщо префікс знятий — знімаємо суфікс -N (порядковий номер вузла).
+    // Якщо prefix не збігся — суфікс НЕ знімаємо (щоб не ламати adlink-hoh15-1 тощо).
+    private static final Pattern PD_HOST_PREFIX = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
+    private static final Pattern PD_HOST_SUFFIX  = Pattern.compile("-\\d+$");
 
     private final Map<Pattern, String> pdDictionary;
     private final Map<Pattern, String> sdhDictionary;
@@ -97,9 +103,22 @@ public class Dictionary {
 
     public String lookupPD(String key) {
         return pdCache.computeIfAbsent(key, k -> {
+            String afterPrefix = PD_HOST_PREFIX.matcher(k).replaceFirst("");
+            String normalized  = afterPrefix.equals(k)
+                    ? k
+                    : PD_HOST_SUFFIX.matcher(afterPrefix).replaceFirst("");
+
             for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
-                if (entry.getKey().matcher(k).find()) {
+                if (entry.getKey().matcher(normalized).find()) {
                     return entry.getValue();
+                }
+            }
+            // Fallback: спробуємо оригінальний ключ (коли normalized не збігся, але оригінал збігається)
+            if (!normalized.equals(k)) {
+                for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
+                    if (entry.getKey().matcher(k).find()) {
+                        return entry.getValue();
+                    }
                 }
             }
             return k;
