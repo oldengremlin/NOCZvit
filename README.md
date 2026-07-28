@@ -194,6 +194,7 @@ classDiagram
   - Gson `com.google.code.gson:gson:2.13.2`
   - jTDS `net.sourceforge.jtds:jtds:1.3.1`
   - Lombok `org.projectlombok:lombok:1.18.46` (provided)
+  - Anthropic Java SDK `com.anthropic:anthropic-java:2.34.0` (опціонально, для Claude AI)
 
 ## Збирання
 
@@ -201,12 +202,12 @@ classDiagram
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.9.0.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.10.0.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.9.0.jar [OPTIONS]
+java -jar target/NOCZvit-1.10.0.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -220,6 +221,7 @@ java -jar target/NOCZvit-1.9.0.jar [OPTIONS]
 | `--temperature` / `--no-temperature` | Увімкнути/вимкнути блок температури (SNMP Celsius) |
 | `--ramos` / `--no-ramos` | Увімкнути/вимкнути блок Ramos |
 | `--zabbix` / `--no-zabbix` | Увімкнути/вимкнути вбудовування графіків температури з Zabbix |
+| `--claude` / `--no-claude` | Увімкнути/вимкнути AI-резюме зміни через Anthropic API |
 | `--debug` / `--no-debug` | Дебаг-режим: звіт надсилається на `email.toDebug` замість `email.to` |
 
 Параметри командного рядка мають пріоритет над налаштуваннями у `noczvit.properties`.
@@ -227,7 +229,7 @@ java -jar target/NOCZvit-1.9.0.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.9.0.jar --debug --no-incidents
+java -jar target/NOCZvit-1.10.0.jar --debug --no-incidents
 ```
 
 ## Налаштування
@@ -281,6 +283,12 @@ accequipment-mssql-server=sqlserver
 accequipment-mssql-database=Equipment
 accequipment-mssql-user=reader
 accequipment-mssql-password=secret
+
+# Claude AI (опціонально, для резюме зміни)
+# Ключ отримати на console.anthropic.com (окремий від підписки claude.ai)
+claude=false
+# claude.apikey=sk-ant-...
+# claude.model=claude-haiku-4-5
 ```
 
 ### Словники
@@ -310,6 +318,8 @@ NOCZvit/
 │   │   └── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
 │   ├── report/
 │   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (групування, Ping-графіки)
+│   ├── claude/
+│   │   └── SummaryClient.java     — Claude API: генерація короткого резюме зміни (опціонально)
 │   ├── snmp/
 │   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
 │   └── zabbix/
