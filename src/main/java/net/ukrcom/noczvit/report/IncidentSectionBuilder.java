@@ -60,8 +60,8 @@ public class IncidentSectionBuilder {
                 .append("</h1>\n");
 
         List<Incident> incidents = allIncidents.stream()
-                .filter(i -> i.eventTs() >= ctDutyBegin && i.eventTs() <= ctDutyEnd)
-                .sorted(Comparator.comparingLong(Incident::eventTs).thenComparingLong(Incident::messageTs))
+                .filter(i -> i.messageTs() >= ctDutyBegin && i.messageTs() <= ctDutyEnd)
+                .sorted(Comparator.comparingLong(Incident::messageTs).thenComparingLong(Incident::eventTs))
                 .toList();
 
         if (incidents.isEmpty()) {
@@ -115,7 +115,7 @@ public class IncidentSectionBuilder {
         String device = inc.device().isEmpty() ? "" : inc.device();
         return "<tr" + rowClass + ">"
                 + "<td>" + n.incrementAndGet() + ".</td>"
-                + "<td>" + inc.eventDateStr() + "</td>"
+                + "<td>" + inc.messageDateStr() + "</td>"
                 + "<td>" + descHtml + "</td>"
                 + "<td>" + device + "</td>"
                 + "</tr>\n";

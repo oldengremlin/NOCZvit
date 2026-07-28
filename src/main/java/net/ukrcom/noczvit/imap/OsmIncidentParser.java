@@ -113,6 +113,11 @@ public class OsmIncidentParser {
             }
         }
 
+        // Append trap time note to description when event time differs from message time
+        if (eventTs != msg.unixDate()) {
+            description += ", який відбувся " + DateUtils.convertMonthNumToMnemo(eventDateStr);
+        }
+
         List<String> reviewNames = new ArrayList<>();
         if (needsReviewFrom) {
             reviewNames.add(from);
