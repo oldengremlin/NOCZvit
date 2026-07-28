@@ -16,7 +16,6 @@ package net.ukrcom.noczvit;
 
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
-import net.ukrcom.noczvit.zabbix.ZabbixClient;
 import net.ukrcom.noczvit.smtp.EmailSender;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
@@ -76,7 +75,7 @@ public class NOCZvit {
             LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
 
             List<Incident> incidents = null;
-            ZabbixClient zabbix = null;
+            net.ukrcom.noczvit.zabbix.Client zabbix = null;
             String debtorsHtml = "";
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -95,10 +94,10 @@ public class NOCZvit {
                     imapFuture = CompletableFuture.completedFuture(null);
                 }
 
-                CompletableFuture<ZabbixClient> zabbixFuture;
+                CompletableFuture<net.ukrcom.noczvit.zabbix.Client> zabbixFuture;
                 if (config.isZabbixEnabled()) {
                     zabbixFuture = CompletableFuture.supplyAsync(() -> {
-                        ZabbixClient zc = new ZabbixClient(config);
+                        net.ukrcom.noczvit.zabbix.Client zc = new net.ukrcom.noczvit.zabbix.Client(config);
                         if (zc.login()) {
                             return zc;
                         }
