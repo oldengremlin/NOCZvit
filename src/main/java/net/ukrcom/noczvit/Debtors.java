@@ -95,9 +95,7 @@ public class Debtors {
                 returnMessage.append(debtorsHtml);
 
             } catch (SQLException e) {
-                if (config.isDebug()) {
-                    System.err.println("Debtors DB error: " + e.getMessage());
-                }
+                System.err.println("Debtors DB error: " + e.getMessage());
             }
         }
 

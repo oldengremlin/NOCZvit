@@ -36,3 +36,4 @@ email.from=Duty Report <noczvit@example.com>
 email.replyTo=Support <support@example.com>
 email.to=Duty Report <recipient1@example.com>,recipient2@example.com
 email.toDebug=admin@example.com
+# email.sendmail=/usr/sbin/sendmail

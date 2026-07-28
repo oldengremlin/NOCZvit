@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +91,8 @@ public class Config {
     @NonNull
     private List<String> emailTo;
     private String emailToDebug;
+    @NonNull
+    private String sendmailPath;
 
     @NonNull
     private String accountMssqlUser;
@@ -124,8 +127,9 @@ public class Config {
 
     private void initValues() {
         properties = new Properties();
-        hosts = new HashMap<>();
-        ramos = new HashMap<>();
+        hosts = Collections.emptyMap();
+        ramos = Collections.emptyMap();
+        sendmailPath = "/usr/sbin/sendmail";
         configPath = null;
         dictionaryPdPath = null;
         dictionarySdhPath = null;
@@ -221,6 +225,7 @@ public class Config {
     }
 
     private void hostsProperties() {
+        Map<String, Map<String, String>> mutableHosts = new HashMap<>();
         String hostsStr = properties.getProperty("snmp.hosts");
         if (hostsStr != null) {
             for (String hostEntry : hostsStr.split(",")) {
@@ -234,13 +239,15 @@ public class Config {
                             hostData.put(kv[0].trim(), kv[1].trim());
                         }
                     }
-                    hosts.put(hostName, hostData);
+                    mutableHosts.put(hostName, Collections.unmodifiableMap(hostData));
                 }
             }
         }
+        hosts = Collections.unmodifiableMap(mutableHosts);
     }
 
     private void ramosProperties() {
+        Map<String, Map<String, String>> mutableRamos = new HashMap<>();
         String ramosStr = properties.getProperty("snmp.ramos");
         if (ramosStr != null) {
             for (String ramosEntry : ramosStr.split(",")) {
@@ -254,10 +261,11 @@ public class Config {
                             ramosData.put(kv[0].trim(), kv[1].trim());
                         }
                     }
-                    ramos.put(ip, ramosData);
+                    mutableRamos.put(ip, Collections.unmodifiableMap(ramosData));
                 }
             }
         }
+        ramos = Collections.unmodifiableMap(mutableRamos);
     }
 
     private void celsiusProperties() {
@@ -274,8 +282,19 @@ public class Config {
         zabbixUrl = properties.getProperty("zabbix.url", "");
         zabbixUsername = properties.getProperty("zabbix.username", "");
         zabbixPassword = properties.getProperty("zabbix.password", "");
-        zabbixGraphWidth = Integer.parseInt(properties.getProperty("zabbix.graphwidth", "640"));
-        zabbixGraphHeight = Integer.parseInt(properties.getProperty("zabbix.graphheight", "83"));
+        zabbixGraphWidth = parseIntSafe(properties.getProperty("zabbix.graphwidth"), 640);
+        zabbixGraphHeight = parseIntSafe(properties.getProperty("zabbix.graphheight"), 83);
+    }
+
+    private int parseIntSafe(String value, int defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 
     private void mssqlProperties() {
@@ -299,6 +318,7 @@ public class Config {
         emailFrom = properties.getProperty("email.from");
         emailReplyTo = properties.getProperty("email.replyTo");
         emailToDebug = properties.getProperty("email.toDebug");
+        sendmailPath = properties.getProperty("email.sendmail", "/usr/sbin/sendmail");
         List<String> toList = new ArrayList<>();
         String toStr = properties.getProperty("email.to");
         if (toStr != null) {

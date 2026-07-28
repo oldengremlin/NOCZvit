@@ -210,7 +210,7 @@ public class ZabbixClient {
                 params.add("filter", filter);
 
                 JsonArray result = apiCall("host.get", params, authToken).getAsJsonArray("result");
-                if (result != null && result.size() > 0) {
+                if (result != null && !result.isEmpty()) {
                     String hostId = result.get(0).getAsJsonObject().get("hostid").getAsString();
                     if (config.isDebug()) {
                         System.err.println("Zabbix host.get: " + shortName + " → hostId=" + hostId);
@@ -243,7 +243,7 @@ public class ZabbixClient {
                 params.add("search", search);
 
                 JsonArray result = apiCall("graph.get", params, authToken).getAsJsonArray("result");
-                if (result != null && result.size() > 0) {
+                if (result != null && !result.isEmpty()) {
                     String graphId = result.get(0).getAsJsonObject().get("graphid").getAsString();
                     String foundName = result.get(0).getAsJsonObject().get("name").getAsString();
                     if (config.isDebug()) {
@@ -337,6 +337,9 @@ public class ZabbixClient {
                 .build();
 
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) {
+            throw new IOException("Zabbix API HTTP " + resp.statusCode() + " for method " + method);
+        }
         return JsonParser.parseString(resp.body()).getAsJsonObject();
     }
 }
