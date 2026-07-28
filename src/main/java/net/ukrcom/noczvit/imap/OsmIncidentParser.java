@@ -87,9 +87,15 @@ public class OsmIncidentParser {
             case END   -> "OSM зареєстровано кінець інциденту, ";
             case NONE  -> "OSM зареєстровано інцидент, ";
         };
-        String description = (statePart + ("Power".equals(type)
-                ? "зникнення живлення на виносі " + geoMsg
-                : "втрата зв'язності " + geoMsg)).replaceAll("\\s+", " ");
+        String eventDesc;
+        if ("Power".equals(type)) {
+            eventDesc = subject.contains("Air Condition")
+                    ? "зникнення живлення на " + geoMsg + " до кондиціонерів"
+                    : "зникнення живлення на виносі " + geoMsg;
+        } else {
+            eventDesc = "втрата зв'язності " + geoMsg;
+        }
+        String description = (statePart + eventDesc).replaceAll("\\s+", " ");
 
         // Extract precise event time from Trap value in body
         long eventTs = msg.unixDate();
