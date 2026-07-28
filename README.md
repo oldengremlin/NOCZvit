@@ -25,7 +25,7 @@ flowchart TD
     PAR --> ZAB[zabbix.Client\nlogin]
     PAR --> DB[(Debtors\nMSSQL)]
 
-    IMAP --> INC[/"List&lt;Incident&gt;"/]
+    IMAP --> INC[/List of Incident/]
     ZAB  --> ZS[/ZabbixSession/]
     DB   --> DH[/HTML боржників/]
 
@@ -45,17 +45,17 @@ flowchart TD
 ```mermaid
 flowchart LR
     FOLDER[IMAP-папка\nZabbix] --> RDR[ImapReader]
-    RDR --> |"List&lt;RawMessage&gt;"| DEDUP["Дедуплікація\nadlink ≤ 60 s"]
+    RDR -->|RawMessage| DEDUP[Дедуплікація\nadlink 60s]
     DEDUP --> RT{{"imap.Client\nмаршрутизація"}}
 
-    RT -->|"Unavailable by ICMP ping\nhas been restarted"| PD[PdIncidentParser\nджерело: PD]
-    RT -->|ospfNbrStateChange|                              OSPF[OspfIncidentParser\nджерело: PD]
-    RT -->|"adlink.* - Fault"|                             ADL[AdlinkIncidentParser\nджерело: PD]
-    RT -->|"Power / STM-N ≥ 2"|                           OSM[OsmIncidentParser\nджерело: OSM]
+    RT -->|ping / restarted|    PD[PdIncidentParser\nджерело: PD]
+    RT -->|ospfNbrStateChange|  OSPF[OspfIncidentParser\nджерело: PD]
+    RT -->|adlink - Fault|      ADL[AdlinkIncidentParser\nджерело: PD]
+    RT -->|Power / STM-N|       OSM[OsmIncidentParser\nджерело: OSM]
 
-    DICT[(Dictionary\nPD / SDH)] -. lookup .-> PD & OSPF & ADL & OSM
+    DICT[(Dictionary\nPD / SDH)] -.-> PD & OSPF & ADL & OSM
 
-    PD & OSPF & ADL & OSM -->|"Optional&lt;Incident&gt;"| LST[/"List&lt;Incident&gt;"/]
+    PD & OSPF & ADL & OSM -->|Optional Incident| LST[/List of Incident/]
 ```
 
 ### Структура класів
