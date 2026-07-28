@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and limitations
  * under the License.
  */
-package net.ukrcom.noczvit;
+package net.ukrcom.noczvit.smtp;
 
 import jakarta.mail.Authenticator;
 import jakarta.mail.Message;
@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.Config;
 
 @Slf4j
 public class EmailSender {

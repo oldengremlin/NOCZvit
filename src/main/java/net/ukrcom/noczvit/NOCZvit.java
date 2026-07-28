@@ -14,6 +14,8 @@
  */
 package net.ukrcom.noczvit;
 
+import net.ukrcom.noczvit.zabbix.ZabbixClient;
+import net.ukrcom.noczvit.smtp.EmailSender;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import jakarta.mail.MessagingException;

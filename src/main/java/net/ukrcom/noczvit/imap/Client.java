@@ -51,7 +51,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.NOCZvit;
-import net.ukrcom.noczvit.ZabbixClient;
+import net.ukrcom.noczvit.zabbix.ZabbixClient;
 import org.apache.commons.text.StringEscapeUtils;
 
 @Slf4j
