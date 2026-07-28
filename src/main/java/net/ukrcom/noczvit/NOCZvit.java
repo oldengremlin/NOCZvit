@@ -14,6 +14,8 @@
  */
 package net.ukrcom.noczvit;
 
+import net.ukrcom.noczvit.model.Incident;
+import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.zabbix.ZabbixClient;
 import net.ukrcom.noczvit.smtp.EmailSender;
 import ch.qos.logback.classic.Level;
@@ -25,7 +27,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
@@ -56,7 +57,6 @@ public class NOCZvit {
                 System.exit(1);
             }
 
-            // Check if all sections are disabled
             if (!config.isIncidentsEnabled() && !config.isTemperatureEnabled() && !config.isRamosEnabled() && !config.isDebtorsEnabled()) {
                 log.info("All report sections are disabled, skipping email sending.");
                 return;
@@ -67,22 +67,21 @@ public class NOCZvit {
             LocalDate yesterday = currentDate.minusDays(1);
 
             LocalDateTime prevDutyBegin = LocalDateTime.parse(yesterday + " 20:00:00", DATE_TIME_FORMATTER);
-            LocalDateTime prevDutyEnd = LocalDateTime.parse(currentDate + " 07:59:59", DATE_TIME_FORMATTER);
+            LocalDateTime prevDutyEnd   = LocalDateTime.parse(currentDate + " 07:59:59", DATE_TIME_FORMATTER);
             LocalDateTime currDutyBegin = LocalDateTime.parse(currentDate + " 08:00:00", DATE_TIME_FORMATTER);
-            LocalDateTime currDutyEnd = LocalDateTime.parse(currentDate + " 19:59:59", DATE_TIME_FORMATTER);
+            LocalDateTime currDutyEnd   = LocalDateTime.parse(currentDate + " 19:59:59", DATE_TIME_FORMATTER);
 
             boolean nightShift = LocalDateTime.now().getHour() < 12;
             LocalDateTime reportFrom = nightShift ? prevDutyBegin : currDutyBegin;
-            LocalDateTime reportTo = nightShift ? prevDutyEnd : currDutyEnd;
+            LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
 
-            // Parallel I/O: IMAP + Zabbix login + Debtors run concurrently
-            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = null;
+            List<Incident> incidents = null;
             ZabbixClient zabbix = null;
             String debtorsHtml = "";
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
-                CompletableFuture<Map<String, Map<String, Map<Long, Map<Long, List<String>>>>>> imapFuture;
+                CompletableFuture<List<Incident>> imapFuture;
                 if (config.isIncidentsEnabled()) {
                     imapFuture = CompletableFuture.supplyAsync(() -> {
                         try {
@@ -134,8 +133,8 @@ public class NOCZvit {
                     throw new IOException("Initialization failed: " + cause.getMessage(), cause);
                 }
 
-                msgLogGroup = imapFuture.join();
-                zabbix = zabbixFuture.join();
+                incidents   = imapFuture.join();
+                zabbix      = zabbixFuture.join();
                 debtorsHtml = debtorsFuture.join();
             }
 
@@ -160,15 +159,17 @@ public class NOCZvit {
                     + ".table-debtors{box-shadow:0 0 0 2px #ef9a9a,2px 2px 6px rgba(0,0,0,.2)}"
                     + "</style></head><body>");
 
+            IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
+
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
-                if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(net.ukrcom.noczvit.imap.Client.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup, zabbix));
+                if (config.isIncidentsEnabled() && incidents != null) {
+                    message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
-                if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(net.ukrcom.noczvit.imap.Client.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
+                if (config.isIncidentsEnabled() && incidents != null) {
+                    message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd));
                 }
                 message.append(debtorsHtml);
             }
