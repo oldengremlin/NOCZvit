@@ -26,12 +26,17 @@ flowchart TD
     PAR --> ZAB[zabbix.Client\nlogin]
     PAR --> DB[(Debtors\nMSSQL)]
 
-    IMAP --> INC[/List of Incident/]
-    ZAB  --> ZS[/ZabbixSession/]
+    IMAP --> INC[/IMAP incidents/]
+    ZAB  --> ZS[/Zabbix session/]
     DB   --> DH[/HTML боржників/]
 
-    INC --> CLAUDE["claude.SummaryClient\nAI-резюме зміни\n(опціонально)"]
-    INC & ZS --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
+    ZS --> ZEVT["event.get history\n→ ProblemFilter\n→ ZabbixIncidentConverter"]
+    INC  --> MERGE[/incidentsForTable\nIMAP + Zabbix/]
+    ZEVT --> MERGE
+
+    MERGE --> CLAUDE["claude.SummaryClient\nAI-резюме зміни\n(опціонально)"]
+    MERGE --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
+    ZS    --> ISB
     INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
 
     CLAUDE --> HTML[HTML-звіт]
@@ -128,6 +133,7 @@ classDiagram
         <<enumeration>>
         PD
         OSM
+        ZABBIX
     }
     class Status {
         <<enumeration>>
@@ -136,11 +142,26 @@ classDiagram
         NONE
     }
 
+    class ZabbixProblem {
+        <<record>>
+        +host() String
+        +name() String
+        +clock() long
+        +rClock() long
+        +isActive() bool
+    }
+    class ZabbixIncidentConverter {
+        +convert(ZabbixProblem) List~Incident~
+    }
+    class ProblemFilter {
+        +filter(problems, imapIncidents) List~ZabbixProblem~
+    }
+
     class IncidentSectionBuilder {
         +build(incidents, zabbix, from, to) String
     }
     class SummaryClient["claude.SummaryClient"] {
-        +generateSummary(incidents, from, to) String
+        +generateSummary(incidentsForTable, from, to) String
     }
     class SnmpClient["snmp.Client"] {
         +getCelsius(from, to, zabbix) String
@@ -148,6 +169,7 @@ classDiagram
     }
     class ZabbixClient["zabbix.Client"] {
         +login() bool
+        +getProblems(from, to) List~ZabbixProblem~
         +getPingGraphRow() String
         +getGraphRow() String
     }
@@ -185,6 +207,12 @@ classDiagram
 
     Incident --> Source
     Incident --> Status
+
+    ZabbixClient ..> ZabbixProblem : creates
+    ProblemFilter ..> ZabbixProblem : filters
+    ZabbixIncidentConverter ..> ZabbixProblem : reads
+    ZabbixIncidentConverter ..> Dictionary : lookup
+    ZabbixIncidentConverter ..> Incident : creates
 
     IncidentSectionBuilder ..> Incident : renders
     IncidentSectionBuilder ..> ZabbixClient : Ping-графіки
@@ -336,7 +364,7 @@ NOCZvit/
 ├── src/main/java/net/ukrcom/noczvit/
 │   ├── NOCZvit.java               — точка входу
 │   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
-│   ├── Dictionary.java            — словники PD/SDH (regex-lookup з кешем)
+│   ├── Dictionary.java            — словники PD/SDH (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N)
 │   ├── Debtors.java               — список боржників із MSSQL
 │   ├── imap/
 │   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
@@ -356,9 +384,13 @@ NOCZvit/
 │   ├── snmp/
 │   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
 │   └── zabbix/
-│       └── Client.java            — Zabbix API + web login; host/graph lookup; chart2.php PNG
+│       ├── Client.java            — Zabbix API: login, event.get history, host/graph lookup, chart2.php PNG
+│       ├── ZabbixProblem.java     — record: host, name, clock, rClock; isActive()
+│       ├── ZabbixIncidentConverter.java — ZabbixProblem → List<Incident> з Dictionary lookup
+│       └── ProblemFilter.java     — фільтрація: порожній host, SDH-OSM, No SNMP, OSPF, дублікати IMAP
 ├── src/main/resources/
 │   ├── noczvit.properties         — конфігурація за замовчуванням
+│   ├── logback.xml                — конфігурація логування (Logback)
 │   ├── dictionary_pd.txt          — словник PD/OSPF/adlink (regex → назва / опис)
 │   ├── dictionary_sdh.txt         — словник SDH/OSM (regex → назва виносу)
 │   ├── help.txt

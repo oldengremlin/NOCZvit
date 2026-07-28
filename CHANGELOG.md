@@ -6,6 +6,27 @@
 
 ---
 
+## [1.11.0] — 2026-07-28
+
+### Додано
+- **Zabbix event history у таблиці звіту** — `zabbix.Client.getProblems()` переключено з `problem.get` (очищається housekeeping) на `event.get` (постійна таблиця); відображає всі PROBLEM-події зміни, включно з уже вирішеними
+  - Двоетапний запит: `event.get` з `value=[1]` для PROBLEM-подій → другий `event.get` для `rClock` через `r_eventid`
+  - Fallback для template-based тригерів з порожнім `hosts`: `trigger.get` за `objectid`
+- **`ZabbixProblem`** — record: `host, name, clock, rClock`; `isActive()` → `rClock == 0`
+- **`ZabbixIncidentConverter`** — конвертує `ZabbixProblem` → `List<Incident>` (START + опціональний END); location через `Dictionary.lookupPD()`; опис містить назву локації, а не raw hostname
+- **`ProblemFilter`** — ланцюжок фільтрів перед конвертацією: порожній host, `SDH-OSM`, `No SNMP`, `OSPF`, перезавантаження, дедублікація з IMAP-інцидентами (±5 хвилин)
+- Zabbix-інциденти злиті з IMAP у `incidentsForTable` — відображаються в HTML-таблиці поряд з IMAP-інцидентами (групування по локаціях, один Ping-графік на унікальний пристрій)
+
+### Змінено
+- **`Dictionary.lookupPD()`** — нормалізація hostname перенесена всередину методу: знімає prefix `^(?:[rsp]|(?:ies\d?|alca)-)` і (лише при збігу prefix) суфікс `-\d+$`; fallback на оригінальний ключ; захищає типи `adlink-hoh15-1` від зайвого зрізання суфікса
+- **`SummaryClient.generateSummary()`** приймає `incidentsForTable` (IMAP + Zabbix) замість лише IMAP — Claude отримує повну картину зміни
+- **Claude prompt** — блок «Доменні знання»: `Routing Engine: High CPU utilization` на Juniper не впливає на комутацію (TFEB/PFE окремо від RE); явна заборона формулювань «системна проблема», «обробка трафіку», «рекомендується діагностика»; рекомендована нейтральна формула
+
+### Виправлено
+- `SummaryClient.buildPrompt()`: `100%` у text block з `.formatted()` → `UnknownFormatConversionException: Conversion = ' '`; виправлено на `100%%`
+
+---
+
 ## [1.10.0] — 2026-07-28
 
 ### Додано
@@ -225,6 +246,7 @@
 
 ---
 
+[1.11.0]: https://github.com/oldengremlin/noczvit/compare/v1.10.0...v1.11.0
 [1.9.0]: https://github.com/oldengremlin/noczvit/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/oldengremlin/noczvit/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/oldengremlin/noczvit/compare/v1.6.0...v1.7.0
