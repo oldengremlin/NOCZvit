@@ -60,6 +60,10 @@ public class NOCZvit {
                 msgLogGroup = imapClient.prepareImapFolder(isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
             }
 
+            boolean nightShift = LocalDateTime.now().getHour() < 12;
+            LocalDateTime reportFrom = nightShift ? prevDutyBegin : currDutyBegin;
+            LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
+
             String subject;
             StringBuilder message = new StringBuilder(
                 "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><style>"
@@ -81,7 +85,7 @@ public class NOCZvit {
                 + ".table-debtors{box-shadow:0 0 0 2px #ef9a9a,2px 2px 6px rgba(0,0,0,.2)}"
                 + "</style></head><body>");
 
-            if (LocalDateTime.now().getHour() < 12) {
+            if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
                     message.append(ImapClient.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup));
@@ -98,8 +102,17 @@ public class NOCZvit {
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
                 SnmpClient snmpClient = new SnmpClient(config);
+                ZabbixClient zabbix = null;
+                if (config.isZabbixEnabled() && config.isTemperatureEnabled()) {
+                    ZabbixClient zc = new ZabbixClient(config);
+                    if (zc.login()) {
+                        zabbix = zc;
+                    } else if (config.isDebug()) {
+                        System.err.println("Zabbix: login failed, temperature graphs disabled");
+                    }
+                }
                 if (config.isTemperatureEnabled()) {
-                    message.append(snmpClient.getCelsius());
+                    message.append(snmpClient.getCelsius(reportFrom, reportTo, zabbix));
                 }
                 if (config.isRamosEnabled()) {
                     message.append(snmpClient.getRamos());

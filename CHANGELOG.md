@@ -6,6 +6,20 @@
 
 ---
 
+## [1.5.0] — 2026-07-28
+
+### Додано
+- `ZabbixClient`: авторизація через `user.login` API (токен використовується як `zbx_sessionid` cookie), пошук хоста (`host.get`) та графіка (`graph.get` з пошуком `"<desc>: Temperature"`), завантаження `chart2.php` та вбудовування PNG як `data:image/png;base64,...` у звіт
+- Після кожного рядка температури у таблиці додається рядок з графіком за звітний період (якщо Zabbix увімкнено і граф знайдено)
+- Новий параметр CLI `--zabbix` / `--no-zabbix`; нові конфіг-параметри `zabbix`, `zabbix.api`, `zabbix.url`, `zabbix.username`, `zabbix.password`, `zabbix.graphwidth`, `zabbix.graphheight`
+- `getCelsius(from, to, zabbix)` тепер отримує звітний часовий діапазон замість `LocalDateTime.now()`
+
+### Змінено
+- `NOCZvit`: визначення зміни (`nightShift`) винесено в окрему змінну; `reportFrom`/`reportTo` передаються в `getCelsius`
+- Graceful degradation: будь-яка помилка Zabbix (мережа, авторизація, граф не знайдено) → просто пропускається графік, рядок з температурою залишається
+
+---
+
 ## [1.4.6] — 2026-07-23
 
 ### Виправлено
