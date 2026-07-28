@@ -288,7 +288,7 @@ public class ImapClient {
          */
     }
 
-    public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup) {
+    public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, ZabbixClient zabbix) {
         StringBuilder html = new StringBuilder();
         html.append("<p><h1>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
                 .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
@@ -410,6 +410,13 @@ public class ImapClient {
                         .append(inc.toTableCells())
                         .append("</tr>\n");
             });
+            if (zabbix != null) {
+                groupIncidents.stream()
+                        .map(Incident::device)
+                        .filter(d -> !d.isEmpty())
+                        .distinct()
+                        .forEach(device -> html.append(zabbix.getPingGraphRow(device, dutyBegin, dutyEnd)));
+            }
             html.append("</tbody></table>\n</div>\n");
         });
 

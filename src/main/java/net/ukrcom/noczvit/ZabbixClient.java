@@ -152,8 +152,19 @@ public class ZabbixClient {
         }
     }
 
-    // Returns extra <tr> row with embedded graph PNG, or "" on any failure.
+    // Returns extra <tr> row with embedded temperature graph PNG, or "" on any failure.
     public String getGraphRow(String shortHostname, String desc, LocalDateTime from, LocalDateTime to) {
+        return getGraphRowForName(shortHostname, desc + ": Temperature", from, to,
+                "getGraphRow(" + shortHostname + ", " + desc + ")");
+    }
+
+    // Returns extra <tr> row with embedded Ping graph PNG, or "" on any failure.
+    public String getPingGraphRow(String hostname, LocalDateTime from, LocalDateTime to) {
+        return getGraphRowForName(hostname, hostname + ": Ping", from, to,
+                "getPingGraphRow(" + hostname + ")");
+    }
+
+    private String getGraphRowForName(String shortHostname, String graphName, LocalDateTime from, LocalDateTime to, String debugLabel) {
         if (authToken == null) {
             return "";
         }
@@ -163,7 +174,7 @@ public class ZabbixClient {
                 return "";
             }
 
-            String graphId = resolveGraphId(hostId, desc);
+            String graphId = resolveGraphId(hostId, graphName);
             if (graphId == null) {
                 return "";
             }
@@ -181,7 +192,7 @@ public class ZabbixClient {
                     + "</td></tr>\n";
         } catch (IOException | InterruptedException e) {
             if (config.isDebug()) {
-                System.err.println("Zabbix getGraphRow(" + shortHostname + ", " + desc + "): " + e.getMessage());
+                System.err.println("Zabbix " + debugLabel + ": " + e.getMessage());
             }
             return "";
         }
@@ -218,36 +229,35 @@ public class ZabbixClient {
         });
     }
 
-    private String resolveGraphId(String hostId, String desc) {
-        String cacheKey = hostId + "\0" + desc;
+    private String resolveGraphId(String hostId, String graphName) {
+        String cacheKey = hostId + "\0" + graphName;
         return graphIdCache.computeIfAbsent(cacheKey, k -> {
             try {
-                String searchName = desc + ": Temperature";
                 JsonObject params = new JsonObject();
                 params.add("output", GSON.toJsonTree(new String[]{"graphid", "name"}));
                 params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
                 JsonObject search = new JsonObject();
-                search.addProperty("name", searchName);
+                search.addProperty("name", graphName);
                 params.add("search", search);
 
                 JsonArray result = apiCall("graph.get", params, authToken).getAsJsonArray("result");
                 if (result != null && result.size() > 0) {
                     String graphId = result.get(0).getAsJsonObject().get("graphid").getAsString();
-                    String graphName = result.get(0).getAsJsonObject().get("name").getAsString();
+                    String foundName = result.get(0).getAsJsonObject().get("name").getAsString();
                     if (config.isDebug()) {
-                        System.err.println("Zabbix graph.get: hostId=" + hostId + " search='" + searchName
-                                + "' → graphId=" + graphId + " name='" + graphName + "'");
+                        System.err.println("Zabbix graph.get: hostId=" + hostId + " search='" + graphName
+                                + "' → graphId=" + graphId + " name='" + foundName + "'");
                     }
                     return graphId;
                 }
                 if (config.isDebug()) {
-                    System.err.println("Zabbix graph.get: no graph found for hostId=" + hostId + " search='" + searchName + "'");
+                    System.err.println("Zabbix graph.get: no graph found for hostId=" + hostId + " search='" + graphName + "'");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (IOException e) {
                 if (config.isDebug()) {
-                    System.err.println("Zabbix graph.get(hostId=" + hostId + ", desc=" + desc + "): " + e.getMessage());
+                    System.err.println("Zabbix graph.get(hostId=" + hostId + ", graphName=" + graphName + "): " + e.getMessage());
                 }
             }
             return null;
