@@ -33,12 +33,13 @@ import net.ukrcom.noczvit.NOCZvit;
 import net.ukrcom.noczvit.model.Incident;
 
 /**
- * Generates a human-readable Ukrainian shift summary using the Claude API.
+ * Формує короткий текст резюме зміни NOC за допомогою Claude API.
+ * Отримує єдиний список інцидентів (IMAP + Zabbix API, вже злиті та відфільтровані).
  */
 @Slf4j
 public class SummaryClient {
 
-    // Fallback converters for residual Markdown the model may produce despite instructions
+    // Запасні конвертери на випадок, якщо модель повертає Markdown всупереч інструкціям
     private static final Pattern MD_HEADING = Pattern.compile("(?m)^#{1,6}\\s+");
     private static final Pattern MD_BOLD    = Pattern.compile("\\*\\*(.+?)\\*\\*");
 
@@ -53,14 +54,16 @@ public class SummaryClient {
     }
 
     /**
-     * Calls Claude API to produce a concise Ukrainian summary of the duty period incidents.
-     * Filters {@code allIncidents} by {@code from}/{@code to} message timestamps — same
-     * window as {@link net.ukrcom.noczvit.report.IncidentSectionBuilder}.
+     * Викликає Claude API для формування короткого резюме зміни українською мовою.
      *
-     * @param allIncidents all parsed incidents (may span multiple duty periods)
-     * @param from         start of the duty period
-     * @param to           end of the duty period
-     * @return HTML fragment (never null); empty string on failure or no incidents in window
+     * <p>Приймає єдиний злитий список інцидентів: IMAP-інциденти + сконвертовані Zabbix-події.
+     * Фільтрує за {@code from}/{@code to} так само як
+     * {@link net.ukrcom.noczvit.report.IncidentSectionBuilder}.
+     *
+     * @param allIncidents всі інциденти зміни (IMAP + Zabbix, можуть охоплювати кілька змін)
+     * @param from         початок звітного періоду
+     * @param to           кінець звітного періоду
+     * @return HTML-фрагмент (ніколи не null); порожній рядок при помилці або відсутності даних
      */
     public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to) {
         long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
@@ -76,7 +79,7 @@ public class SummaryClient {
         }
 
         try {
-            log.debug("Calling Claude API ({}) for shift summary ({} incidents)", model, incidents.size());
+            log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів)", model, incidents.size());
 
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
@@ -91,18 +94,18 @@ public class SummaryClient {
                     .collect(Collectors.joining());
 
             if (summary.isBlank()) {
-                log.warn("Claude returned empty summary");
+                log.warn("Claude повернув порожнє резюме");
                 return "";
             }
 
-            log.debug("Claude summary generated ({} chars)", summary.length());
+            log.debug("Резюме Claude сформовано ({} символів)", summary.length());
             return buildHtml(summary);
 
         } catch (AnthropicServiceException e) {
-            log.warn("Claude API error (HTTP {}): {}", e.statusCode(), e.getMessage());
+            log.warn("Claude API помилка (HTTP {}): {}", e.statusCode(), e.getMessage());
             return "";
         } catch (Exception e) {
-            log.warn("Claude summary failed: {}", e.getMessage());
+            log.warn("Claude резюме — помилка: {}", e.getMessage());
             return "";
         }
     }
@@ -127,7 +130,7 @@ public class SummaryClient {
             sb.append(" [").append(inc.source()).append(", ").append(inc.status()).append("]\n");
         }
 
-        // Pre-computed fact — do NOT ask Claude to infer this from START/END pairs
+        // Попередньо обчислений факт — Claude не аналізує пари START/END самостійно
         sb.append("\nНезакриті інциденти на кінець зміни: ")
           .append(computeUnclosed(incidents))
           .append("\n");
@@ -137,7 +140,7 @@ public class SummaryClient {
 
                 Твоє завдання: написати КОРОТКЕ (3-5 речень) резюме зміни звичайним текстом українською мовою, призначене для керівництва або чергової зміни, що приходить. Резюме має:
                 - Вказати загальну кількість інцидентів та їх характер (пінг-падіння, обриви оптики, OSPF, живлення тощо)
-                - Виділити найбільш значущі або повторювані проблеми по локаціях
+                - Виділити найбільш значущі або повторювані проблеми по локаціях та конкретних пристроях
                 - Використати готовий факт "Незакриті інциденти на кінець зміни" — не аналізуй пари START/END самостійно
                 - Бути написане стисло, в офіційному стилі, без технічного жаргону
 
@@ -149,9 +152,8 @@ public class SummaryClient {
     }
 
     /**
-     * Groups incidents by (location, device) and counts STARTs vs ENDs.
-     * Returns a human-readable Ukrainian string describing open incidents,
-     * or "немає" if all are closed.
+     * Групує інциденти за (location, device) і рахує START vs END.
+     * Повертає людиночитаний рядок про незакриті інциденти або "немає".
      */
     private String computeUnclosed(List<Incident> incidents) {
         record GroupKey(String location, String device) {}
@@ -185,19 +187,19 @@ public class SummaryClient {
     }
 
     private String buildHtml(String summary) {
-        // 1. Strip markdown headings (# Заголовок → Заголовок) — safety net
+        // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
 
-        // 2. Escape HTML — BEFORE inserting any tags
+        // 2. Екранувати HTML — ДО вставки будь-яких тегів
         String escaped = clean
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;");
 
-        // 3. Convert **bold** → <b>bold</b> — safe after HTML escaping since ** is not HTML
+        // 3. **жирний** → <b>жирний</b> — безпечно після екранування
         escaped = MD_BOLD.matcher(escaped).replaceAll("<b>$1</b>");
 
-        // 4. Paragraph and line breaks
+        // 4. Абзаци та переноси рядків
         escaped = escaped.replace("\n\n", "</p><p>").replace("\n", "<br>");
 
         return "<div class=\"section\" style=\"background:#fff;padding:12px 16px;"
