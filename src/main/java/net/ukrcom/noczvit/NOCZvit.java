@@ -18,6 +18,8 @@ import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.smtp.EmailSender;
+import net.ukrcom.noczvit.zabbix.ProblemFilter;
+import net.ukrcom.noczvit.zabbix.ZabbixProblem;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import jakarta.mail.MessagingException;
@@ -26,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -78,6 +81,7 @@ public class NOCZvit {
             List<Incident> incidents = null;
             net.ukrcom.noczvit.zabbix.Client zabbix = null;
             String debtorsHtml = "";
+            List<ZabbixProblem> zabbixProblems = Collections.emptyList();
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
@@ -102,11 +106,23 @@ public class NOCZvit {
                         if (zc.login()) {
                             return zc;
                         }
-                        log.warn("Zabbix: login failed, graphs disabled");
+                        log.warn("Zabbix: логін не вдався, графіки та події вимкнено");
                         return null;
                     }, ioExecutor);
                 } else {
                     zabbixFuture = CompletableFuture.completedFuture(null);
+                }
+
+                // Завантажуємо події Zabbix після успішного логіну, тільки якщо Claude увімкнений.
+                // Якщо Zabbix недоступний (null), повертаємо порожній список.
+                CompletableFuture<List<ZabbixProblem>> zabbixProblemsFuture;
+                if (config.isZabbixEnabled() && config.isClaudeEnabled()) {
+                    zabbixProblemsFuture = zabbixFuture.thenApplyAsync(zc -> {
+                        if (zc == null) return Collections.<ZabbixProblem>emptyList();
+                        return zc.getProblems(reportFrom, reportTo);
+                    }, ioExecutor);
+                } else {
+                    zabbixProblemsFuture = CompletableFuture.completedFuture(Collections.emptyList());
                 }
 
                 CompletableFuture<String> debtorsFuture;
@@ -118,7 +134,7 @@ public class NOCZvit {
                 }
 
                 try {
-                    CompletableFuture.allOf(imapFuture, zabbixFuture, debtorsFuture).join();
+                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture).join();
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause();
                     if (cause instanceof RuntimeException re && re.getCause() instanceof MessagingException me) {
@@ -133,9 +149,10 @@ public class NOCZvit {
                     throw new IOException("Initialization failed: " + cause.getMessage(), cause);
                 }
 
-                incidents   = imapFuture.join();
-                zabbix      = zabbixFuture.join();
-                debtorsHtml = debtorsFuture.join();
+                incidents      = imapFuture.join();
+                zabbix         = zabbixFuture.join();
+                zabbixProblems = zabbixProblemsFuture.join();
+                debtorsHtml    = debtorsFuture.join();
             }
 
             String subject;
@@ -165,15 +182,21 @@ public class NOCZvit {
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
+                    List<ZabbixProblem> filteredProblems = summaryClient != null && incidents != null
+                            ? ProblemFilter.filter(zabbixProblems, incidents)
+                            : Collections.emptyList();
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd) : null;
+                            ? summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd, filteredProblems) : null;
                     message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
+                    List<ZabbixProblem> filteredProblems = summaryClient != null
+                            ? ProblemFilter.filter(zabbixProblems, incidents)
+                            : Collections.emptyList();
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd) : null;
+                            ? summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd, filteredProblems) : null;
                     message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
