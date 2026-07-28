@@ -96,6 +96,12 @@ public class Config {
     @NonNull
     private String sendmailPath;
 
+    private boolean claudeEnabled;
+    @NonNull
+    private String claudeApiKey;
+    @NonNull
+    private String claudeModel;
+
     @NonNull
     private String accountMssqlUser;
     @NonNull
@@ -125,6 +131,7 @@ public class Config {
         emailProperties();
         mssqlProperties();
         zabbixProperties();
+        claudeProperties();
     }
 
     private void initValues() {
@@ -135,6 +142,8 @@ public class Config {
         configPath = null;
         dictionaryPdPath = null;
         dictionarySdhPath = null;
+        claudeApiKey = "";
+        claudeModel = "claude-haiku-4-5";
     }
 
     private void loadProperties() throws IOException {
@@ -192,6 +201,10 @@ public class Config {
                     debug = true;
                 case "--no-debug" ->
                     debug = false;
+                case "--claude" ->
+                    claudeEnabled = true;
+                case "--no-claude" ->
+                    claudeEnabled = false;
                 default -> {
                     printHelp();
                     log.error("Unknown argument: {}", arg);
@@ -224,6 +237,7 @@ public class Config {
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
         zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
+        claudeEnabled = Boolean.parseBoolean(properties.getProperty("claude", "false"));
     }
 
     private void hostsProperties() {
@@ -329,6 +343,21 @@ public class Config {
             }
         }
         emailTo = toList;
+    }
+
+    private void claudeProperties() {
+        String key = properties.getProperty("claude.apikey", "");
+        if (!key.isBlank()) {
+            claudeApiKey = key;
+        }
+        String model = properties.getProperty("claude.model", "");
+        if (!model.isBlank()) {
+            claudeModel = model;
+        }
+        if (claudeEnabled && claudeApiKey.isBlank()) {
+            log.warn("Claude summary enabled but claude.apikey is not set — disabling");
+            claudeEnabled = false;
+        }
     }
 
     public boolean isDebtorsEnabled() {

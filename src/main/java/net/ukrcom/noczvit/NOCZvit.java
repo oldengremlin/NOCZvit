@@ -14,6 +14,7 @@
  */
 package net.ukrcom.noczvit;
 
+import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.smtp.EmailSender;
@@ -159,15 +160,22 @@ public class NOCZvit {
                     + "</style></head><body>");
 
             IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
+            SummaryClient summaryClient = config.isClaudeEnabled() ? new SummaryClient(config) : null;
 
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
+                    if (summaryClient != null) {
+                        message.append(summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd));
+                    }
                     message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
+                    if (summaryClient != null) {
+                        message.append(summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd));
+                    }
                     message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd));
                 }
                 message.append(debtorsHtml);
