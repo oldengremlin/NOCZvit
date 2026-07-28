@@ -50,6 +50,11 @@ public class IncidentSectionBuilder {
      */
     public String build(List<Incident> allIncidents, Client zabbix,
                         LocalDateTime dutyBegin, LocalDateTime dutyEnd) {
+        return build(allIncidents, zabbix, dutyBegin, dutyEnd, null);
+    }
+
+    public String build(List<Incident> allIncidents, Client zabbix,
+                        LocalDateTime dutyBegin, LocalDateTime dutyEnd, String summaryHtml) {
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctDutyEnd   = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
@@ -58,6 +63,10 @@ public class IncidentSectionBuilder {
                 .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
                 .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER))
                 .append("</h1>\n");
+
+        if (summaryHtml != null && !summaryHtml.isBlank()) {
+            html.append(summaryHtml);
+        }
 
         List<Incident> incidents = allIncidents.stream()
                 .filter(i -> i.messageTs() >= ctDutyBegin && i.messageTs() <= ctDutyEnd)
