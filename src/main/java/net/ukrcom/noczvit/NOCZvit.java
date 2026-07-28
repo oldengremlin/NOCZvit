@@ -18,6 +18,9 @@ import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.smtp.EmailSender;
+import net.ukrcom.noczvit.zabbix.ProblemFilter;
+import net.ukrcom.noczvit.zabbix.ZabbixIncidentConverter;
+import net.ukrcom.noczvit.zabbix.ZabbixProblem;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import jakarta.mail.MessagingException;
@@ -26,10 +29,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +57,8 @@ public class NOCZvit {
 
         try {
             Config config = new Config(args);
+            Dictionary dictionary = new Dictionary(config);
+
             if (!config.isValid()) {
                 log.error("Invalid configuration. Ensure all required email properties are set.");
                 System.exit(1);
@@ -78,6 +85,7 @@ public class NOCZvit {
             List<Incident> incidents = null;
             net.ukrcom.noczvit.zabbix.Client zabbix = null;
             String debtorsHtml = "";
+            List<ZabbixProblem> zabbixProblems = Collections.emptyList();
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
@@ -109,6 +117,17 @@ public class NOCZvit {
                     zabbixFuture = CompletableFuture.completedFuture(null);
                 }
 
+                // Завантажуємо Zabbix-події після логіну (якщо Zabbix недоступний — порожній список).
+                CompletableFuture<List<ZabbixProblem>> zabbixProblemsFuture;
+                if (config.isZabbixEnabled() && config.isIncidentsEnabled()) {
+                    zabbixProblemsFuture = zabbixFuture.thenApplyAsync(zc -> {
+                        if (zc == null) return Collections.<ZabbixProblem>emptyList();
+                        return zc.getProblems(reportFrom, reportTo);
+                    }, ioExecutor);
+                } else {
+                    zabbixProblemsFuture = CompletableFuture.completedFuture(Collections.emptyList());
+                }
+
                 CompletableFuture<String> debtorsFuture;
                 if (!nightShift && config.isDebtorsEnabled()) {
                     debtorsFuture = CompletableFuture.supplyAsync(
@@ -118,7 +137,7 @@ public class NOCZvit {
                 }
 
                 try {
-                    CompletableFuture.allOf(imapFuture, zabbixFuture, debtorsFuture).join();
+                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture).join();
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause();
                     if (cause instanceof RuntimeException re && re.getCause() instanceof MessagingException me) {
@@ -133,10 +152,24 @@ public class NOCZvit {
                     throw new IOException("Initialization failed: " + cause.getMessage(), cause);
                 }
 
-                incidents   = imapFuture.join();
-                zabbix      = zabbixFuture.join();
-                debtorsHtml = debtorsFuture.join();
+                incidents      = imapFuture.join();
+                zabbix         = zabbixFuture.join();
+                zabbixProblems = zabbixProblemsFuture.join();
+                debtorsHtml    = debtorsFuture.join();
             }
+
+            // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP для таблиці.
+            // Claude отримує лише оригінальний список IMAP (incidents) — без змін.
+            ZabbixIncidentConverter zabbixConverter = new ZabbixIncidentConverter(dictionary);
+            List<Incident> zabbixIncidents = (incidents != null)
+                    ? ProblemFilter.filter(zabbixProblems, incidents).stream()
+                            .flatMap(p -> zabbixConverter.convert(p).stream())
+                            .toList()
+                    : Collections.emptyList();
+
+            List<Incident> incidentsForTable = (incidents != null)
+                    ? Stream.concat(incidents.stream(), zabbixIncidents.stream()).toList()
+                    : Collections.emptyList();
 
             String subject;
             StringBuilder message = new StringBuilder(
@@ -160,6 +193,7 @@ public class NOCZvit {
                     + "</style></head><body>");
 
             IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
+            // Claude отримує лише incidents (IMAP) — Zabbix-події до мовної моделі не йдуть
             SummaryClient summaryClient = config.isClaudeEnabled() ? new SummaryClient(config) : null;
 
             if (nightShift) {
@@ -167,14 +201,14 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
                             ? summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd) : null;
-                    message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
+                    message.append(incidentBuilder.build(incidentsForTable, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
                             ? summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd) : null;
-                    message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
+                    message.append(incidentBuilder.build(incidentsForTable, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
             }

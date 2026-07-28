@@ -42,6 +42,6 @@ public record Incident(
         String description,
         List<String> reviewNames
 ) {
-    public enum Source { PD, OSM }
+    public enum Source { PD, OSM, ZABBIX }
     public enum Status { START, END, NONE }
 }
