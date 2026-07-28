@@ -46,8 +46,8 @@ public class ZabbixIncidentConverter {
         "лип", "серп", "вер", "жовт", "лист", "груд"
     };
 
-    // Аналог PdIncidentParser.DEVICE_PREFIX_PATTERN: знімаємо префікс r/s перед пошуком у словнику
-    private static final Pattern HOST_PREFIX = Pattern.compile("^[rs]");
+    // Аналог PdIncidentParser.DEVICE_PREFIX_PATTERN: знімаємо r/s/p та ies*/alca- перед пошуком у словнику
+    private static final Pattern HOST_PREFIX = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
     // Знімаємо суфікс виду «-1», «-2» тощо (порядковий номер вузла)
     private static final Pattern HOST_SUFFIX = Pattern.compile("-\\d+$");
 
