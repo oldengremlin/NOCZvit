@@ -76,7 +76,7 @@ public class ZabbixIncidentConverter {
         List<String> reviewNames = needsReview ? List.of(host) : List.of();
 
         String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
-        String descSuffix = p.name() + " на " + deviceWord + host;
+        String descSuffix = p.name() + " на " + deviceWord + location;
 
         List<Incident> result = new ArrayList<>(2);
 
