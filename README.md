@@ -10,6 +10,7 @@ NOCZvit — Java-програма, яка автоматично формує щ
 - Групує та фільтрує інциденти за послугами
 - Отримує показники температури обладнання через SNMP (Celsius / Ramos)
 - Отримує список боржників із MSSQL (опціонально)
+- Генерує AI-резюме зміни через Anthropic Claude API (опціонально)
 - Надсилає готовий HTML-звіт на e-mail
 
 ## Схема роботи
@@ -29,10 +30,12 @@ flowchart TD
     ZAB  --> ZS[/ZabbixSession/]
     DB   --> DH[/HTML боржників/]
 
+    INC --> CLAUDE["claude.SummaryClient\nAI-резюме зміни\n(опціонально)"]
     INC & ZS --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
     INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
 
-    ISB  --> HTML[HTML-звіт]
+    CLAUDE --> HTML[HTML-звіт]
+    ISB  --> HTML
     SNMP --> HTML
     DH   --> HTML
 
@@ -67,7 +70,10 @@ classDiagram
     class Config {
         +isIncidentsEnabled() bool
         +isZabbixEnabled() bool
+        +isClaudeEnabled() bool
         +isDebug() bool
+        +getClaudeApiKey() String
+        +getClaudeModel() String
     }
     class Dictionary {
         +lookupPD(key) String
@@ -133,6 +139,9 @@ classDiagram
     class IncidentSectionBuilder {
         +build(incidents, zabbix, from, to) String
     }
+    class SummaryClient["claude.SummaryClient"] {
+        +generateSummary(incidents, from, to) String
+    }
     class SnmpClient["snmp.Client"] {
         +getCelsius(from, to, zabbix) String
         +getRamos() String
@@ -148,6 +157,7 @@ classDiagram
     NOCZvit --> ZabbixClient
     NOCZvit --> SnmpClient
     NOCZvit --> IncidentSectionBuilder
+    NOCZvit --> SummaryClient
     NOCZvit --> EmailSender
     NOCZvit --> Debtors
 
@@ -178,6 +188,9 @@ classDiagram
 
     IncidentSectionBuilder ..> Incident : renders
     IncidentSectionBuilder ..> ZabbixClient : Ping-графіки
+
+    SummaryClient ..> Incident : reads
+    SummaryClient ..> Config : apiKey + model
 
     SnmpClient ..> ZabbixClient : температурні графіки
 ```
@@ -221,7 +234,7 @@ java -jar target/NOCZvit-1.10.0.jar [OPTIONS]
 | `--temperature` / `--no-temperature` | Увімкнути/вимкнути блок температури (SNMP Celsius) |
 | `--ramos` / `--no-ramos` | Увімкнути/вимкнути блок Ramos |
 | `--zabbix` / `--no-zabbix` | Увімкнути/вимкнути вбудовування графіків температури з Zabbix |
-| `--claude` / `--no-claude` | Увімкнути/вимкнути AI-резюме зміни через Anthropic API |
+| `--claude` / `--no-claude` | Увімкнути/вимкнути AI-резюме зміни (за замовчуванням: увімк. в нормальному режимі, вимк. в `--debug`) |
 | `--debug` / `--no-debug` | Дебаг-режим: звіт надсилається на `email.toDebug` замість `email.to` |
 
 Параметри командного рядка мають пріоритет над налаштуваннями у `noczvit.properties`.
@@ -285,11 +298,31 @@ accequipment-mssql-user=reader
 accequipment-mssql-password=secret
 
 # Claude AI (опціонально, для резюме зміни)
-# Ключ отримати на console.anthropic.com (окремий від підписки claude.ai)
-claude=false
+# API-ключ генерується на https://console.anthropic.com (окремий від підписки claude.ai)
 # claude.apikey=sk-ant-...
 # claude.model=claude-haiku-4-5
+# claude=false  ← явно вимкнути завжди; claude=true ← вмикати навіть в --debug
 ```
+
+### Claude AI (резюме зміни)
+
+Опціональна секція на початку звіту — короткий людськомовний опис зміни, сформований Anthropic Claude.
+
+**Отримання API-ключа:**
+1. Зареєструватися на [console.anthropic.com](https://console.anthropic.com) *(окремий акаунт від claude.ai)*
+2. Додати платіжний метод
+3. Згенерувати ключ (`sk-ant-...`) та вказати його в `claude.apikey`
+
+**Поведінка за замовчуванням** (без явного `claude=` у конфігурації):
+
+| Режим запуску | Claude |
+|---|---|
+| Звичайний (без `--debug`) | **увімкнений** (якщо є `claude.apikey`) |
+| `--debug` | **вимкнений** |
+| `--claude` (явно) | увімкнений незалежно від режиму |
+| `--no-claude` (явно) | вимкнений незалежно від режиму |
+
+**Орієнтовна вартість** на моделі `claude-haiku-4-5`: ~$0.005/день (2 виклики × ~1 500 вхідних + ~180 вихідних токенів). Бюджету $5 вистачить приблизно на **2–3 роки**.
 
 ### Словники
 
