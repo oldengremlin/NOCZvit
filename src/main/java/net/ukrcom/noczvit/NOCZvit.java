@@ -14,11 +14,13 @@
  */
 package net.ukrcom.noczvit;
 
+import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.smtp.EmailSender;
 import net.ukrcom.noczvit.zabbix.ProblemFilter;
+import net.ukrcom.noczvit.zabbix.ZabbixIncidentConverter;
 import net.ukrcom.noczvit.zabbix.ZabbixProblem;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
@@ -33,6 +35,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +58,7 @@ public class NOCZvit {
 
         try {
             Config config = new Config(args);
+            Dictionary dictionary = new Dictionary(config);
             if (!config.isValid()) {
                 log.error("Invalid configuration. Ensure all required email properties are set.");
                 System.exit(1);
@@ -178,25 +182,32 @@ public class NOCZvit {
 
             IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
             SummaryClient summaryClient = config.isClaudeEnabled() ? new SummaryClient(config) : null;
+            ZabbixIncidentConverter zabbixConverter = new ZabbixIncidentConverter(dictionary);
+
+            // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP-переліком.
+            // Результат передається лише в Claude — HTML-таблиця інцидентів залишається незмінною.
+            List<Incident> zabbixIncidents = (summaryClient != null && incidents != null)
+                    ? ProblemFilter.filter(zabbixProblems, incidents).stream()
+                            .flatMap(p -> zabbixConverter.convert(p).stream())
+                            .toList()
+                    : Collections.emptyList();
+
+            List<Incident> incidentsForClaude = (incidents != null)
+                    ? Stream.concat(incidents.stream(), zabbixIncidents.stream()).toList()
+                    : Collections.emptyList();
 
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
-                    List<ZabbixProblem> filteredProblems = summaryClient != null && incidents != null
-                            ? ProblemFilter.filter(zabbixProblems, incidents)
-                            : Collections.emptyList();
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd, filteredProblems) : null;
+                            ? summaryClient.generateSummary(incidentsForClaude, prevDutyBegin, prevDutyEnd) : null;
                     message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
-                    List<ZabbixProblem> filteredProblems = summaryClient != null
-                            ? ProblemFilter.filter(zabbixProblems, incidents)
-                            : Collections.emptyList();
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd, filteredProblems) : null;
+                            ? summaryClient.generateSummary(incidentsForClaude, currDutyBegin, currDutyEnd) : null;
                     message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
