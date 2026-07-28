@@ -201,14 +201,14 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
                             ? summaryClient.generateSummary(incidentsForClaude, prevDutyBegin, prevDutyEnd) : null;
-                    message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
+                    message.append(incidentBuilder.build(incidentsForClaude, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
                             ? summaryClient.generateSummary(incidentsForClaude, currDutyBegin, currDutyEnd) : null;
-                    message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
+                    message.append(incidentBuilder.build(incidentsForClaude, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
             }
