@@ -40,13 +40,15 @@ public class SnmpClient {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_CONCURRENT_SNMP = 10;
 
+    private record CelsiusResult(String cells, String graphRow) {}
+
     private final Config config;
 
     public SnmpClient(Config config) {
         this.config = config;
     }
 
-    public String getCelsius() {
+    public String getCelsius(LocalDateTime from, LocalDateTime to, ZabbixClient zabbix) {
         StringBuilder html = new StringBuilder();
         html.append("<p>\n<h1>Температура обладнання на виносах, станом на ")
                 .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
@@ -63,14 +65,14 @@ public class SnmpClient {
         Collections.sort(hostnames);
 
         Semaphore sem = new Semaphore(MAX_CONCURRENT_SNMP);
-        List<Future<String>> futures = new ArrayList<>(hostnames.size());
+        List<Future<CelsiusResult>> futures = new ArrayList<>(hostnames.size());
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (String hostname : hostnames) {
                 futures.add(executor.submit(() -> {
                     sem.acquire();
                     try {
-                        return queryHostCelsius(hostname);
+                        return queryHostCelsius(hostname, from, to, zabbix);
                     } finally {
                         sem.release();
                     }
@@ -79,11 +81,13 @@ public class SnmpClient {
         }
 
         int n = 0;
-        for (Future<String> future : futures) {
+        for (Future<CelsiusResult> future : futures) {
             try {
                 n++;
+                CelsiusResult result = future.get();
                 html.append("<tr><td>").append(n).append(".</td>")
-                        .append(future.get()).append("</tr>\n");
+                        .append(result.cells()).append("</tr>\n");
+                html.append(result.graphRow());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
@@ -97,7 +101,7 @@ public class SnmpClient {
         return html.toString();
     }
 
-    private String queryHostCelsius(String hostname) {
+    private CelsiusResult queryHostCelsius(String hostname, LocalDateTime from, LocalDateTime to, ZabbixClient zabbix) {
         String host = hostname.split(" ")[0];
         String domain = config.getSnmpHostsSuffix();
 
@@ -122,8 +126,11 @@ public class SnmpClient {
                 if (config.isDebug()) {
                     System.err.println("ERROR: " + error);
                 }
-                return "<td><b>" + host + "</b></td>"
-                     + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>";
+                return new CelsiusResult(
+                    "<td><b>" + host + "</b></td>"
+                    + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>",
+                    ""
+                );
             }
 
             String desc = response.getVariable(new OID(config.getHosts().get(hostname).get("desc"))).toString();
@@ -134,15 +141,22 @@ public class SnmpClient {
                 System.err.printf("%s -> %s -> %s%n", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
             }
 
-            return "<td><b>" + host + "." + domain + "</b></td>"
-                 + "<td>" + desc + "</td>"
-                 + "<td><b>" + temp + "</b>°C</td>";
+            String graphRow = (zabbix != null) ? zabbix.getGraphRow(host, desc, from, to) : "";
+            return new CelsiusResult(
+                "<td><b>" + host + "." + domain + "</b></td>"
+                + "<td>" + desc + "</td>"
+                + "<td><b>" + temp + "</b>°C</td>",
+                graphRow
+            );
         } catch (IOException e) {
             if (config.isDebug()) {
                 System.err.println("ERROR: " + e.getMessage());
             }
-            return "<td><b>" + host + "</b></td>"
-                 + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>";
+            return new CelsiusResult(
+                "<td><b>" + host + "</b></td>"
+                + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>",
+                ""
+            );
         }
     }
 

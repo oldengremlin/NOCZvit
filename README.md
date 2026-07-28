@@ -31,12 +31,12 @@ NOCZvit — Java-програма, яка автоматично формує щ
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.4.6.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.5.0.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.4.6.jar [OPTIONS]
+java -jar target/NOCZvit-1.5.0.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -49,6 +49,7 @@ java -jar target/NOCZvit-1.4.6.jar [OPTIONS]
 | `--incidents` / `--no-incidents` | Увімкнути/вимкнути блок інцидентів |
 | `--temperature` / `--no-temperature` | Увімкнути/вимкнути блок температури (SNMP Celsius) |
 | `--ramos` / `--no-ramos` | Увімкнути/вимкнути блок Ramos |
+| `--zabbix` / `--no-zabbix` | Увімкнути/вимкнути вбудовування графіків температури з Zabbix |
 | `--debug` / `--no-debug` | Дебаг-режим: звіт надсилається на `email.toDebug` замість `email.to` |
 
 Параметри командного рядка мають пріоритет над налаштуваннями у `noczvit.properties`.
@@ -56,7 +57,7 @@ java -jar target/NOCZvit-1.4.6.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.4.6.jar --debug --no-incidents
+java -jar target/NOCZvit-1.5.0.jar --debug --no-incidents
 ```
 
 ## Налаштування
@@ -91,6 +92,15 @@ email.from=noc@example.com
 email.replyTo=noc@example.com
 email.to=shift@example.com,manager@example.com
 email.toDebug=dev@example.com
+
+# Zabbix (опціонально, для графіків температури)
+zabbix=false
+zabbix.api=https://zabbix.example.com/zabbix/api_jsonrpc.php
+zabbix.url=https://zabbix.example.com/zabbix
+zabbix.username=noczvit
+zabbix.password=secret
+zabbix.graphwidth=640
+zabbix.graphheight=83
 
 # MSSQL (опціонально, для списку боржників)
 account-mssql-server=sqlserver
