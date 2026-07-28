@@ -141,6 +141,10 @@ public class Client {
      * Повертає список подій Zabbix за вказаний період зміни.
      * Запитує лише Середні (3), Високі (4) та Критичні (5) severity.
      * Повертає порожній список якщо авторизація не виконана або при помилці.
+     *
+     * Використовує event.get (таблиця events) замість problem.get (таблиця problems),
+     * бо problem.get повертає лише активні або нещодавно вирішені проблеми —
+     * Zabbix housekeeping видаляє вирішені записи з problem-таблиці.
      */
     public List<ZabbixProblem> getProblems(LocalDateTime from, LocalDateTime to) {
         if (authToken == null) {
@@ -152,29 +156,33 @@ public class Client {
 
         try {
             JsonObject params = new JsonObject();
+            params.addProperty("source", 0);                              // trigger-based events
+            params.addProperty("object", 0);                              // trigger objects
+            params.add("value", GSON.toJsonTree(new int[]{1}));           // 1 = PROBLEM (not recovery)
             params.addProperty("time_from", ctFrom);
             params.addProperty("time_till", ctTo);
             params.add("severities", GSON.toJsonTree(new int[]{3, 4, 5}));
-            // objectid = trigger ID, потрібен для fallback-резолюції хоста через trigger.get
-            params.add("output", GSON.toJsonTree(new String[]{"eventid", "objectid", "name", "clock", "r_clock"}));
+            // objectid = trigger ID (для fallback через trigger.get), r_eventid = ID події відновлення
+            params.add("output", GSON.toJsonTree(new String[]{"eventid", "objectid", "r_eventid", "name", "clock"}));
             params.add("selectHosts", GSON.toJsonTree(new String[]{"host"}));
 
-            JsonObject resp = apiCall("problem.get", params, authToken);
+            JsonObject resp = apiCall("event.get", params, authToken);
             JsonArray result = resp.getAsJsonArray("result");
             if (result == null) {
                 return Collections.emptyList();
             }
 
-            record ProblemEntry(String objectId, String name, long clock, long rClock, String host) {}
-            List<ProblemEntry> entries = new ArrayList<>(result.size());
+            record EventEntry(String objectId, String rEventId, String name, long clock, String host) {}
+            List<EventEntry> entries = new ArrayList<>(result.size());
+            List<String> rEventIds = new ArrayList<>();
             List<String> missingHostTriggerIds = new ArrayList<>();
 
             for (JsonElement el : result) {
                 JsonObject obj = el.getAsJsonObject();
-                String objectId = obj.get("objectid").getAsString();
-                String name  = obj.get("name").getAsString();
-                long clock   = obj.get("clock").getAsLong();
-                long rClock  = obj.get("r_clock").getAsLong();
+                String objectId  = obj.get("objectid").getAsString();
+                String rEventId  = obj.get("r_eventid").getAsString(); // "0" якщо ще активна
+                String name      = obj.get("name").getAsString();
+                long clock       = obj.get("clock").getAsLong();
 
                 JsonArray hosts = obj.getAsJsonArray("hosts");
                 String host = (hosts != null && !hosts.isEmpty())
@@ -184,31 +192,65 @@ public class Client {
                 if (host.isBlank()) {
                     missingHostTriggerIds.add(objectId);
                 }
-                entries.add(new ProblemEntry(objectId, name, clock, rClock, host));
+                if (!"0".equals(rEventId)) {
+                    rEventIds.add(rEventId);
+                }
+                entries.add(new EventEntry(objectId, rEventId, name, clock, host));
             }
 
-            // Fallback: якщо selectHosts повернув порожній масив (template-based тригер),
-            // резолюємо хост окремим запитом trigger.get
+            // Час відновлення: отримуємо clock відновлювальних подій одним запитом
+            Map<String, Long> rEventClocks = fetchEventClocks(rEventIds);
+            // Fallback для template-based тригерів, де selectHosts повернув порожній масив
             Map<String, String> triggerHostMap = resolveTriggerHosts(missingHostTriggerIds);
 
             List<ZabbixProblem> problems = new ArrayList<>(entries.size());
-            for (ProblemEntry e : entries) {
+            for (EventEntry e : entries) {
                 String host = e.host().isBlank()
                         ? triggerHostMap.getOrDefault(e.objectId(), "")
                         : e.host();
-                problems.add(new ZabbixProblem(host, e.name(), e.clock(), e.rClock()));
+                long rClock = "0".equals(e.rEventId()) ? 0L
+                        : rEventClocks.getOrDefault(e.rEventId(), 0L);
+                problems.add(new ZabbixProblem(host, e.name(), e.clock(), rClock));
             }
 
-            log.debug("Zabbix problem.get: {} подій у [{}, {}]", problems.size(), from, to);
+            log.debug("Zabbix event.get: {} подій у [{}, {}]", problems.size(), from, to);
             return problems;
 
         } catch (IOException | InterruptedException e) {
-            log.warn("Zabbix problem.get помилка: {}", e.getMessage());
+            log.warn("Zabbix event.get помилка: {}", e.getMessage());
             return Collections.emptyList();
         }
     }
 
-    // Резолюція хостів через trigger.get для тригерів, де problem.get/selectHosts не повернув хост.
+    // Отримує clock відновлювальних подій за їх eventid (один запит для всіх).
+    private Map<String, Long> fetchEventClocks(List<String> eventIds) {
+        if (eventIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            JsonObject params = new JsonObject();
+            params.add("eventids", GSON.toJsonTree(eventIds.toArray(new String[0])));
+            params.add("output", GSON.toJsonTree(new String[]{"eventid", "clock"}));
+
+            JsonObject resp = apiCall("event.get", params, authToken);
+            JsonArray result = resp.getAsJsonArray("result");
+            if (result == null) {
+                return Collections.emptyMap();
+            }
+
+            Map<String, Long> map = new HashMap<>();
+            for (JsonElement el : result) {
+                JsonObject obj = el.getAsJsonObject();
+                map.put(obj.get("eventid").getAsString(), obj.get("clock").getAsLong());
+            }
+            return map;
+        } catch (IOException | InterruptedException e) {
+            log.warn("Zabbix event.get (recovery clocks) помилка: {}", e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
+    // Резолюція хостів через trigger.get для тригерів, де event.get/selectHosts не повернув хост.
     private Map<String, String> resolveTriggerHosts(List<String> triggerIds) {
         if (triggerIds.isEmpty()) {
             return Collections.emptyMap();
