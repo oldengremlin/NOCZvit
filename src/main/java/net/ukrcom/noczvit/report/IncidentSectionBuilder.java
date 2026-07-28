@@ -85,7 +85,7 @@ public class IncidentSectionBuilder {
         byLocation.forEach((location, group) -> {
             html.append("<div class=\"section\">\n")
                     .append("<h2>Зареєстровані інциденти на виносі ").append(location).append("</h2>\n")
-                    .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                    .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
                     .append("<th style=\"width:30px\">№</th>")
                     .append("<th>Дата та час</th>")
