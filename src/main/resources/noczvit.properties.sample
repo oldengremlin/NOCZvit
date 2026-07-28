@@ -4,6 +4,10 @@ temperature=true
 ramos=false
 zabbix=false
 debug=false
+# Claude AI summary (optional — requires API key from console.anthropic.com)
+claude=false
+# claude.apikey=sk-ant-...
+# claude.model=claude-haiku-4-5
 
 # IMAP Configuration
 mail.hostname=smtp.example.com
