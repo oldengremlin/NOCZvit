@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and limitations
  * under the License.
  */
-package net.ukrcom.noczvit;
+package net.ukrcom.noczvit.zabbix;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -36,6 +36,7 @@ import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.Config;
 
 @Slf4j
 public class ZabbixClient {

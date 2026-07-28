@@ -36,7 +36,7 @@ import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
-import net.ukrcom.noczvit.ZabbixClient;
+import net.ukrcom.noczvit.zabbix.ZabbixClient;
 
 @Slf4j
 public class Client {
