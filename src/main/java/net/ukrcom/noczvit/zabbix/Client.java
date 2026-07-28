@@ -36,7 +36,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
@@ -153,7 +155,8 @@ public class Client {
             params.addProperty("time_from", ctFrom);
             params.addProperty("time_till", ctTo);
             params.add("severities", GSON.toJsonTree(new int[]{3, 4, 5}));
-            params.add("output", GSON.toJsonTree(new String[]{"eventid", "name", "clock", "r_clock"}));
+            // objectid = trigger ID, потрібен для fallback-резолюції хоста через trigger.get
+            params.add("output", GSON.toJsonTree(new String[]{"eventid", "objectid", "name", "clock", "r_clock"}));
             params.add("selectHosts", GSON.toJsonTree(new String[]{"host"}));
 
             JsonObject resp = apiCall("problem.get", params, authToken);
@@ -162,9 +165,13 @@ public class Client {
                 return Collections.emptyList();
             }
 
-            List<ZabbixProblem> problems = new ArrayList<>(result.size());
+            record ProblemEntry(String objectId, String name, long clock, long rClock, String host) {}
+            List<ProblemEntry> entries = new ArrayList<>(result.size());
+            List<String> missingHostTriggerIds = new ArrayList<>();
+
             for (JsonElement el : result) {
                 JsonObject obj = el.getAsJsonObject();
+                String objectId = obj.get("objectid").getAsString();
                 String name  = obj.get("name").getAsString();
                 long clock   = obj.get("clock").getAsLong();
                 long rClock  = obj.get("r_clock").getAsLong();
@@ -174,7 +181,22 @@ public class Client {
                         ? hosts.get(0).getAsJsonObject().get("host").getAsString()
                         : "";
 
-                problems.add(new ZabbixProblem(host, name, clock, rClock));
+                if (host.isBlank()) {
+                    missingHostTriggerIds.add(objectId);
+                }
+                entries.add(new ProblemEntry(objectId, name, clock, rClock, host));
+            }
+
+            // Fallback: якщо selectHosts повернув порожній масив (template-based тригер),
+            // резолюємо хост окремим запитом trigger.get
+            Map<String, String> triggerHostMap = resolveTriggerHosts(missingHostTriggerIds);
+
+            List<ZabbixProblem> problems = new ArrayList<>(entries.size());
+            for (ProblemEntry e : entries) {
+                String host = e.host().isBlank()
+                        ? triggerHostMap.getOrDefault(e.objectId(), "")
+                        : e.host();
+                problems.add(new ZabbixProblem(host, e.name(), e.clock(), e.rClock()));
             }
 
             log.debug("Zabbix problem.get: {} подій у [{}, {}]", problems.size(), from, to);
@@ -183,6 +205,41 @@ public class Client {
         } catch (IOException | InterruptedException e) {
             log.warn("Zabbix problem.get помилка: {}", e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    // Резолюція хостів через trigger.get для тригерів, де problem.get/selectHosts не повернув хост.
+    private Map<String, String> resolveTriggerHosts(List<String> triggerIds) {
+        if (triggerIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            JsonObject params = new JsonObject();
+            params.add("triggerids", GSON.toJsonTree(triggerIds.toArray(new String[0])));
+            params.add("output", GSON.toJsonTree(new String[]{"triggerid"}));
+            params.add("selectHosts", GSON.toJsonTree(new String[]{"host"}));
+
+            JsonObject resp = apiCall("trigger.get", params, authToken);
+            JsonArray result = resp.getAsJsonArray("result");
+            if (result == null) {
+                return Collections.emptyMap();
+            }
+
+            Map<String, String> map = new HashMap<>();
+            for (JsonElement el : result) {
+                JsonObject obj = el.getAsJsonObject();
+                String triggerId = obj.get("triggerid").getAsString();
+                JsonArray hosts = obj.getAsJsonArray("hosts");
+                if (hosts != null && !hosts.isEmpty()) {
+                    String host = hosts.get(0).getAsJsonObject().get("host").getAsString();
+                    map.put(triggerId, host);
+                    log.debug("Zabbix trigger.get fallback: triggerId={} → host={}", triggerId, host);
+                }
+            }
+            return map;
+        } catch (IOException | InterruptedException e) {
+            log.warn("Zabbix trigger.get fallback помилка: {}", e.getMessage());
+            return Collections.emptyMap();
         }
     }
 

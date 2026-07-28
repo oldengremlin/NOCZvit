@@ -24,6 +24,7 @@ import net.ukrcom.noczvit.model.Incident;
  * <p>IMAP-папка є основним джерелом даних. Zabbix — вторинним.
  * Виключаємо:
  * <ul>
+ *   <li>події без хоста (порожній рядок — тригер на шаблоні або API не повернув хост)</li>
  *   <li>хост SDH-OSM (події OSM вже присутні через OsmIncidentParser)</li>
  *   <li>проблеми "No SNMP data collection" (технічний шум моніторингу)</li>
  *   <li>OSPF-події (вже надходять через OspfIncidentParser)</li>
@@ -51,6 +52,7 @@ public class ProblemFilter {
      */
     public static List<ZabbixProblem> filter(List<ZabbixProblem> problems, List<Incident> imapIncidents) {
         return problems.stream()
+                .filter(p -> !p.host().isBlank())
                 .filter(p -> !"SDH-OSM".equals(p.host()))
                 .filter(p -> !NO_SNMP.matcher(p.name()).find())
                 .filter(p -> !OSPF.matcher(p.name()).find())
