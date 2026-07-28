@@ -56,7 +56,7 @@ public class Client {
         html.append("<p>\n<h1>Температура обладнання на виносах, станом на ")
                 .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
                 .append("</h1>\n")
-                .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
                 .append("<th style=\"width:30px\">№</th>")
                 .append("<th>Обладнання</th>")
@@ -197,7 +197,7 @@ public class Client {
         StringBuilder fragment = new StringBuilder();
         fragment.append("<div class=\"section\">\n")
                 .append("<h2>Майданчик ").append(config.getRamos().get(host).get("name")).append("</h2>\n")
-                .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
                 .append("<th style=\"width:30px\">№</th>")
                 .append("<th>Датчик</th>")
