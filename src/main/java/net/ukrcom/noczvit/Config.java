@@ -44,6 +44,13 @@ public class Config {
     private boolean incidentsEnabled;
     private boolean temperatureEnabled;
     private boolean ramosEnabled;
+    private boolean zabbixEnabled;
+    private String zabbixApi;
+    private String zabbixUrl;
+    private String zabbixUsername;
+    private String zabbixPassword;
+    private int zabbixGraphWidth;
+    private int zabbixGraphHeight;
     @Getter(AccessLevel.NONE)
     @NonNull
     private String configPath;
@@ -112,6 +119,7 @@ public class Config {
         celsiusProperties();
         emailProperties();
         mssqlProperties();
+        zabbixProperties();
     }
 
     private void initValues() {
@@ -170,6 +178,10 @@ public class Config {
                     ramosEnabled = true;
                 case "--no-ramos" ->
                     ramosEnabled = false;
+                case "--zabbix" ->
+                    zabbixEnabled = true;
+                case "--no-zabbix" ->
+                    zabbixEnabled = false;
                 case "--debug" ->
                     debug = true;
                 case "--no-debug" ->
@@ -205,6 +217,7 @@ public class Config {
         incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
+        zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
     }
 
     private void hostsProperties() {
@@ -254,6 +267,15 @@ public class Config {
         snmpCommunityCelsius = properties.getProperty("snmp.community.celsius", snmpCommunity);
         snmpCommunityRamos = properties.getProperty("snmp.community.ramos", snmpCommunity);
         snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
+    }
+
+    private void zabbixProperties() {
+        zabbixApi = properties.getProperty("zabbix.api", "");
+        zabbixUrl = properties.getProperty("zabbix.url", "");
+        zabbixUsername = properties.getProperty("zabbix.username", "");
+        zabbixPassword = properties.getProperty("zabbix.password", "");
+        zabbixGraphWidth = Integer.parseInt(properties.getProperty("zabbix.graphwidth", "640"));
+        zabbixGraphHeight = Integer.parseInt(properties.getProperty("zabbix.graphheight", "83"));
     }
 
     private void mssqlProperties() {
