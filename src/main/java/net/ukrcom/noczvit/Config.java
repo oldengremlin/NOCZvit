@@ -96,6 +96,14 @@ public class Config {
     @NonNull
     private String sendmailPath;
 
+    private boolean claudeEnabled;
+    @NonNull
+    private String claudeApiKey;
+    @NonNull
+    private String claudeModel;
+    @Getter(AccessLevel.NONE)
+    private Boolean claudeExplicit; // null = not explicitly set via property or CLI
+
     @NonNull
     private String accountMssqlUser;
     @NonNull
@@ -125,6 +133,7 @@ public class Config {
         emailProperties();
         mssqlProperties();
         zabbixProperties();
+        claudeProperties();
     }
 
     private void initValues() {
@@ -135,6 +144,9 @@ public class Config {
         configPath = null;
         dictionaryPdPath = null;
         dictionarySdhPath = null;
+        claudeApiKey = "";
+        claudeModel = "claude-haiku-4-5";
+        claudeExplicit = null;
     }
 
     private void loadProperties() throws IOException {
@@ -192,6 +204,10 @@ public class Config {
                     debug = true;
                 case "--no-debug" ->
                     debug = false;
+                case "--claude" ->
+                    claudeExplicit = true;
+                case "--no-claude" ->
+                    claudeExplicit = false;
                 default -> {
                     printHelp();
                     log.error("Unknown argument: {}", arg);
@@ -224,6 +240,10 @@ public class Config {
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
         zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
+        String claudeProp = properties.getProperty("claude");
+        if (claudeProp != null) {
+            claudeExplicit = Boolean.parseBoolean(claudeProp);
+        }
     }
 
     private void hostsProperties() {
@@ -329,6 +349,24 @@ public class Config {
             }
         }
         emailTo = toList;
+    }
+
+    private void claudeProperties() {
+        String key = properties.getProperty("claude.apikey", "");
+        if (!key.isBlank()) {
+            claudeApiKey = key;
+        }
+        String model = properties.getProperty("claude.model", "");
+        if (!model.isBlank()) {
+            claudeModel = model;
+        }
+        // Default: enabled in normal mode, disabled in debug mode.
+        // Explicit claude=.../--claude/--no-claude overrides the default.
+        claudeEnabled = (claudeExplicit != null) ? claudeExplicit : !debug;
+        if (claudeEnabled && claudeApiKey.isBlank()) {
+            log.warn("Claude summary enabled but claude.apikey is not set — disabling");
+            claudeEnabled = false;
+        }
     }
 
     public boolean isDebtorsEnabled() {

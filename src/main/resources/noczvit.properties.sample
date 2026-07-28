@@ -4,6 +4,12 @@ temperature=true
 ramos=false
 zabbix=false
 debug=false
+# Claude AI summary (optional — requires API key from console.anthropic.com)
+# Default behaviour (when omitted): enabled in normal mode, disabled in --debug mode.
+# Set claude=false to disable always; claude=true to enable even in --debug mode.
+# claude=true
+# claude.apikey=sk-ant-...
+# claude.model=claude-haiku-4-5
 
 # IMAP Configuration
 mail.hostname=smtp.example.com
