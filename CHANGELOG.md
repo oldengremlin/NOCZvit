@@ -6,6 +6,36 @@
 
 ---
 
+## [1.7.0] — 2026-07-28
+
+### Виправлено (критичне)
+- `Dictionary`: `HashMap` → `LinkedHashMap` для `pdDictionary` та `sdhDictionary` — сортування за довжиною regex більше не губиться при вставці в `HashMap` (де `Pattern` використовує identity hashCode)
+- `EmailSender`: виняток у потоці-записнику більше не губиться беззвучно — замість анонімного `Thread` використовується `Future` через `Executors.newVirtualThreadPerTaskExecutor()`; `MessagingException`/`IOException` з `message.writeTo()` тепер коректно піднімаються до `sendReport`
+- `SnmpClient` (Ramos): `Double.parseDouble(null)` → NPE; тепер є `null`-перевірка перед парсингом усіх 7 значень датчика
+
+### Додано
+- `Dictionary`: кеш повторних пошуків (`ConcurrentHashMap`) — повторний lookup по тому ж ключу не перебирає весь словник
+- `Config`: новий параметр `email.sendmail` (шлях до sendmail, за замовчуванням `/usr/sbin/sendmail`)
+
+### Паралелізм
+- `NOCZvit.main()`: IMAP, авторизація Zabbix та отримання боржників запускаються паралельно через `CompletableFuture` + virtual threads — найбільший виграш у часі запуску
+- `ImapClient.formatReport`: Ping-графіки для всіх пристроїв у виносі завантажуються паралельно (`CompletableFuture`) зі збереженням порядку відображення
+- `SnmpClient` (Ramos): 7 окремих SNMP GET на датчик замінено одним multi-OID GET — 7× менше round-trip'ів на кожен сенсор
+
+### Змінено
+- `Config`: `Integer.parseInt` для `zabbix.graphwidth`/`zabbix.graphheight` захищено — некоректне значення у конфігурації → fallback на 640/83 замість `NumberFormatException`
+- `Config.getHosts()` / `Config.getRamos()`: повертають `Collections.unmodifiableMap` — захист від випадкової мутації
+- `EmailSender`: шлях до sendmail конфігурується через `email.sendmail`; буфер 1024→8192 байт; `process.waitFor(30, TimeUnit.SECONDS)` з таймаутом і `destroyForcibly()` при перевищенні
+- `ZabbixClient.apiCall()`: перевірка HTTP-статусу — не-200 кидає `IOException` замість того щоб парсити HTML як JSON
+- `ZabbixClient`: `result.size() > 0` → `!result.isEmpty()`
+- `Debtors`: SQL-помилки логуються завжди (раніше — лише в debug-режимі)
+- `ImapClient.PATTERN_ORIGINALFROMNAME`: `private final ... Pattern.compile(":$").pattern()` → `private static final String ":$"` (видалено зайвий `Pattern.compile`)
+- `ImapClient.convertMonthNumToMnemo`: `StringBuffer` → `StringBuilder`
+- `ImapClient.filterAndMergeMessages`: зовнішні цикли `keySet()` + `get(key)` → `entrySet()`
+- `ImapClient.prepareImapFolder`: `System.exit(2)` у catch-блоці замінено на `throw new RuntimeException` — VM більше не зупиняється примусово
+
+---
+
 ## [1.6.0] — 2026-07-28
 
 ### Додано

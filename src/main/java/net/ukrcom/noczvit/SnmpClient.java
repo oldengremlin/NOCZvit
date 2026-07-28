@@ -246,46 +246,71 @@ public class SnmpClient {
 
                 String sensorIndex = response.get(0).getVariable().toString();
 
-                String desc = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorDescription") + "." + sensorIndex);
-                String unit = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorUnit") + "." + sensorIndex);
-                String value = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorValue") + "." + sensorIndex);
-                String lw = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorLowWarning") + "." + sensorIndex);
-                String hw = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorHighWarning") + "." + sensorIndex);
-                String lc = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorLowCritical") + "." + sensorIndex);
-                String hc = getValue(snmp, target, config.getRamos().get(host).get("temperatureSensorHighCritical") + "." + sensorIndex);
+                OID descOid = new OID(config.getRamos().get(host).get("temperatureSensorDescription") + "." + sensorIndex);
+                OID unitOid = new OID(config.getRamos().get(host).get("temperatureSensorUnit") + "." + sensorIndex);
+                OID valueOid = new OID(config.getRamos().get(host).get("temperatureSensorValue") + "." + sensorIndex);
+                OID lwOid = new OID(config.getRamos().get(host).get("temperatureSensorLowWarning") + "." + sensorIndex);
+                OID hwOid = new OID(config.getRamos().get(host).get("temperatureSensorHighWarning") + "." + sensorIndex);
+                OID lcOid = new OID(config.getRamos().get(host).get("temperatureSensorLowCritical") + "." + sensorIndex);
+                OID hcOid = new OID(config.getRamos().get(host).get("temperatureSensorHighCritical") + "." + sensorIndex);
+
+                PDU getMulti = new PDU();
+                getMulti.add(new VariableBinding(descOid));
+                getMulti.add(new VariableBinding(unitOid));
+                getMulti.add(new VariableBinding(valueOid));
+                getMulti.add(new VariableBinding(lwOid));
+                getMulti.add(new VariableBinding(hwOid));
+                getMulti.add(new VariableBinding(lcOid));
+                getMulti.add(new VariableBinding(hcOid));
+                getMulti.setType(PDU.GET);
+
+                var multiRe = snmp.send(getMulti, target);
+                PDU multiResponse = multiRe != null ? multiRe.getResponse() : null;
+
+                String desc = extractValue(multiResponse, descOid);
+                String unit = extractValue(multiResponse, unitOid);
+                String value = extractValue(multiResponse, valueOid);
+                String lw = extractValue(multiResponse, lwOid);
+                String hw = extractValue(multiResponse, hwOid);
+                String lc = extractValue(multiResponse, lcOid);
+                String hc = extractValue(multiResponse, hcOid);
 
                 if (config.isDebug()) {
                     System.err.printf("%s = %s : desc=%s, unit=%s, value=%s, lw=%s, hw=%s, lc=%s, hc=%s%n",
                             oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
                 }
 
-                desc = desc.replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
-                        .replaceAll("(?i)(cold\\s*zone)", "<font color=darkblue>$1</font>");
+                if (desc != null) {
+                    desc = desc.replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
+                            .replaceAll("(?i)(cold\\s*zone)", "<font color=darkblue>$1</font>");
+                }
 
                 String valueColor = "inherit";
                 String rowClass = "";
-                try {
-                    double val = Double.parseDouble(value);
-                    double lowWarn = Double.parseDouble(lw);
-                    double highWarn = Double.parseDouble(hw);
-                    double lowCrit = Double.parseDouble(lc);
-                    double highCrit = Double.parseDouble(hc);
+                if (value != null && lw != null && hw != null && lc != null && hc != null) {
+                    try {
+                        double val = Double.parseDouble(value);
+                        double lowWarn = Double.parseDouble(lw);
+                        double highWarn = Double.parseDouble(hw);
+                        double lowCrit = Double.parseDouble(lc);
+                        double highCrit = Double.parseDouble(hc);
 
-                    if (val >= lowWarn && val <= highWarn) {
-                        valueColor = "darkgrey";
-                    } else if (val >= lowCrit && val <= highCrit) {
-                        valueColor = "darkred";
-                        rowClass = " class=\"row-critical\"";
+                        if (val >= lowWarn && val <= highWarn) {
+                            valueColor = "darkgrey";
+                        } else if (val >= lowCrit && val <= highCrit) {
+                            valueColor = "darkred";
+                            rowClass = " class=\"row-critical\"";
+                        }
+                    } catch (NumberFormatException ignored) {
                     }
-                } catch (NumberFormatException ignored) {
                 }
 
                 n++;
                 fragment.append("<tr").append(rowClass).append(">")
                         .append("<td>").append(n).append(".</td>")
-                        .append("<td>").append(desc).append("</td>")
+                        .append("<td>").append(desc != null ? desc : "").append("</td>")
                         .append("<td style=\"color:").append(valueColor).append("\">")
-                        .append("<b>").append(value).append("</b>°").append(unit).append("</td>")
+                        .append("<b>").append(value != null ? value : "?").append("</b>°").append(unit != null ? unit : "").append("</td>")
                         .append("</tr>\n");
 
                 pdu.clear();
@@ -303,15 +328,15 @@ public class SnmpClient {
         return fragment.toString();
     }
 
-    private String getValue(Snmp snmp, CommunityTarget<Address> target, String oid) throws IOException {
-        PDU pdu = new PDU();
-        pdu.add(new VariableBinding(new OID(oid)));
-        pdu.setType(PDU.GET);
-
-        PDU response = snmp.send(pdu, target).getResponse();
-        if (response != null && response.getErrorStatus() == PDU.noError) {
-            return response.getVariable(new OID(oid)).toString();
+    private String extractValue(PDU response, OID oid) {
+        if (response == null || response.getErrorStatus() != PDU.noError) {
+            return null;
         }
-        return null;
+        var variable = response.getVariable(oid);
+        if (variable == null) {
+            return null;
+        }
+        String s = variable.toString();
+        return "noSuchObject".equals(s) || "noSuchInstance".equals(s) ? null : s;
     }
 }

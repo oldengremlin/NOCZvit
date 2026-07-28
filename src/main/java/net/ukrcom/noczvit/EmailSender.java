@@ -30,6 +30,10 @@ import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class EmailSender {
 
@@ -91,26 +95,43 @@ public class EmailSender {
             System.err.println("Message: " + messageHtml);
         }
 
-        try (PipedInputStream in = new PipedInputStream(); PipedOutputStream out = new PipedOutputStream(in)) {
-            new Thread(() -> {
-                try {
-                    message.writeTo(out);
-                    out.close();
-                } catch (MessagingException | IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }).start();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor();
+             PipedInputStream in = new PipedInputStream();
+             PipedOutputStream out = new PipedOutputStream(in)) {
 
-            ProcessBuilder pb = new ProcessBuilder("/usr/sbin/sendmail", "-t");
+            Future<?> writerFuture = executor.submit(() -> {
+                message.writeTo(out);
+                out.close();
+                return null;
+            });
+
+            ProcessBuilder pb = new ProcessBuilder(config.getSendmailPath(), "-t");
             Process process = pb.start();
             try (OutputStream processOut = process.getOutputStream()) {
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = in.read(buffer)) != -1) {
                     processOut.write(buffer, 0, bytesRead);
                 }
             }
-            int exitCode = process.waitFor();
+
+            try {
+                writerFuture.get();
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof MessagingException me) throw me;
+                throw new IOException("Message serialization failed: " + cause.getMessage(), cause);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while waiting for message writer", e);
+            }
+
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IOException("sendmail timed out after 30 seconds");
+            }
+            int exitCode = process.exitValue();
             if (exitCode != 0) {
                 System.err.println("sendmail failed with exit code: " + exitCode);
             }
