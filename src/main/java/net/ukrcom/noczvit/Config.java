@@ -31,7 +31,9 @@ import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @ToString(includeFieldNames = true)
 @EqualsAndHashCode
 @Getter
@@ -192,7 +194,7 @@ public class Config {
                     debug = false;
                 default -> {
                     printHelp();
-                    System.err.println("Error: Unknown argument: " + arg);
+                    log.error("Unknown argument: {}", arg);
                     System.exit(1);
                 }
             }
@@ -202,7 +204,7 @@ public class Config {
     private void printHelp() {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(HELP_PATH)) {
             if (input == null) {
-                System.err.println("Error: Default " + HELP_PATH + " not found in resources");
+                log.warn("Help file not found in resources: {}", HELP_PATH);
                 return;
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
@@ -212,7 +214,7 @@ public class Config {
                 }
             }
         } catch (IOException e) {
-            System.err.println("Error: Failed to read " + HELP_PATH + ": " + e.getMessage());
+            log.warn("Failed to read help file {}: {}", HELP_PATH, e.getMessage());
         }
     }
 

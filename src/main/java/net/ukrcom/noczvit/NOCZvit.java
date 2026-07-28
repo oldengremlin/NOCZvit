@@ -14,37 +14,49 @@
  */
 package net.ukrcom.noczvit;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
 import jakarta.mail.MessagingException;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.LoggerFactory;
 
 /**
  * NOC report on incidents registered automatically by Zabbix and OSM systems
  *
  * @author olden
  */
+@Slf4j
 public class NOCZvit {
 
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public static void main(String[] args) throws MessagingException, IOException {
+        // Set log level to DEBUG before Config is instantiated so all initialization is visible
+        if (Arrays.asList(args).contains("--debug")) {
+            LoggerContext ctx = (LoggerContext) LoggerFactory.getILoggerFactory();
+            ctx.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).setLevel(Level.DEBUG);
+        }
+
         try {
             Config config = new Config(args);
             if (!config.isValid()) {
-                System.err.println("Invalid configuration. Ensure all required email properties are set.");
+                log.error("Invalid configuration. Ensure all required email properties are set.");
                 System.exit(1);
             }
 
             // Check if all sections are disabled
             if (!config.isIncidentsEnabled() && !config.isTemperatureEnabled() && !config.isRamosEnabled() && !config.isDebtorsEnabled()) {
-                System.err.println("All report sections are disabled, skipping email sending.");
+                log.info("All report sections are disabled, skipping email sending.");
                 return;
             }
 
@@ -89,9 +101,7 @@ public class NOCZvit {
                         if (zc.login()) {
                             return zc;
                         }
-                        if (config.isDebug()) {
-                            System.err.println("Zabbix: login failed, graphs disabled");
-                        }
+                        log.warn("Zabbix: login failed, graphs disabled");
                         return null;
                     }, ioExecutor);
                 } else {
@@ -177,7 +187,7 @@ public class NOCZvit {
             emailSender.sendReport(subject, message.toString());
 
         } catch (MessagingException | IOException e) {
-            System.err.println("Error: " + e.getMessage());
+            log.error("Fatal error: {}", e.getMessage());
             System.exit(1);
         }
     }

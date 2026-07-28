@@ -34,8 +34,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringEscapeUtils;
 
+@Slf4j
 public class Debtors {
 
     private final StringBuilder returnMessage;
@@ -95,7 +97,7 @@ public class Debtors {
                 returnMessage.append(debtorsHtml);
 
             } catch (SQLException e) {
-                System.err.println("Debtors DB error: " + e.getMessage());
+                log.error("Debtors DB error: {}", e.getMessage());
             }
         }
 
@@ -159,9 +161,7 @@ public class Debtors {
     private Connection connectTo(String server, String database, String user, String password) throws SQLException {
         String[] hostPort = resolveServer(server);
         String url = "jdbc:jtds:sqlserver://" + hostPort[0] + ":" + hostPort[1] + "/" + database;
-        if (config.isDebug()) {
-            System.err.println("Debtors connecting: " + url);
-        }
+        log.debug("Debtors connecting: {}", url);
         return DriverManager.getConnection(url, user, password);
     }
 
@@ -220,9 +220,7 @@ public class Debtors {
                 }
             }
         } catch (JsonSyntaxException e) {
-            if (config.isDebug()) {
-                System.err.println("Debtors JSON parse error: " + e.getMessage());
-            }
+            log.warn("Debtors JSON parse error: {}", e.getMessage());
         }
         return result;
     }
