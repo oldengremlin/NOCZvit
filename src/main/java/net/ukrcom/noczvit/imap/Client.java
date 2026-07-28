@@ -37,6 +37,7 @@ public class Client {
     private final ImapReader reader;
     private final PdIncidentParser pdParser;
     private final OsmIncidentParser osmParser;
+    private final OspfIncidentParser ospfParser;
 
     public Client(Config config) throws IOException {
         this.config = config;
@@ -44,6 +45,7 @@ public class Client {
         this.reader = new ImapReader(config);
         this.pdParser = new PdIncidentParser(dictionary);
         this.osmParser = new OsmIncidentParser(dictionary);
+        this.ospfParser = new OspfIncidentParser(dictionary);
     }
 
     /**
@@ -77,6 +79,12 @@ public class Client {
                 } else {
                     log.debug("Skipping PD message (time filter): unixDate={}", msg.unixDate());
                 }
+            } else if (isOspfMessage(msg.subject())) {
+                if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
+                    ospfParser.parse(msg).ifPresent(incidents::add);
+                } else {
+                    log.debug("Skipping OSPF message (time filter): unixDate={}", msg.unixDate());
+                }
             } else if (isOsmMessage(msg.subject())) {
                 osmParser.parse(msg)
                         .filter(i -> i.messageTs() >= fromEpoch && i.messageTs() <= toEpoch)
@@ -90,6 +98,10 @@ public class Client {
 
     private boolean isPdMessage(String subject) {
         return subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*");
+    }
+
+    private boolean isOspfMessage(String subject) {
+        return subject.contains("ospfNbrStateChange");
     }
 
     private boolean isOsmMessage(String subject) {
