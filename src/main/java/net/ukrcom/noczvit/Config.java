@@ -352,11 +352,11 @@ public class Config {
     }
 
     private void claudeProperties() {
-        String key = properties.getProperty("claude.apikey", "");
+        String key = stripInlineComment(properties.getProperty("claude.apikey", ""));
         if (!key.isBlank()) {
             claudeApiKey = key;
         }
-        String model = properties.getProperty("claude.model", "");
+        String model = stripInlineComment(properties.getProperty("claude.model", ""));
         if (!model.isBlank()) {
             claudeModel = model;
         }
@@ -367,6 +367,12 @@ public class Config {
             log.warn("Claude summary enabled but claude.apikey is not set — disabling");
             claudeEnabled = false;
         }
+    }
+
+    private static String stripInlineComment(String value) {
+        if (value == null) return "";
+        int idx = value.indexOf('#');
+        return idx >= 0 ? value.substring(0, idx).trim() : value.trim();
     }
 
     public boolean isDebtorsEnabled() {
