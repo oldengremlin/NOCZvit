@@ -79,7 +79,7 @@ public class Client {
                 }
             } else if (isOsmMessage(msg.subject())) {
                 osmParser.parse(msg)
-                        .filter(i -> i.eventTs() >= fromEpoch && i.eventTs() <= toEpoch)
+                        .filter(i -> i.messageTs() >= fromEpoch && i.messageTs() <= toEpoch)
                         .ifPresent(incidents::add);
             }
         }
