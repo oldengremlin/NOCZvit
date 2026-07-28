@@ -21,8 +21,10 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -125,13 +127,18 @@ public class SummaryClient {
             sb.append(" [").append(inc.source()).append(", ").append(inc.status()).append("]\n");
         }
 
+        // Pre-computed fact — do NOT ask Claude to infer this from START/END pairs
+        sb.append("\nНезакриті інциденти на кінець зміни: ")
+          .append(computeUnclosed(incidents))
+          .append("\n");
+
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
 
                 Твоє завдання: написати КОРОТКЕ (3-5 речень) резюме зміни звичайним текстом українською мовою, призначене для керівництва або чергової зміни, що приходить. Резюме має:
                 - Вказати загальну кількість інцидентів та їх характер (пінг-падіння, обриви оптики, OSPF, живлення тощо)
                 - Виділити найбільш значущі або повторювані проблеми по локаціях
-                - Зазначити, чи є незакриті інциденти (статус START без відповідного END)
+                - Використати готовий факт "Незакриті інциденти на кінець зміни" — не аналізуй пари START/END самостійно
                 - Бути написане стисло, в офіційному стилі, без технічного жаргону
 
                 КРИТИЧНО ВАЖЛИВО: відповідь — лише звичайний текст.
@@ -139,6 +146,42 @@ public class SummaryClient {
                 НЕ перелічуй всі інциденти по одному. Дай загальну картину зміни.
 
                 %s""".formatted(sb.toString());
+    }
+
+    /**
+     * Groups incidents by (location, device) and counts STARTs vs ENDs.
+     * Returns a human-readable Ukrainian string describing open incidents,
+     * or "немає" if all are closed.
+     */
+    private String computeUnclosed(List<Incident> incidents) {
+        record GroupKey(String location, String device) {}
+
+        Map<GroupKey, Long> starts = incidents.stream()
+                .filter(i -> i.status() == Incident.Status.START)
+                .collect(Collectors.groupingBy(
+                        i -> new GroupKey(i.location(), i.device()),
+                        Collectors.counting()));
+
+        Map<GroupKey, Long> ends = incidents.stream()
+                .filter(i -> i.status() == Incident.Status.END)
+                .collect(Collectors.groupingBy(
+                        i -> new GroupKey(i.location(), i.device()),
+                        Collectors.counting()));
+
+        List<String> open = new ArrayList<>();
+        starts.forEach((key, startCount) -> {
+            long endCount = ends.getOrDefault(key, 0L);
+            if (startCount > endCount) {
+                long diff = startCount - endCount;
+                String label = key.location();
+                if (!key.device().isEmpty()) {
+                    label += " (" + key.device() + ")";
+                }
+                open.add(label + " — " + diff + " шт.");
+            }
+        });
+
+        return open.isEmpty() ? "немає" : String.join("; ", open);
     }
 
     private String buildHtml(String summary) {
