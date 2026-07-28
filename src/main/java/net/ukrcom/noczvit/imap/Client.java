@@ -14,646 +14,89 @@
  */
 package net.ukrcom.noczvit.imap;
 
-import com.sun.mail.imap.IMAPFolder;
-import com.sun.mail.imap.IMAPStore;
-import jakarta.mail.BodyPart;
-import jakarta.mail.Folder;
-import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
-import jakarta.mail.Multipart;
-import jakarta.mail.search.SearchTerm;
-import jakarta.mail.Session;
-import java.io.InputStream;
 import java.io.IOException;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 import net.ukrcom.noczvit.Dictionary;
-import net.ukrcom.noczvit.NOCZvit;
-import net.ukrcom.noczvit.zabbix.ZabbixClient;
-import org.apache.commons.text.StringEscapeUtils;
+import net.ukrcom.noczvit.model.Incident;
 
+/**
+ * Orchestrates IMAP reading and incident parsing.
+ * Delegates I/O to {@link ImapReader}, business logic to {@link PdIncidentParser}
+ * and {@link OsmIncidentParser}.
+ */
 @Slf4j
 public class Client {
 
-    //private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
-    private static final Map<String, String> MONTH_MAP = Map.ofEntries(
-            Map.entry("Jan", "січ"), Map.entry("Feb", "лют"), Map.entry("Mar", "бер"), Map.entry("Apr", "квіт"),
-            Map.entry("May", "трав"), Map.entry("Jun", "черв"), Map.entry("Jul", "лип"), Map.entry("Aug", "серп"),
-            Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
-    );
-    private static final Pattern DEVICE_PREFIX_PATTERN = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
-
-//    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.RFC_1123_DATE_TIME;
-    private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
-
-    private static final DateTimeFormatter TRAP_DATE_INPUT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final DateTimeFormatter TRAP_DATE_OUTPUT_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
-
-    private static final String PATTERN_ORIGINALFROMNAME = ":$";
-    private final Pattern PATTERN_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
-
     private final Config config;
-    private final Dictionary dictionary;
-
-    record MessageHeader(String dateStr, long unixDate, String subject, String body) {
-
-    }
+    private final ImapReader reader;
+    private final PdIncidentParser pdParser;
+    private final OsmIncidentParser osmParser;
 
     public Client(Config config) throws IOException {
         this.config = config;
-        this.dictionary = new Dictionary(config);
+        Dictionary dictionary = new Dictionary(config);
+        this.reader = new ImapReader(config);
+        this.pdParser = new PdIncidentParser(dictionary);
+        this.osmParser = new OsmIncidentParser(dictionary);
     }
 
-    public Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> prepareImapFolder(boolean isInteractive,
-                                                                                          LocalDateTime prevDutyBegin,
-                                                                                          LocalDateTime prevDutyEnd,
-                                                                                          LocalDateTime currDutyBegin,
-                                                                                          LocalDateTime currDutyEnd) {
-        Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = new HashMap<>();
-        Properties props = new Properties();
-        props.put("mail.imap.ssl.enable", config.isMailSsl());
-        props.put("mail.imap.host", config.getMailHostname());
-        props.put("mail.imap.port", config.isMailSsl() ? "993" : "143");
-        props.put("mail.imap.timeout", "5000");
+    /**
+     * Reads messages from IMAP and parses them into incidents covering both duty periods.
+     *
+     * @return all incidents found within [prevDutyBegin, currDutyEnd]
+     */
+    public List<Incident> prepareImapFolder(boolean isInteractive,
+                                            LocalDateTime prevDutyBegin,
+                                            LocalDateTime prevDutyEnd,
+                                            LocalDateTime currDutyBegin,
+                                            LocalDateTime currDutyEnd) {
+        long fromEpoch = prevDutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long toEpoch   = currDutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
-        Session session = Session.getInstance(props);
-        try (IMAPStore store = (IMAPStore) session.getStore(config.isMailSsl() ? "imaps" : "imap")) {
-            log.debug("Connecting to IMAP server: {}:{}", config.getMailHostname(), config.isMailSsl() ? "993" : "143");
-            store.connect(config.getMailHostname(), config.getMailUsername(), config.getMailPassword());
-            log.debug("Connected to IMAP server");
-            try (IMAPFolder folder = (IMAPFolder) store.getFolder(config.getZabbixFolder())) {
-                folder.open(Folder.READ_ONLY);
-                if (log.isDebugEnabled()) {
-                    log.debug("IMAP folders:");
-                    for (Folder f : store.getDefaultFolder().list()) {
-                        log.debug("  {}", f.getFullName());
-                    }
-                }
+        log.debug("Filter period: {} … {}", prevDutyBegin, currDutyEnd);
 
-                if (folder.getMessageCount() > 0) {
-                    log.info("Processing {} messages from IMAP folder...", folder.getMessageCount());
-
-                    long ctPrevDutyBegin = prevDutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
-                    long ctCurrDutyEnd = currDutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
-                    log.debug("Filter period: ctPrevDutyBegin={} ({}), ctCurrDutyEnd={} ({})",
-                            ctPrevDutyBegin, prevDutyBegin, ctCurrDutyEnd, currDutyEnd);
-
-                    Message[] messages;
-                    if (config.isDebug()) {
-                        messages = folder.getMessages();
-                    } else {
-                        SearchTerm dateTerm = new SearchTerm() {
-                            @Override
-                            public boolean match(Message message) {
-                                try {
-                                    Date sentDate = message.getSentDate();
-                                    long unixDate = sentDate.getTime() / 1000;
-                                    return unixDate >= ctPrevDutyBegin && unixDate <= ctCurrDutyEnd;
-                                } catch (MessagingException e) {
-                                    return false;
-                                }
-                            }
-                        };
-                        log.info("IMAP filter: sent >= {} && sent <= {}", ctPrevDutyBegin, ctCurrDutyEnd);
-                        messages = folder.search(dateTerm);
-                    }
-
-                    for (Message msg : messages) {
-                        Optional<MessageHeader> mhOpt = parseMessageHeader(msg);
-                        if (mhOpt.isEmpty()) {
-                            continue;
-                        }
-                        MessageHeader mh = mhOpt.get();
-
-                        log.debug("Processing message: subject={}, unixDate={}", mh.subject(), mh.unixDate());
-
-                        if (mh.subject().matches(".*(?:Unavailable by ICMP ping|has been restarted).*")) {
-                            if (mh.unixDate() >= ctPrevDutyBegin && mh.unixDate() <= ctCurrDutyEnd) {
-                                proceedPD(isInteractive, mh.subject(), null, msgLogGroup, mh.unixDate(), mh.dateStr());
-                            } else {
-                                log.debug("Skipping PD message due to time filter: unixDate={}", mh.unixDate());
-                            }
-                        } else if (mh.subject().matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + (config.isDebug() ? "1-9" : "2-9") + "][0-9]*).*")) {
-                            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup = new HashMap<>();
-                            proceedSDH(isInteractive, mh.subject(), mh.body(), tempMsgLogGroup, mh.unixDate(), mh.dateStr());
-                            filterAndMergeMessages(tempMsgLogGroup, msgLogGroup, ctPrevDutyBegin, ctCurrDutyEnd, isInteractive, config);
-                        }
-                    }
-
-                    log.info("IMAP processing done");
-                }
-            }
+        List<RawMessage> rawMessages;
+        try {
+            rawMessages = reader.readMessages(config.isDebug(), fromEpoch, toEpoch);
         } catch (MessagingException e) {
             log.error("IMAP error: {}", e.getMessage());
             throw new RuntimeException("IMAP error: " + e.getMessage(), e);
         }
-        return msgLogGroup;
-    }
 
-    private String getTextFromMessage(Message message) throws MessagingException, IOException {
-        String result = "";
-        if (message.isMimeType("text/plain")) {
-            // Handle text/plain directly
-            Object content = message.getContent();
-            switch (content) {
-                case String string ->
-                    result = string;
-                case InputStream inputStream ->
-                    result = new String(inputStream.readAllBytes(), "UTF-8");
-                default -> {
-                }
-            }
-        } else if (message.isMimeType("multipart/*")) {
-            // Handle multipart messages
-            Multipart multipart = (Multipart) message.getContent();
-            for (int i = 0; i < multipart.getCount(); i++) {
-                BodyPart bodyPart = multipart.getBodyPart(i);
-                if (bodyPart.isMimeType("text/plain")) {
-                    result = (String) bodyPart.getContent();
-                    break;
-                }
-            }
-        }
-        return result;
-    }
-
-    private void filterAndMergeMessages(Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup,
-                                        Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup,
-                                        long ctPrevDutyBegin,
-                                        long ctCurrDutyEnd,
-                                        boolean isInteractive,
-                                        Config config) {
-
-        for (var groupEntry : tempMsgLogGroup.entrySet()) {
-            String group = groupEntry.getKey();
-            for (var deviceEntry : groupEntry.getValue().entrySet()) {
-                String device = deviceEntry.getKey();
-                for (var tsEntry : deviceEntry.getValue().entrySet()) {
-                    Long ts = tsEntry.getKey();
-                    if (ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd) {
-                        Map<Long, List<String>> existingTtsMap = msgLogGroup
-                                .computeIfAbsent(group, k -> new HashMap<>())
-                                .computeIfAbsent(device, k -> new HashMap<>())
-                                .computeIfAbsent(ts, k -> new HashMap<>());
-                        for (Map.Entry<Long, List<String>> ttsEntry : tsEntry.getValue().entrySet()) {
-                            existingTtsMap
-                                    .computeIfAbsent(ttsEntry.getKey(), k -> new ArrayList<>())
-                                    .addAll(ttsEntry.getValue());
-                        }
-                        log.debug("Merged: group={}, device={}, ts={}", group, device, ts);
-                    }
-                }
-            }
-        }
-
-        /*
-        // Структура:
-        // - String (group): назва групи, наприклад, "Обухів, Малишка 2"
-        // - Map<String, ...> (device): мапа пристроїв, наприклад, "core1"
-        // - Map<Long, ...> (ts): мапа таймстемпів, наприклад, 1748549842 (Unix timestamp)
-        // - Map<Long, List<String>> (tts): мапа подій (tts) із списком повідомлень, наприклад, {1748528164: ["msg1", "msg2"]}
-        tempMsgLogGroup
-                .entrySet().stream().flatMap(
-                        groupEntry -> groupEntry.getValue()
-                                .entrySet().stream().map(
-                                        deviceEntry -> Map.entry(
-                                                groupEntry.getKey(), deviceEntry
-                                        )
-                                )
-                ).flatMap(
-                        groupDevice -> groupDevice
-                                .getValue()
-                                .getValue()
-                                .entrySet().stream().map(
-                                        tsEntry -> Map.entry(
-                                                Map.entry(
-                                                        groupDevice.getKey(), groupDevice.getValue().getKey()
-                                                ), tsEntry
-                                        )
-                                )
-                ).filter(groupDeviceTs -> {
-                    Long ts = groupDeviceTs.getValue().getKey();
-                    return ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd;
-                })
-                .forEach(groupDeviceTs -> {
-                    String group = groupDeviceTs.getKey().getKey();
-                    String device = groupDeviceTs.getKey().getValue();
-                    Long ts = groupDeviceTs.getValue().getKey();
-                    Map<Long, List<String>> ttsMap = groupDeviceTs.getValue().getValue();
-
-                    Map<Long, List<String>> existingTtsMap = msgLogGroup
-                            .computeIfAbsent(group, k -> new HashMap<>())
-                            .computeIfAbsent(device, k -> new HashMap<>())
-                            .computeIfAbsent(ts, k -> new HashMap<>());
-
-                    ttsMap.forEach((tts, messages)
-                            -> existingTtsMap.computeIfAbsent(tts, k -> new ArrayList<>()).addAll(messages));
-
-                    if (config.isDebug()) {
-                        System.err.println("Merged messages: group=" + group + ", device=" + device
-                                + ", ts=" + ts + ", messages=" + existingTtsMap);
-                    }
-                });
-         */
-    }
-
-    public static String formatReport(Config config, LocalDateTime dutyBegin, LocalDateTime dutyEnd, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, ZabbixClient zabbix) {
-        StringBuilder html = new StringBuilder();
-        html.append("<p><h1>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
-                .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
-                .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER))
-                .append("</h1>\n");
-
-        long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
-        long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
-
-        record Incident(String group, String device, Long ts, Long tts, String message) {
-
-            public String toTableCells() {
-                String[] parts = message.split(" : ", 2);
-                String dateStr = parts.length > 1 ? parts[0] : "";
-                String msgText = parts.length > 1 ? parts[1] : message;
-                return "<td>" + dateStr + "</td>"
-                     + "<td>" + msgText + "</td>"
-                     + "<td>" + (device.isEmpty() ? "" : device) + "</td>";
-            }
-
-            public String rowClass() {
-                if (message.contains("початок інциденту")) {
-                    return "row-start";
-                } else if (message.contains("кінець інциденту")) {
-                    return "row-end";
-                }
-                return "";
-            }
-
-        }
-
-//
-//      ІМПЕРАТИВНИЙ СТИЛЬ
-//
         List<Incident> incidents = new ArrayList<>();
-        for (var groupEntry : msgLogGroup.entrySet()) {
-            for (var deviceEntry : groupEntry.getValue().entrySet()) {
-                for (var tsEntry : deviceEntry.getValue().entrySet()) {
-                    if (tsEntry.getKey() < ctDutyBegin || tsEntry.getKey() > ctDutyEnd) {
-                        continue;
-                    }
-                    for (var ttsEntry : tsEntry.getValue().entrySet()) {
-                        for (String msg : ttsEntry.getValue()) {
-                            incidents.add(new Incident(
-                                    groupEntry.getKey(), deviceEntry.getKey(),
-                                    tsEntry.getKey(), ttsEntry.getKey(),
-                                    //StringEscapeUtils.escapeHtml4(msg)
-                                    msg
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-        incidents.sort(Comparator.comparing(Incident::ts).thenComparing(Incident::tts));
-
-//
-//      ФУНКЦІОНАЛЬНИЙ СТИЛЬ (В ДАНОМУ ВИПАДКУ НЕ ВИПРАВДАНО)
-//
-        /*
-        List<Incident> incidents = msgLogGroup.entrySet().stream()
-                .flatMap((var groupEntry) -> {
-                    return groupEntry.getValue().entrySet().stream()
-                            .flatMap((var deviceEntry) -> {
-                                return deviceEntry.getValue().entrySet().stream()
-                                        .flatMap((var tsEntry) -> {
-                                            return tsEntry.getValue().entrySet().stream()
-                                                    .flatMap((var ttsEntry) -> {
-                                                        return ttsEntry.getValue().stream()
-                                                                .map((var msg) -> {
-                                                                    return new Incident(
-                                                                            groupEntry.getKey(),
-                                                                            deviceEntry.getKey(),
-                                                                            tsEntry.getKey(),
-                                                                            ttsEntry.getKey(),
-                                                                            StringEscapeUtils.escapeHtml4(msg)
-                                                                    );
-                                                                });
-                                                    });
-                                        });
-                            });
-                })
-                .filter((var incident) -> {
-                    return incident.ts >= ctDutyBegin && incident.ts <= ctDutyEnd;
-                })
-                .sorted(Comparator.comparing(Incident::ts).thenComparing(Incident::tts))
-                .toList();
-         */
-
-        if (incidents.isEmpty()) {
-            html.append("<p><i>Інцидентів не зареєстровано</i>\n");
-            html.append("<p>");
-            return html.toString();
-        }
-
-//
-//      Групування за локацією + побудова таблиць.
-//      Функціональне groupingBy для групування, forEach з AtomicInteger
-//      для глобального лічильника рядків — чистіше за вкладені streams.
-//
-        Map<String, List<Incident>> byGroup = incidents.stream()
-                .collect(Collectors.groupingBy(Incident::group, LinkedHashMap::new, Collectors.toList()));
-
-        AtomicInteger n = new AtomicInteger(0);
-        byGroup.forEach((group, groupIncidents) -> {
-            html.append("<div class=\"section\">\n")
-                    .append("<h2>Зареєстровані інциденти на виносі ").append(group).append("</h2>\n")
-                    .append("<table width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
-                    .append("<thead><tr>")
-                    .append("<th style=\"width:30px\">№</th>")
-                    .append("<th>Дата та час</th>")
-                    .append("<th>Інцидент</th>")
-                    .append("<th>Обладнання</th>")
-                    .append("</tr></thead><tbody>\n");
-            groupIncidents.forEach(inc -> {
-                String cls = inc.rowClass();
-                html.append("<tr").append(cls.isEmpty() ? "" : " class=\"" + cls + "\"").append(">")
-                        .append("<td>").append(n.incrementAndGet()).append(".</td>")
-                        .append(inc.toTableCells())
-                        .append("</tr>\n");
-            });
-            if (zabbix != null) {
-                List<String> pingDevices = groupIncidents.stream()
-                        .map(Incident::device)
-                        .filter(d -> !d.isEmpty())
-                        .distinct()
-                        .toList();
-                if (!pingDevices.isEmpty()) {
-                    try (var pingExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
-                        List<CompletableFuture<String>> pingFutures = pingDevices.stream()
-                                .map(device -> CompletableFuture.supplyAsync(
-                                        () -> zabbix.getPingGraphRow(device, dutyBegin, dutyEnd),
-                                        pingExecutor))
-                                .toList();
-                        CompletableFuture.allOf(pingFutures.toArray(new CompletableFuture[0])).join();
-                        pingFutures.forEach(f -> {
-                            try {
-                                html.append(f.get());
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            } catch (ExecutionException ignored) {
-                            }
-                        });
-                    }
-                }
-            }
-            html.append("</tbody></table>\n</div>\n");
-        });
-
-        html.append("<p>");
-        return html.toString();
-    }
-
-    private void proceedPD(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, long ts, String dt) {
-        if (subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
-                || subject.contains("UVPN") || subject.contains("SDH-OSM") || subject.contains("astashov")
-                || subject.contains("console") || subject.contains("ramb-\\d+:")
-                || subject.matches(".*[dm]: NS\\d?.*")
-                || (subject.matches(".*: [ap][^:]+: [ap][^:]+ has.*") && !subject.contains("alca"))) {
-            return;
-        }
-
-        boolean needCheck = false;
-        String[] parts = subject.split("\\s+");
-        String from = parts.length > 2 ? parts[2] : "";
-        String type = parts.length > 5 ? parts[5] : "";
-
-        if (subject.contains(" Resolved:") && "been".equals(type)) {
-            return;
-        }
-
-        String originalFromName = from.replaceAll(PATTERN_ORIGINALFROMNAME, ""); // Preserve the original device name
-
-        if (from.endsWith(":")) {
-            if (!from.matches(".*-\\d+:$")) {
-                from = from.replace(":", "-65535:");
-            }
-            String[] fromParts = from.split(":");
-            String fromName = fromParts[0];
-            String fromObject = fromName.matches(".*-\\d+$") ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "") : fromName;
-            from = fromObject.replace("-65535", "");
-            fromName = fromName.replace("-65535", "");
-            String transformedFrom = dictionary.lookupPD(fromObject); // Lookup the full name including suffix
-            needCheck = fromObject.equals(transformedFrom);
-            from = transformedFrom;
-        }
-
-        String state = "Zabbix зареєстровано ";
-        if (!(subject.contains(" Problem:") && type.contains("been"))) {
-            if (subject.contains(" Resolved:")) {
-                state = "Zabbix зареєстровано кінець інциденту, ";
-            } else if (subject.contains(" Problem:")) {
-                state = "Zabbix зареєстровано початок інциденту, ";
-            }
-        }
-
-        String msg = StringEscapeUtils.escapeHtml4(state + switch (type) {
-            case "ICMP" ->
-                "зникнення зв'язку з обладнанням на ";
-            case "Unavailable", "by" ->
-                "зникнення підключення ";
-            case "been" ->
-                "перезавантаження обладнання ";
-            default ->
-                type + " ";
-        } + from);
-
-        if (needCheck) {
-            msg += " (<i>потребує коригування назви</i> '<b>" + StringEscapeUtils.escapeHtml4(from) + "</b>')";
-        }
-
-        msg = msg.replaceAll("\\s+", " ");
-        dt = convertMonthNumToMnemo(dt);
-
-        msgLogGroup.computeIfAbsent(from, k -> new HashMap<>())
-                .computeIfAbsent(originalFromName, k -> new HashMap<>())
-                .computeIfAbsent(ts, k -> new HashMap<>())
-                .computeIfAbsent(ts, k -> new ArrayList<>())
-                .add(dt + " : " + msg);
-
-        log.debug("PD stored: from={}, orig={}, ts={}", from, originalFromName, ts);
-    }
-
-    private void proceedSDH(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, long ts, String dt) {
-        log.debug("Processing SDH message: subject={}, ts={}", subject, ts);
-        log.debug("Raw body: {}", body);
-
-        String appendix;
-        if (subject.contains("Air Conditioning")) {
-            appendix = " (кондиціонер)";
-        } else if (subject.contains("Diesel Generator")) {
-            appendix = " (генератор)";
-        } else {
-            appendix = "";
-        }
-
-        String[] parts = subject.split("\\s+");
-        String geo = parts.length > 3 ? parts[3] : "";
-        String type = parts.length > 5 ? parts[5] : "";
-
-        String from = geo;
-        String to = "";
-//        boolean needCheckFrom = true;
-//        boolean needCheckTo = true;
-
-        if ("STM".equals(type)) {
-            String[] geoParts = geo.split("__");
-            from = geoParts[0];
-            to = geoParts.length > 1 ? geoParts[1] : "";
-        }
-
-        String originalFrom = from;
-        from = dictionary.lookupSDH(from);
-        boolean needCheckFrom = originalFrom.equals(from);
-
-        String originalTo = to;
-        to = dictionary.lookupSDH(to);
-        boolean needCheckTo = originalTo.equals(to);
-
-        String geoMsg;
-        if ("STM".equals(type)) {
-            geoMsg = to.isEmpty() ? "на " + from : "з " + from + " на " + to;
-        } else {
-            geoMsg = from;
-        }
-
-        String msg;
-        if (subject.contains(" Resolved:")) {
-            msg = "OSM зареєстровано кінець інциденту, ";
-        } else if (subject.contains(" Problem:")) {
-            msg = "OSM зареєстровано початок інциденту, ";
-        } else {
-            msg = "OSM зареєстровано інцидент, ";
-        }
-        msg += "Power".equals(type) ? "зникнення живлення на виносі " + geoMsg : "втрата зв’язності " + geoMsg;
-
-        // Обробка Trap value для отримання точного часу інциденту
-        boolean trapValueFound = false;
-        // Очищаємо body від \r і розбиваємо на рядки
-        String[] lines = body.replace("\r", "").split("\n");
-        long tts = ts;
-        String tdt = dt;
-        for (String line : lines) {
-            if (line.startsWith("Trap value:")) {
-                log.debug("Trap value line: {}", line);
-                // Шукаємо дату у форматі yyyy-MM-dd'T'HH:mm:ss
-                Matcher matcher = PATTERN_DATE.matcher(line);
-                if (matcher.find()) {
-                    String trapDate = matcher.group();
-                    try {
-                        LocalDateTime ldt = LocalDateTime.parse(trapDate, TRAP_DATE_INPUT_FORMATTER);
-                        tts = ldt.atZone(ZoneId.systemDefault()).toEpochSecond();
-                        tdt = ldt.atZone(ZoneId.systemDefault()).format(TRAP_DATE_OUTPUT_FORMATTER);
-                        trapValueFound = true;
-                        log.debug("Found Trap value date: {}, updated ts={}", trapDate, tts);
-                    } catch (DateTimeParseException e) {
-                        log.warn("Failed to parse Trap value date: {} — {}", trapDate, e.getMessage());
-                    }
+        for (RawMessage msg : rawMessages) {
+            if (isPdMessage(msg.subject())) {
+                if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
+                    pdParser.parse(msg).ifPresent(incidents::add);
                 } else {
-                    log.debug("No date found in Trap value line");
+                    log.debug("Skipping PD message (time filter): unixDate={}", msg.unixDate());
                 }
-                break; // Обробили Trap value, виходимо
+            } else if (isOsmMessage(msg.subject())) {
+                osmParser.parse(msg)
+                        .filter(i -> i.messageTs() >= fromEpoch && i.messageTs() <= toEpoch)
+                        .ifPresent(incidents::add);
             }
         }
 
-        if (!trapValueFound) {
-            log.debug("No Trap value date found, using original ts={}", ts);
-        }
-
-        msg = msg.replaceAll("\\s+", " ");
-        if (ts != tts) {
-            tdt = convertMonthNumToMnemo(tdt);
-            msg = msg.concat(", який відбувся " + tdt);
-        }
-        msg = StringEscapeUtils.escapeHtml4(msg);
-
-        if (needCheckFrom || (needCheckTo && !to.isEmpty())) {
-            msg += " (<i>потребує коригування назви</i>";
-            if (needCheckFrom) {
-                msg += " '<b>" + StringEscapeUtils.escapeHtml4(from) + "</b>'";
-            }
-            if (needCheckTo && !to.isEmpty()) {
-                msg += (needCheckFrom ? " та" : "") + " '<b>" + StringEscapeUtils.escapeHtml4(to) + "</b>'";
-            }
-            msg += ")";
-        }
-
-        dt = convertMonthNumToMnemo(dt);
-
-        // Зберігаємо повідомлення з оновленим ts
-        msgLogGroup.computeIfAbsent(from, k -> new HashMap<>())
-                .computeIfAbsent("", k -> new HashMap<>())
-                .computeIfAbsent(ts, k -> new HashMap<>())
-                .computeIfAbsent(tts, k -> new ArrayList<>())
-                .add(dt + " : " + msg);
-
-        log.debug("SDH stored: from={}, to={}, ts={}", from, to, ts);
+        log.info("IMAP processing done: {} incidents", incidents.size());
+        return incidents;
     }
 
-    private String convertMonthNumToMnemo(String dt) {
-        dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\+\\d{4}$", "");
-        Matcher matcher = MONTH_PATTERN.matcher(dt);
-        StringBuilder sb = new StringBuilder();
-        while (matcher.find()) {
-            matcher.appendReplacement(sb, MONTH_MAP.get(matcher.group()));
-        }
-        matcher.appendTail(sb);
-        return sb.toString();
+    private boolean isPdMessage(String subject) {
+        return subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*");
     }
 
-    private Optional<MessageHeader> parseMessageHeader(Message msg) {
-        try {
-            String dateStr = msg.getHeader("Date")[0];
-            String subject = msg.getSubject();
-            String body;
-            try {
-                body = getTextFromMessage(msg);
-            } catch (MessagingException | IOException e) {
-                log.debug("Failed to get message body: {}", e.getMessage());
-                return Optional.empty();
-            }
-            long unixDate;
-            try {
-                unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
-            } catch (DateTimeParseException e) {
-                log.debug("Failed to parse date: {}", dateStr);
-                return Optional.empty();
-            }
-            return Optional.of(new MessageHeader(dateStr, unixDate, subject, body));
-        } catch (MessagingException ex) {
-            System.getLogger(Client.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
-            return Optional.empty();
+    private boolean isOsmMessage(String subject) {
+        String stmPattern = "2-9";
+        if (config.isDebug()) {
+            stmPattern = "1-9";
         }
+        return subject.matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + stmPattern + "][0-9]*).*");
     }
-
 }
