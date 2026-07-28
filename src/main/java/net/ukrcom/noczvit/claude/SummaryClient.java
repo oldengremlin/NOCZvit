@@ -19,10 +19,8 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -33,10 +31,10 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 import net.ukrcom.noczvit.NOCZvit;
 import net.ukrcom.noczvit.model.Incident;
-import net.ukrcom.noczvit.zabbix.ZabbixProblem;
 
 /**
- * Generates a human-readable Ukrainian shift summary using the Claude API.
+ * Формує короткий текст резюме зміни NOC за допомогою Claude API.
+ * Отримує єдиний список інцидентів (IMAP + Zabbix API, вже злиті та відфільтровані).
  */
 @Slf4j
 public class SummaryClient {
@@ -44,7 +42,6 @@ public class SummaryClient {
     // Запасні конвертери на випадок, якщо модель повертає Markdown всупереч інструкціям
     private static final Pattern MD_HEADING = Pattern.compile("(?m)^#{1,6}\\s+");
     private static final Pattern MD_BOLD    = Pattern.compile("\\*\\*(.+?)\\*\\*");
-    private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final AnthropicClient client;
     private final String model;
@@ -58,18 +55,17 @@ public class SummaryClient {
 
     /**
      * Викликає Claude API для формування короткого резюме зміни українською мовою.
-     * Фільтрує {@code allIncidents} за {@code from}/{@code to} за часом повідомлення —
-     * так само як {@link net.ukrcom.noczvit.report.IncidentSectionBuilder}.
      *
-     * @param allIncidents   всі розібрані інциденти (можуть охоплювати кілька змін)
-     * @param from           початок звітного періоду
-     * @param to             кінець звітного періоду
-     * @param zabbixProblems відфільтровані події Zabbix, що не дублюються в IMAP
-     *                       (порожній список, якщо Zabbix вимкнений або не дав результатів)
+     * <p>Приймає єдиний злитий список інцидентів: IMAP-інциденти + сконвертовані Zabbix-події.
+     * Фільтрує за {@code from}/{@code to} так само як
+     * {@link net.ukrcom.noczvit.report.IncidentSectionBuilder}.
+     *
+     * @param allIncidents всі інциденти зміни (IMAP + Zabbix, можуть охоплювати кілька змін)
+     * @param from         початок звітного періоду
+     * @param to           кінець звітного періоду
      * @return HTML-фрагмент (ніколи не null); порожній рядок при помилці або відсутності даних
      */
-    public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to,
-                                  List<ZabbixProblem> zabbixProblems) {
+    public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to) {
         long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctTo   = to.atZone(ZoneId.systemDefault()).toEpochSecond();
 
@@ -78,18 +74,17 @@ public class SummaryClient {
                 .sorted(Comparator.comparingLong(Incident::messageTs))
                 .toList();
 
-        if (incidents.isEmpty() && zabbixProblems.isEmpty()) {
+        if (incidents.isEmpty()) {
             return "";
         }
 
         try {
-            log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів IMAP, {} подій Zabbix)",
-                    model, incidents.size(), zabbixProblems.size());
+            log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів)", model, incidents.size());
 
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1024L)
-                    .addUserMessage(buildPrompt(incidents, from, to, zabbixProblems))
+                    .addUserMessage(buildPrompt(incidents, from, to))
                     .build();
 
             Message response = client.messages().create(params);
@@ -99,83 +94,54 @@ public class SummaryClient {
                     .collect(Collectors.joining());
 
             if (summary.isBlank()) {
-                log.warn("Claude returned empty summary");
+                log.warn("Claude повернув порожнє резюме");
                 return "";
             }
 
-            log.debug("Claude summary generated ({} chars)", summary.length());
+            log.debug("Резюме Claude сформовано ({} символів)", summary.length());
             return buildHtml(summary);
 
         } catch (AnthropicServiceException e) {
-            log.warn("Claude API error (HTTP {}): {}", e.statusCode(), e.getMessage());
+            log.warn("Claude API помилка (HTTP {}): {}", e.statusCode(), e.getMessage());
             return "";
         } catch (Exception e) {
-            log.warn("Claude summary failed: {}", e.getMessage());
+            log.warn("Claude резюме — помилка: {}", e.getMessage());
             return "";
         }
     }
 
-    private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
-                               List<ZabbixProblem> zabbixProblems) {
+    private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to) {
         StringBuilder sb = new StringBuilder();
         sb.append("Звітний період: з ")
           .append(from.format(NOCZvit.DATE_TIME_FORMATTER))
           .append(" по ")
-          .append(to.format(NOCZvit.DATE_TIME_FORMATTER));
+          .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
+          .append("\n\nІнциденти (").append(incidents.size()).append(" шт.):\n");
 
-        if (!incidents.isEmpty()) {
-            sb.append("\n\nІнциденти з IMAP (").append(incidents.size()).append(" шт.):\n");
-            int n = 0;
-            for (Incident inc : incidents) {
-                sb.append(++n).append(". ");
-                sb.append("[").append(inc.messageDateStr()).append("] ");
-                sb.append(inc.location());
-                if (!inc.device().isEmpty()) {
-                    sb.append(" / ").append(inc.device());
-                }
-                sb.append(" — ").append(inc.description());
-                sb.append(" [").append(inc.source()).append(", ").append(inc.status()).append("]\n");
+        int n = 0;
+        for (Incident inc : incidents) {
+            sb.append(++n).append(". ");
+            sb.append("[").append(inc.messageDateStr()).append("] ");
+            sb.append(inc.location());
+            if (!inc.device().isEmpty()) {
+                sb.append(" / ").append(inc.device());
             }
-
-            // Попередньо обчислений факт — Claude не аналізує пари START/END самостійно
-            sb.append("\nНезакриті інциденти на кінець зміни: ")
-              .append(computeUnclosed(incidents))
-              .append("\n");
-        } else {
-            sb.append("\n\nІнцидентів з IMAP за зміну не зареєстровано.\n");
+            sb.append(" — ").append(inc.description());
+            sb.append(" [").append(inc.source()).append(", ").append(inc.status()).append("]\n");
         }
 
-        if (!zabbixProblems.isEmpty()) {
-            sb.append("\nДодаткові події Zabbix (").append(zabbixProblems.size())
-              .append(" шт., не включені до основного переліку):\n");
-            sb.append("УВАГА: при написанні резюме ОБОВ'ЯЗКОВО вказуй значення поля \"Пристрій\".\n");
-            int n = 0;
-            for (ZabbixProblem p : zabbixProblems) {
-                LocalDateTime dt = Instant.ofEpochSecond(p.clock())
-                        .atZone(ZoneId.systemDefault()).toLocalDateTime();
-                sb.append(++n).append(". ");
-                sb.append("Пристрій: ").append(p.host()).append(", ");
-                sb.append("[").append(dt.format(TS_FORMAT)).append("] ");
-                sb.append(p.name());
-                if (p.isActive()) {
-                    sb.append(" [АКТИВНА]");
-                } else {
-                    LocalDateTime resolved = Instant.ofEpochSecond(p.rClock())
-                            .atZone(ZoneId.systemDefault()).toLocalDateTime();
-                    sb.append(" [вирішена о ").append(resolved.format(TS_FORMAT)).append("]");
-                }
-                sb.append("\n");
-            }
-        }
+        // Попередньо обчислений факт — Claude не аналізує пари START/END самостійно
+        sb.append("\nНезакриті інциденти на кінець зміни: ")
+          .append(computeUnclosed(incidents))
+          .append("\n");
 
         return """
-                Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний перелік інцидентів та подій мережі за зміну.
+                Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
 
                 Твоє завдання: написати КОРОТКЕ (3-5 речень) резюме зміни звичайним текстом українською мовою, призначене для керівництва або чергової зміни, що приходить. Резюме має:
                 - Вказати загальну кількість інцидентів та їх характер (пінг-падіння, обриви оптики, OSPF, живлення тощо)
-                - Виділити найбільш значущі або повторювані проблеми по локаціях
+                - Виділити найбільш значущі або повторювані проблеми по локаціях та конкретних пристроях
                 - Використати готовий факт "Незакриті інциденти на кінець зміни" — не аналізуй пари START/END самостійно
-                - Якщо є додаткові події Zabbix — включи їх у загальну картину, ОБОВ'ЯЗКОВО вказуючи конкретний hostname кожного пристрою (наприклад: "підвищене навантаження CPU на r234-1 та rhoh15-1")
                 - Бути написане стисло, в офіційному стилі, без технічного жаргону
 
                 КРИТИЧНО ВАЖЛИВО: відповідь — лише звичайний текст.
@@ -186,9 +152,8 @@ public class SummaryClient {
     }
 
     /**
-     * Groups incidents by (location, device) and counts STARTs vs ENDs.
-     * Returns a human-readable Ukrainian string describing open incidents,
-     * or "немає" if all are closed.
+     * Групує інциденти за (location, device) і рахує START vs END.
+     * Повертає людиночитаний рядок про незакриті інциденти або "немає".
      */
     private String computeUnclosed(List<Incident> incidents) {
         record GroupKey(String location, String device) {}
@@ -222,19 +187,19 @@ public class SummaryClient {
     }
 
     private String buildHtml(String summary) {
-        // 1. Strip markdown headings (# Заголовок → Заголовок) — safety net
+        // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
 
-        // 2. Escape HTML — BEFORE inserting any tags
+        // 2. Екранувати HTML — ДО вставки будь-яких тегів
         String escaped = clean
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;");
 
-        // 3. Convert **bold** → <b>bold</b> — safe after HTML escaping since ** is not HTML
+        // 3. **жирний** → <b>жирний</b> — безпечно після екранування
         escaped = MD_BOLD.matcher(escaped).replaceAll("<b>$1</b>");
 
-        // 4. Paragraph and line breaks
+        // 4. Абзаци та переноси рядків
         escaped = escaped.replace("\n\n", "</p><p>").replace("\n", "<br>");
 
         return "<div class=\"section\" style=\"background:#fff;padding:12px 16px;"
