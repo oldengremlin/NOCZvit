@@ -34,7 +34,9 @@ import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class SnmpClient {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -91,9 +93,7 @@ public class SnmpClient {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
-                if (config.isDebug()) {
-                    System.err.println("ERROR (celsius future): " + e.getCause().getMessage());
-                }
+                log.error("SNMP celsius query failed: {}", e.getCause().getMessage());
             }
         }
 
@@ -123,9 +123,7 @@ public class SnmpClient {
             PDU response = snmp.send(pdu, target).getResponse();
             if (response == null || response.getErrorStatus() != PDU.noError) {
                 String error = response != null ? response.getErrorStatusText() : "Timeout";
-                if (config.isDebug()) {
-                    System.err.println("ERROR: " + error);
-                }
+                log.warn("SNMP celsius {}: {}", host + "." + domain, error);
                 return new CelsiusResult(
                     "<td><b>" + host + "</b></td>"
                     + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>",
@@ -136,10 +134,8 @@ public class SnmpClient {
             String desc = response.getVariable(new OID(config.getHosts().get(hostname).get("desc"))).toString();
             String temp = response.getVariable(new OID(config.getHosts().get(hostname).get("temp"))).toString();
 
-            if (config.isDebug()) {
-                System.err.printf("%s -> %s -> %s%n", host + "." + domain, config.getHosts().get(hostname).get("desc"), desc);
-                System.err.printf("%s -> %s -> %s%n", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
-            }
+            log.debug("{} -> {} -> {}", host + "." + domain, config.getHosts().get(hostname).get("desc"), desc);
+            log.debug("{} -> {} -> {}", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
 
             String graphRow = (zabbix != null) ? zabbix.getGraphRow(host, desc, from, to) : "";
             return new CelsiusResult(
@@ -149,9 +145,7 @@ public class SnmpClient {
                 graphRow
             );
         } catch (IOException e) {
-            if (config.isDebug()) {
-                System.err.println("ERROR: " + e.getMessage());
-            }
+            log.warn("SNMP celsius {}: {}", host, e.getMessage());
             return new CelsiusResult(
                 "<td><b>" + host + "</b></td>"
                 + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>",
@@ -191,9 +185,7 @@ public class SnmpClient {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
-                if (config.isDebug()) {
-                    System.err.println("ERROR (ramos future): " + e.getCause().getMessage());
-                }
+                log.error("SNMP ramos query failed: {}", e.getCause().getMessage());
             }
         }
 
@@ -231,11 +223,9 @@ public class SnmpClient {
                 PDU response = snmp.send(pdu, target).getResponse();
                 if (response == null || response.getErrorStatus() != PDU.noError) {
                     String error = response != null ? response.getErrorStatusText() : "Timeout";
+                    log.warn("SNMP ramos {}: {}", host, error);
                     fragment.append("<tr><td colspan=\"3\"><i>").append(host)
                             .append(" - не вдалося отримати доступ: ").append(error).append("</i></td></tr>\n");
-                    if (config.isDebug()) {
-                        System.err.println("ERROR: " + error);
-                    }
                     break;
                 }
 
@@ -275,10 +265,8 @@ public class SnmpClient {
                 String lc = extractValue(multiResponse, lcOid);
                 String hc = extractValue(multiResponse, hcOid);
 
-                if (config.isDebug()) {
-                    System.err.printf("%s = %s : desc=%s, unit=%s, value=%s, lw=%s, hw=%s, lc=%s, hc=%s%n",
-                            oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
-                }
+                log.debug("{} = {} : desc={}, unit={}, value={}, lw={}, hw={}, lc={}, hc={}",
+                        oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
 
                 if (desc != null) {
                     desc = desc.replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
@@ -317,11 +305,9 @@ public class SnmpClient {
                 pdu.add(new VariableBinding(oid));
             }
         } catch (IOException e) {
+            log.warn("SNMP ramos {}: {}", host, e.getMessage());
             fragment.append("<tr><td colspan=\"3\"><i>").append(host)
                     .append(" - не вдалося отримати доступ: ").append(e.getMessage()).append("</i></td></tr>\n");
-            if (config.isDebug()) {
-                System.err.println("ERROR: " + e.getMessage());
-            }
         }
 
         fragment.append("</tbody></table>\n</div>\n");
