@@ -6,6 +6,32 @@
 
 ---
 
+## [1.9.0] — 2026-07-28
+
+### Архітектура
+- Розділення коду за відповідальністю: **Infrastructure → Domain → Presentation**
+  - `imap.ImapReader` — лише I/O (читання IMAP, формування `RawMessage`)
+  - `record RawMessage` — незмінний DTO з полями subject, body, unixDate, dateStr
+  - `record Incident` — доменна модель інциденту з enum `Source` (PD/OSM) та `Status` (START/END/NONE)
+  - `imap.Client` — оркестратор: делегує I/O до `ImapReader`, бізнес-логіку до парсерів
+  - `imap.*IncidentParser` — по одному парсеру на тип повідомлення
+  - `report.IncidentSectionBuilder` — формування HTML-секції інцидентів (відокремлено від бізнес-логіки)
+- `net.ukrcom.noczvit.zabbix.ZabbixClient` → `net.ukrcom.noczvit.zabbix.Client` (однакова конвенція з `imap.Client` та `snmp.Client`)
+
+### Додано
+- `OspfIncidentParser` — підтримка повідомлень Zabbix `ospfNbrStateChange`; формат: «Zabbix зареєстровано початок/кінець інциденту, падіння каналу на \<router> по каналу \<channel>»; обидві назви з словника PD з `reviewNames`-маркером при відсутності
+- `AdlinkIncidentParser` — підтримка сухих контактів (dry-contact monitor); парсить `card N, port N, line N - Fault`; ключ `device:card:port:line` у словнику PD визначає опис події; ключ `device` визначає назву виносу для групування; fallback — «спрацювання сухого контакту, лінія N» + `reviewNames`
+- Дедублікація adlink-повідомлень у `imap.Client`: Zabbix надсилає кожне сповіщення двічі; пара з однаковим subject у 60-секундному вікні зводиться до першого; дедуплікація виконується до фільтрації за зміною, тому граничні дублікати (напр. 07:59:59 + 08:00:03) коректно залишаються в ранішній зміні
+- `OsmIncidentParser`: розрізнення між `Power` на кондиціонери і на виніс — за ознакою `Air Condition` у темі листа; опис: «зникнення живлення на \<location> до кондиціонерів» (без «виносі»)
+- `imap.DateUtils` — утиліта конвертації місяців (українська локаль), перенесена з `ImapClient`
+
+### Змінено
+- Словник `dictionary_pd.txt` тепер підтримує складені ключі для adlink: `^adlink-dev:card:port:line=опис події`
+- `reviewNames` — список `List<String>` у `Incident`; рендериться в `IncidentSectionBuilder` як «(потребує коригування назви '\<name>')»
+- Колонка «Дата та час» у звіті завжди показує час **отримання листа** (messageTs); час події з Trap value OSM відображається в описі через суфікс «який відбувся \<eventTime>»
+
+---
+
 ## [1.8.0] — 2026-07-28
 
 ### Додано
@@ -187,6 +213,17 @@
 
 ---
 
+[1.9.0]: https://github.com/oldengremlin/noczvit/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/oldengremlin/noczvit/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/oldengremlin/noczvit/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/oldengremlin/noczvit/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/oldengremlin/noczvit/compare/v1.4.6...v1.5.0
+[1.4.6]: https://github.com/oldengremlin/noczvit/compare/v1.4.5...v1.4.6
+[1.4.5]: https://github.com/oldengremlin/noczvit/compare/v1.4.4...v1.4.5
+[1.4.4]: https://github.com/oldengremlin/noczvit/compare/v1.4.3...v1.4.4
+[1.4.3]: https://github.com/oldengremlin/noczvit/compare/v1.4.2...v1.4.3
+[1.4.2]: https://github.com/oldengremlin/noczvit/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/oldengremlin/noczvit/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/oldengremlin/noczvit/compare/v1.3.4...v1.4.0
 [1.3.4]: https://github.com/oldengremlin/noczvit/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/oldengremlin/noczvit/compare/v1.3.2...v1.3.3

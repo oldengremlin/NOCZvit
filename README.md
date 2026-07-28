@@ -12,6 +12,177 @@ NOCZvit — Java-програма, яка автоматично формує щ
 - Отримує список боржників із MSSQL (опціонально)
 - Надсилає готовий HTML-звіт на e-mail
 
+## Схема роботи
+
+### Загальний потік
+
+```mermaid
+flowchart TD
+    CLI([java -jar NOCZvit.jar]) --> CFG[Config\nнастройки + словники]
+    CFG --> PAR{{"Паралельна ініціалізація\nvirtual threads"}}
+
+    PAR --> IMAP[imap.Client\nчитання IMAP]
+    PAR --> ZAB[zabbix.Client\nlogin]
+    PAR --> DB[(Debtors\nMSSQL)]
+
+    IMAP --> INC[/"List&lt;Incident&gt;"/]
+    ZAB  --> ZS[/ZabbixSession/]
+    DB   --> DH[/HTML боржників/]
+
+    INC & ZS --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
+    INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
+
+    ISB  --> HTML[HTML-звіт]
+    SNMP --> HTML
+    DH   --> HTML
+
+    HTML --> MAIL[EmailSender\nsendmail]
+    MAIL --> OUT([e-mail NOC])
+```
+
+### Маршрутизація IMAP-повідомлень
+
+```mermaid
+flowchart LR
+    FOLDER[IMAP-папка\nZabbix] --> RDR[ImapReader]
+    RDR --> |"List&lt;RawMessage&gt;"| DEDUP["Дедуплікація\nadlink ≤ 60 s"]
+    DEDUP --> RT{{"imap.Client\nмаршрутизація"}}
+
+    RT -->|"Unavailable by ICMP ping\nhas been restarted"| PD[PdIncidentParser\nджерело: PD]
+    RT -->|ospfNbrStateChange|                              OSPF[OspfIncidentParser\nджерело: PD]
+    RT -->|"adlink.* - Fault"|                             ADL[AdlinkIncidentParser\nджерело: PD]
+    RT -->|"Power / STM-N ≥ 2"|                           OSM[OsmIncidentParser\nджерело: OSM]
+
+    DICT[(Dictionary\nPD / SDH)] -. lookup .-> PD & OSPF & ADL & OSM
+
+    PD & OSPF & ADL & OSM -->|"Optional&lt;Incident&gt;"| LST[/"List&lt;Incident&gt;"/]
+```
+
+### Структура класів
+
+```mermaid
+classDiagram
+    class NOCZvit {
+        +main(String[] args)
+    }
+    class Config {
+        +isIncidentsEnabled() bool
+        +isZabbixEnabled() bool
+        +isDebug() bool
+    }
+    class Dictionary {
+        +lookupPD(key) String
+        +lookupSDH(key) String
+    }
+    class EmailSender {
+        +sendReport(subject, body)
+    }
+    class Debtors {
+        +toString() String
+    }
+
+    class ImapClient["imap.Client"] {
+        +prepareImapFolder() List~Incident~
+        -deduplicateAdlink()
+    }
+    class ImapReader {
+        +readMessages() List~RawMessage~
+    }
+    class RawMessage {
+        <<record>>
+        +subject() String
+        +body() String
+        +unixDate() long
+        +dateStr() String
+    }
+    class PdIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+    class OsmIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+    class OspfIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+    class AdlinkIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+
+    class Incident {
+        <<record>>
+        +location() String
+        +device() String
+        +messageTs() long
+        +eventTs() long
+        +source() Source
+        +status() Status
+        +description() String
+        +reviewNames() List~String~
+    }
+    class Source {
+        <<enumeration>>
+        PD
+        OSM
+    }
+    class Status {
+        <<enumeration>>
+        START
+        END
+        NONE
+    }
+
+    class IncidentSectionBuilder {
+        +build(incidents, zabbix, from, to) String
+    }
+    class SnmpClient["snmp.Client"] {
+        +getCelsius(from, to, zabbix) String
+        +getRamos() String
+    }
+    class ZabbixClient["zabbix.Client"] {
+        +login() bool
+        +getPingGraphRow() String
+        +getGraphRow() String
+    }
+
+    NOCZvit --> Config
+    NOCZvit --> ImapClient
+    NOCZvit --> ZabbixClient
+    NOCZvit --> SnmpClient
+    NOCZvit --> IncidentSectionBuilder
+    NOCZvit --> EmailSender
+    NOCZvit --> Debtors
+
+    ImapClient --> ImapReader
+    ImapClient --> Dictionary
+    ImapClient --> PdIncidentParser
+    ImapClient --> OsmIncidentParser
+    ImapClient --> OspfIncidentParser
+    ImapClient --> AdlinkIncidentParser
+
+    ImapReader ..> RawMessage : creates
+
+    PdIncidentParser ..> RawMessage : reads
+    PdIncidentParser ..> Dictionary : lookup
+    PdIncidentParser ..> Incident : creates
+    OsmIncidentParser ..> RawMessage : reads
+    OsmIncidentParser ..> Dictionary : lookup
+    OsmIncidentParser ..> Incident : creates
+    OspfIncidentParser ..> RawMessage : reads
+    OspfIncidentParser ..> Dictionary : lookup
+    OspfIncidentParser ..> Incident : creates
+    AdlinkIncidentParser ..> RawMessage : reads
+    AdlinkIncidentParser ..> Dictionary : lookup
+    AdlinkIncidentParser ..> Incident : creates
+
+    Incident --> Source
+    Incident --> Status
+
+    IncidentSectionBuilder ..> Incident : renders
+    IncidentSectionBuilder ..> ZabbixClient : Ping-графіки
+
+    SnmpClient ..> ZabbixClient : температурні графіки
+```
+
 ## Вимоги
 
 - **JDK**: 21 або новіше (перевірено на JDK 21 та JDK 24+)
@@ -31,12 +202,12 @@ NOCZvit — Java-програма, яка автоматично формує щ
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.6.0.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.9.0.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.6.0.jar [OPTIONS]
+java -jar target/NOCZvit-1.9.0.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -57,7 +228,7 @@ java -jar target/NOCZvit-1.6.0.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.6.0.jar --debug --no-incidents
+java -jar target/NOCZvit-1.9.0.jar --debug --no-incidents
 ```
 
 ## Налаштування
@@ -123,16 +294,31 @@ accequipment-mssql-password=secret
 ```
 NOCZvit/
 ├── src/main/java/net/ukrcom/noczvit/
-│   ├── NOCZvit.java          — точка входу
-│   ├── Config.java           — зчитування та валідація конфігурації (Lombok)
-│   ├── ImapClient.java       — читання IMAP, парсинг повідомлень
-│   ├── SnmpClient.java       — SNMP-опитування (паралельно, virtual threads)
-│   ├── Debtors.java          — список боржників із MSSQL
-│   └── ...
+│   ├── NOCZvit.java               — точка входу
+│   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
+│   ├── Dictionary.java            — словники PD/SDH (regex-lookup з кешем)
+│   ├── Debtors.java               — список боржників із MSSQL
+│   ├── imap/
+│   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
+│   │   ├── ImapReader.java        — I/O: читання сирих повідомлень з IMAP-папки
+│   │   ├── RawMessage.java        — record: незмінний DTO (subject, body, unixDate, dateStr)
+│   │   ├── PdIncidentParser.java  — Zabbix ICMP ping / restarted
+│   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події
+│   │   ├── OspfIncidentParser.java — Zabbix ospfNbrStateChange
+│   │   ├── AdlinkIncidentParser.java — сухі контакти adlink (card/port/line → словник)
+│   │   └── DateUtils.java         — конвертація місяців у локалізований рядок
+│   ├── model/
+│   │   └── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
+│   ├── report/
+│   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (групування, Ping-графіки)
+│   ├── snmp/
+│   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
+│   └── zabbix/
+│       └── Client.java            — Zabbix API + web login; host/graph lookup; chart2.php PNG
 ├── src/main/resources/
-│   ├── noczvit.properties    — конфігурація за замовчуванням
-│   ├── dictionary_pd.txt
-│   ├── dictionary_sdh.txt
+│   ├── noczvit.properties         — конфігурація за замовчуванням
+│   ├── dictionary_pd.txt          — словник PD/OSPF/adlink (regex → назва / опис)
+│   ├── dictionary_sdh.txt         — словник SDH/OSM (regex → назва виносу)
 │   ├── help.txt
 │   └── version.properties
 └── pom.xml
