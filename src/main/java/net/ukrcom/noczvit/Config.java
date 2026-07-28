@@ -101,6 +101,8 @@ public class Config {
     private String claudeApiKey;
     @NonNull
     private String claudeModel;
+    @Getter(AccessLevel.NONE)
+    private Boolean claudeExplicit; // null = not explicitly set via property or CLI
 
     @NonNull
     private String accountMssqlUser;
@@ -144,6 +146,7 @@ public class Config {
         dictionarySdhPath = null;
         claudeApiKey = "";
         claudeModel = "claude-haiku-4-5";
+        claudeExplicit = null;
     }
 
     private void loadProperties() throws IOException {
@@ -202,9 +205,9 @@ public class Config {
                 case "--no-debug" ->
                     debug = false;
                 case "--claude" ->
-                    claudeEnabled = true;
+                    claudeExplicit = true;
                 case "--no-claude" ->
-                    claudeEnabled = false;
+                    claudeExplicit = false;
                 default -> {
                     printHelp();
                     log.error("Unknown argument: {}", arg);
@@ -237,7 +240,10 @@ public class Config {
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
         zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
-        claudeEnabled = Boolean.parseBoolean(properties.getProperty("claude", "false"));
+        String claudeProp = properties.getProperty("claude");
+        if (claudeProp != null) {
+            claudeExplicit = Boolean.parseBoolean(claudeProp);
+        }
     }
 
     private void hostsProperties() {
@@ -354,6 +360,9 @@ public class Config {
         if (!model.isBlank()) {
             claudeModel = model;
         }
+        // Default: enabled in normal mode, disabled in debug mode.
+        // Explicit claude=.../--claude/--no-claude overrides the default.
+        claudeEnabled = (claudeExplicit != null) ? claudeExplicit : !debug;
         if (claudeEnabled && claudeApiKey.isBlank()) {
             log.warn("Claude summary enabled but claude.apikey is not set — disabling");
             claudeEnabled = false;
