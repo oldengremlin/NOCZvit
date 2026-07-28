@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and limitations
  * under the License.
  */
-package net.ukrcom.noczvit;
+package net.ukrcom.noczvit.snmp;
 
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.PDU;
@@ -35,9 +35,11 @@ import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.Config;
+import net.ukrcom.noczvit.ZabbixClient;
 
 @Slf4j
-public class SnmpClient {
+public class Client {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_CONCURRENT_SNMP = 10;
@@ -46,7 +48,7 @@ public class SnmpClient {
 
     private final Config config;
 
-    public SnmpClient(Config config) {
+    public Client(Config config) {
         this.config = config;
     }
 

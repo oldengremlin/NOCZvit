@@ -14,7 +14,6 @@
  */
 package net.ukrcom.noczvit;
 
-import net.ukrcom.noczvit.imap.Client;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import jakarta.mail.MessagingException;
@@ -72,7 +71,7 @@ public class NOCZvit {
 
             boolean nightShift = LocalDateTime.now().getHour() < 12;
             LocalDateTime reportFrom = nightShift ? prevDutyBegin : currDutyBegin;
-            LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
+            LocalDateTime reportTo = nightShift ? prevDutyEnd : currDutyEnd;
 
             // Parallel I/O: IMAP + Zabbix login + Debtors run concurrently
             Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = null;
@@ -85,7 +84,7 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled()) {
                     imapFuture = CompletableFuture.supplyAsync(() -> {
                         try {
-                            return new Client(config).prepareImapFolder(
+                            return new net.ukrcom.noczvit.imap.Client(config).prepareImapFolder(
                                     isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
@@ -140,40 +139,40 @@ public class NOCZvit {
 
             String subject;
             StringBuilder message = new StringBuilder(
-                "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><style>"
-                + "body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222;margin:0;padding:16px}"
-                + "h1{font-size:16px;color:#1a1a2e;margin:8px 0 4px}"
-                + "h2{font-size:13px;color:#16213e;margin:24px 0 6px;background:#e8eaf0;padding:5px 10px;border-left:4px solid #37474f}"
-                + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
-                + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
-                + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
-                + "tr:nth-child(even) td{background:#f5f7fa}"
-                + "tr.row-start td{background:#fff0f0}"
-                + "tr.row-end td{background:#f0fff0}"
-                + "tr.row-critical td{background:#fff0f0}"
-                + "tr.row-start:nth-child(even) td{background:#f5e2e2}"
-                + "tr.row-end:nth-child(even) td{background:#e2f5e2}"
-                + "tr.row-critical:nth-child(even) td{background:#f5e2e2}"
-                + "tr:hover td{background:#e8ecf5!important}"
-                + ".section{margin-bottom:20px}"
-                + ".table-debtors{box-shadow:0 0 0 2px #ef9a9a,2px 2px 6px rgba(0,0,0,.2)}"
-                + "</style></head><body>");
+                    "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><style>"
+                    + "body{font-family:Arial,sans-serif;font-size:13px;background:#f0f2f5;color:#222;margin:0;padding:16px}"
+                    + "h1{font-size:16px;color:#1a1a2e;margin:8px 0 4px}"
+                    + "h2{font-size:13px;color:#16213e;margin:24px 0 6px;background:#e8eaf0;padding:5px 10px;border-left:4px solid #37474f}"
+                    + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
+                    + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
+                    + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
+                    + "tr:nth-child(even) td{background:#f5f7fa}"
+                    + "tr.row-start td{background:#fff0f0}"
+                    + "tr.row-end td{background:#f0fff0}"
+                    + "tr.row-critical td{background:#fff0f0}"
+                    + "tr.row-start:nth-child(even) td{background:#f5e2e2}"
+                    + "tr.row-end:nth-child(even) td{background:#e2f5e2}"
+                    + "tr.row-critical:nth-child(even) td{background:#f5e2e2}"
+                    + "tr:hover td{background:#e8ecf5!important}"
+                    + ".section{margin-bottom:20px}"
+                    + ".table-debtors{box-shadow:0 0 0 2px #ef9a9a,2px 2px 6px rgba(0,0,0,.2)}"
+                    + "</style></head><body>");
 
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(Client.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup, zabbix));
+                    message.append(net.ukrcom.noczvit.imap.Client.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup, zabbix));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(Client.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
+                    message.append(net.ukrcom.noczvit.imap.Client.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
                 }
                 message.append(debtorsHtml);
             }
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
-                SnmpClient snmpClient = new SnmpClient(config);
+                net.ukrcom.noczvit.snmp.Client snmpClient = new net.ukrcom.noczvit.snmp.Client(config);
                 if (config.isTemperatureEnabled()) {
                     message.append(snmpClient.getCelsius(reportFrom, reportTo, zabbix));
                 }
