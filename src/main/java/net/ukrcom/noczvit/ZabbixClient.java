@@ -159,8 +159,10 @@ public class ZabbixClient {
     }
 
     // Returns extra <tr> row with embedded Ping graph PNG, or "" on any failure.
+    // Graph name is "Ping" (standard Zabbix template name, without hostname prefix —
+    // the web UI prepends "hostname: " for display but the API name is just "Ping").
     public String getPingGraphRow(String hostname, LocalDateTime from, LocalDateTime to) {
-        return getGraphRowForName(hostname, hostname + ": Ping", from, to,
+        return getGraphRowForName(hostname, "Ping", from, to,
                 "getPingGraphRow(" + hostname + ")");
     }
 
