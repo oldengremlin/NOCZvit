@@ -34,7 +34,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class EmailSender {
 
     private final Config config;
@@ -90,10 +92,8 @@ public class EmailSender {
         message.setContent(multipart);
         message.setHeader("X-PoweredBy", "NOCZvit v" + version);
 
-        if (config.isDebug()) {
-            System.err.println("Subject: " + subject);
-            System.err.println("Message: " + messageHtml);
-        }
+        log.debug("Subject: {}", subject);
+        log.debug("Message size: {} bytes", messageHtml.length());
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor();
              PipedInputStream in = new PipedInputStream();
@@ -133,7 +133,9 @@ public class EmailSender {
             }
             int exitCode = process.exitValue();
             if (exitCode != 0) {
-                System.err.println("sendmail failed with exit code: " + exitCode);
+                log.warn("sendmail exited with code {}", exitCode);
+            } else {
+                log.info("Report sent via {}", config.getSendmailPath());
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

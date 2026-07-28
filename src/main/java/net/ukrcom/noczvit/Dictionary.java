@@ -28,7 +28,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class Dictionary {
 
     private final Map<Pattern, String> pdDictionary;
@@ -71,7 +73,7 @@ public class Dictionary {
                 Pattern pattern = Pattern.compile(entry.getKey());
                 dictionary.put(pattern, entry.getValue());
             } catch (Exception e) {
-                System.err.println("Invalid regex pattern in dictionary: " + entry.getKey() + ", error: " + e.getMessage());
+                log.warn("Invalid regex in dictionary: {} — {}", entry.getKey(), e.getMessage());
             }
         }
     }

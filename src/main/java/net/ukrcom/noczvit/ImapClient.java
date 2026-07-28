@@ -47,8 +47,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringEscapeUtils;
 
+@Slf4j
 public class ImapClient {
 
     //private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -95,33 +97,25 @@ public class ImapClient {
 
         Session session = Session.getInstance(props);
         try (IMAPStore store = (IMAPStore) session.getStore(config.isMailSsl() ? "imaps" : "imap")) {
-            if (config.isDebug()) {
-                System.err.println("Connecting to IMAP server: " + config.getMailHostname() + ":" + (config.isMailSsl() ? "993" : "143"));
-            }
+            log.debug("Connecting to IMAP server: {}:{}", config.getMailHostname(), config.isMailSsl() ? "993" : "143");
             store.connect(config.getMailHostname(), config.getMailUsername(), config.getMailPassword());
-            if (config.isDebug()) {
-                System.err.println("Connected to IMAP server");
-            }
+            log.debug("Connected to IMAP server");
             try (IMAPFolder folder = (IMAPFolder) store.getFolder(config.getZabbixFolder())) {
                 folder.open(Folder.READ_ONLY);
-                if (isInteractive && config.isDebug()) {
-                    System.err.println("IMAP folders:");
+                if (log.isDebugEnabled()) {
+                    log.debug("IMAP folders:");
                     for (Folder f : store.getDefaultFolder().list()) {
-                        System.err.println("    " + f.getFullName());
+                        log.debug("  {}", f.getFullName());
                     }
                 }
 
                 if (folder.getMessageCount() > 0) {
-                    if (isInteractive) {
-                        System.err.println("Processing " + folder.getMessageCount() + " messages...");
-                        System.err.println("Running at: " + System.currentTimeMillis());
-                    }
+                    log.info("Processing {} messages from IMAP folder...", folder.getMessageCount());
 
                     long ctPrevDutyBegin = prevDutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
                     long ctCurrDutyEnd = currDutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
-                    if (config.isDebug()) {
-                        System.err.println("Filter period: ctPrevDutyBegin=" + ctPrevDutyBegin + " (" + prevDutyBegin + "), ctCurrDutyEnd=" + ctCurrDutyEnd + " (" + currDutyEnd + ")");
-                    }
+                    log.debug("Filter period: ctPrevDutyBegin={} ({}), ctCurrDutyEnd={} ({})",
+                            ctPrevDutyBegin, prevDutyBegin, ctCurrDutyEnd, currDutyEnd);
 
                     Message[] messages;
                     if (config.isDebug()) {
@@ -139,9 +133,7 @@ public class ImapClient {
                                 }
                             }
                         };
-                        if (isInteractive) {
-                            System.err.println("IMAP filter: [" + dateTerm.toString() + "] (sent >= " + ctPrevDutyBegin + " && sent <= " + ctCurrDutyEnd + ")");
-                        }
+                        log.info("IMAP filter: sent >= {} && sent <= {}", ctPrevDutyBegin, ctCurrDutyEnd);
                         messages = folder.search(dateTerm);
                     }
 
@@ -152,15 +144,13 @@ public class ImapClient {
                         }
                         MessageHeader mh = mhOpt.get();
 
-                        if (config.isDebug()) {
-                            System.err.println("Processing message: subject=" + mh.subject() + ", unixDate=" + mh.unixDate());
-                        }
+                        log.debug("Processing message: subject={}, unixDate={}", mh.subject(), mh.unixDate());
 
                         if (mh.subject().matches(".*(?:Unavailable by ICMP ping|has been restarted).*")) {
                             if (mh.unixDate() >= ctPrevDutyBegin && mh.unixDate() <= ctCurrDutyEnd) {
                                 proceedPD(isInteractive, mh.subject(), null, msgLogGroup, mh.unixDate(), mh.dateStr());
-                            } else if (config.isDebug()) {
-                                System.err.println("Skipping PD message due to time filter: unixDate=" + mh.unixDate());
+                            } else {
+                                log.debug("Skipping PD message due to time filter: unixDate={}", mh.unixDate());
                             }
                         } else if (mh.subject().matches(".*(?:[Pp][Oo][Ww][Ee][Rr]|STM [Ss][Tt][Mm].?[" + (config.isDebug() ? "1-9" : "2-9") + "][0-9]*).*")) {
                             Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> tempMsgLogGroup = new HashMap<>();
@@ -169,13 +159,11 @@ public class ImapClient {
                         }
                     }
 
-                    if (isInteractive) {
-                        System.err.println("\nStop at " + System.currentTimeMillis());
-                    }
+                    log.info("IMAP processing done");
                 }
             }
         } catch (MessagingException e) {
-            System.err.println("IMAP error: " + e.getMessage());
+            log.error("IMAP error: {}", e.getMessage());
             throw new RuntimeException("IMAP error: " + e.getMessage(), e);
         }
         return msgLogGroup;
@@ -231,9 +219,7 @@ public class ImapClient {
                                     .computeIfAbsent(ttsEntry.getKey(), k -> new ArrayList<>())
                                     .addAll(ttsEntry.getValue());
                         }
-                        if (config.isDebug()) {
-                            System.err.println("Merged messages: group=" + group + ", device=" + device + ", ts=" + ts + ", messages=" + existingTtsMap);
-                        }
+                        log.debug("Merged: group={}, device={}, ts={}", group, device, ts);
                     }
                 }
             }
@@ -511,16 +497,12 @@ public class ImapClient {
                 .computeIfAbsent(ts, k -> new ArrayList<>())
                 .add(dt + " : " + msg);
 
-        if (isInteractive && config.isDebug()) {
-            System.err.println("PD stored: from=" + from + ", originalFromName=" + originalFromName + ", ts=" + ts + ", dt=" + dt + ", msg=" + msg);
-        }
+        log.debug("PD stored: from={}, orig={}, ts={}", from, originalFromName, ts);
     }
 
     private void proceedSDH(boolean isInteractive, String subject, String body, Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup, long ts, String dt) {
-        if (config.isDebug()) {
-            System.err.println("Processing SDH message: subject=" + subject + ", original ts=" + ts + ", original dt=" + dt);
-            System.err.println("Raw body: " + body);
-        }
+        log.debug("Processing SDH message: subject={}, ts={}", subject, ts);
+        log.debug("Raw body: {}", body);
 
         String appendix;
         if (subject.contains("Air Conditioning")) {
@@ -579,37 +561,29 @@ public class ImapClient {
         String tdt = dt;
         for (String line : lines) {
             if (line.startsWith("Trap value:")) {
-                if (config.isDebug()) {
-                    System.err.println("Trap value line: " + line);
-                }
+                log.debug("Trap value line: {}", line);
                 // Шукаємо дату у форматі yyyy-MM-dd'T'HH:mm:ss
                 Matcher matcher = PATTERN_DATE.matcher(line);
                 if (matcher.find()) {
                     String trapDate = matcher.group();
                     try {
-
                         LocalDateTime ldt = LocalDateTime.parse(trapDate, TRAP_DATE_INPUT_FORMATTER);
                         tts = ldt.atZone(ZoneId.systemDefault()).toEpochSecond();
                         tdt = ldt.atZone(ZoneId.systemDefault()).format(TRAP_DATE_OUTPUT_FORMATTER);
-
                         trapValueFound = true;
-                        if (config.isDebug()) {
-                            System.err.println("Found Trap value date: " + trapDate + ", updated ts=" + tts + ", updated dt=" + tdt);
-                        }
+                        log.debug("Found Trap value date: {}, updated ts={}", trapDate, tts);
                     } catch (DateTimeParseException e) {
-                        if (config.isDebug()) {
-                            System.err.println("Failed to parse Trap value date: " + trapDate + ", error: " + e.getMessage());
-                        }
+                        log.warn("Failed to parse Trap value date: {} — {}", trapDate, e.getMessage());
                     }
-                } else if (config.isDebug()) {
-                    System.err.println("No date found in Trap value line with regex");
+                } else {
+                    log.debug("No date found in Trap value line");
                 }
                 break; // Обробили Trap value, виходимо
             }
         }
 
-        if (!trapValueFound && config.isDebug()) {
-            System.err.println("No Trap value date found, using original ts=" + ts + ", dt=" + dt);
+        if (!trapValueFound) {
+            log.debug("No Trap value date found, using original ts={}", ts);
         }
 
         msg = msg.replaceAll("\\s+", " ");
@@ -639,9 +613,7 @@ public class ImapClient {
                 .computeIfAbsent(tts, k -> new ArrayList<>())
                 .add(dt + " : " + msg);
 
-        if (isInteractive && config.isDebug()) {
-            System.err.println("SDH stored: from=" + from + ", to=" + to + ", ts=" + ts + ", dt=" + dt + ", msg=" + msg);
-        }
+        log.debug("SDH stored: from={}, to={}, ts={}", from, to, ts);
     }
 
     private String convertMonthNumToMnemo(String dt) {
@@ -663,18 +635,14 @@ public class ImapClient {
             try {
                 body = getTextFromMessage(msg);
             } catch (MessagingException | IOException e) {
-                if (config.isDebug()) {
-                    System.err.println("Failed to get message body: " + e.getMessage());
-                }
+                log.debug("Failed to get message body: {}", e.getMessage());
                 return Optional.empty();
             }
             long unixDate;
             try {
                 unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
             } catch (DateTimeParseException e) {
-                if (config.isDebug()) {
-                    System.err.println("Failed to parse date: " + dateStr);
-                }
+                log.debug("Failed to parse date: {}", dateStr);
                 return Optional.empty();
             }
             return Optional.of(new MessageHeader(dateStr, unixDate, subject, body));
