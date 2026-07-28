@@ -64,6 +64,16 @@ public class NOCZvit {
             LocalDateTime reportFrom = nightShift ? prevDutyBegin : currDutyBegin;
             LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
 
+            ZabbixClient zabbix = null;
+            if (config.isZabbixEnabled()) {
+                ZabbixClient zc = new ZabbixClient(config);
+                if (zc.login()) {
+                    zabbix = zc;
+                } else if (config.isDebug()) {
+                    System.err.println("Zabbix: login failed, graphs disabled");
+                }
+            }
+
             String subject;
             StringBuilder message = new StringBuilder(
                 "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><style>"
@@ -88,12 +98,12 @@ public class NOCZvit {
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(ImapClient.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup));
+                    message.append(ImapClient.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup, zabbix));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(ImapClient.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup));
+                    message.append(ImapClient.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
                 }
                 if (config.isDebtorsEnabled()) {
                     message.append(new Debtors(config));
@@ -102,15 +112,6 @@ public class NOCZvit {
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
                 SnmpClient snmpClient = new SnmpClient(config);
-                ZabbixClient zabbix = null;
-                if (config.isZabbixEnabled() && config.isTemperatureEnabled()) {
-                    ZabbixClient zc = new ZabbixClient(config);
-                    if (zc.login()) {
-                        zabbix = zc;
-                    } else if (config.isDebug()) {
-                        System.err.println("Zabbix: login failed, temperature graphs disabled");
-                    }
-                }
                 if (config.isTemperatureEnabled()) {
                     message.append(snmpClient.getCelsius(reportFrom, reportTo, zabbix));
                 }
