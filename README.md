@@ -44,18 +44,17 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    FOLDER[IMAP-папка\nZabbix] --> RDR[ImapReader]
-    RDR -->|RawMessage| DEDUP[Дедуплікація\nadlink 60s]
-    DEDUP --> RT{{"imap.Client\nмаршрутизація"}}
+    FOLDER[IMAP-папка] --> RDR[ImapReader]
+    RDR --> DEDUP[Дедуплікація adlink]
+    DEDUP --> RT{imap.Client}
 
-    RT -->|"ping / restarted"|   PD[PdIncidentParser\nджерело: PD]
-    RT -->|ospfNbrStateChange|   OSPF[OspfIncidentParser\nджерело: PD]
-    RT -->|"adlink - Fault"|     ADL[AdlinkIncidentParser\nджерело: PD]
-    RT -->|"Power / STM-N"|      OSM[OsmIncidentParser\nджерело: OSM]
+    RT -- ping/restarted --> PD[PdIncidentParser]
+    RT -- ospfNbrStateChange --> OSPF[OspfIncidentParser]
+    RT -- adlink-Fault --> ADL[AdlinkIncidentParser]
+    RT -- Power/STM-N --> OSM[OsmIncidentParser]
 
-    DICT[(Dictionary\nPD / SDH)] -.-> PD & OSPF & ADL & OSM
-
-    PD & OSPF & ADL & OSM -->|"Optional Incident"| LST[/List of Incident/]
+    DICT[(Словник)] -.-> PD & OSPF & ADL & OSM
+    PD & OSPF & ADL & OSM --> OUT[/List of Incident/]
 ```
 
 ### Структура класів
