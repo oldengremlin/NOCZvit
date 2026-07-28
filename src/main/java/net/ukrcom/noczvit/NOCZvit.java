@@ -21,6 +21,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executors;
 
 /**
  * NOC report on incidents registered automatically by Zabbix and OSM systems
@@ -31,7 +34,7 @@ public class NOCZvit {
 
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws MessagingException, IOException {
         try {
             Config config = new Config(args);
             if (!config.isValid()) {
@@ -54,24 +57,74 @@ public class NOCZvit {
             LocalDateTime currDutyBegin = LocalDateTime.parse(currentDate + " 08:00:00", DATE_TIME_FORMATTER);
             LocalDateTime currDutyEnd = LocalDateTime.parse(currentDate + " 19:59:59", DATE_TIME_FORMATTER);
 
-            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = null;
-            if (config.isIncidentsEnabled()) {
-                ImapClient imapClient = new ImapClient(config);
-                msgLogGroup = imapClient.prepareImapFolder(isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
-            }
-
             boolean nightShift = LocalDateTime.now().getHour() < 12;
             LocalDateTime reportFrom = nightShift ? prevDutyBegin : currDutyBegin;
             LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
 
+            // Parallel I/O: IMAP + Zabbix login + Debtors run concurrently
+            Map<String, Map<String, Map<Long, Map<Long, List<String>>>>> msgLogGroup = null;
             ZabbixClient zabbix = null;
-            if (config.isZabbixEnabled()) {
-                ZabbixClient zc = new ZabbixClient(config);
-                if (zc.login()) {
-                    zabbix = zc;
-                } else if (config.isDebug()) {
-                    System.err.println("Zabbix: login failed, graphs disabled");
+            String debtorsHtml = "";
+
+            try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+
+                CompletableFuture<Map<String, Map<String, Map<Long, Map<Long, List<String>>>>>> imapFuture;
+                if (config.isIncidentsEnabled()) {
+                    imapFuture = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return new ImapClient(config).prepareImapFolder(
+                                    isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }, ioExecutor);
+                } else {
+                    imapFuture = CompletableFuture.completedFuture(null);
                 }
+
+                CompletableFuture<ZabbixClient> zabbixFuture;
+                if (config.isZabbixEnabled()) {
+                    zabbixFuture = CompletableFuture.supplyAsync(() -> {
+                        ZabbixClient zc = new ZabbixClient(config);
+                        if (zc.login()) {
+                            return zc;
+                        }
+                        if (config.isDebug()) {
+                            System.err.println("Zabbix: login failed, graphs disabled");
+                        }
+                        return null;
+                    }, ioExecutor);
+                } else {
+                    zabbixFuture = CompletableFuture.completedFuture(null);
+                }
+
+                CompletableFuture<String> debtorsFuture;
+                if (!nightShift && config.isDebtorsEnabled()) {
+                    debtorsFuture = CompletableFuture.supplyAsync(
+                            () -> new Debtors(config).toString(), ioExecutor);
+                } else {
+                    debtorsFuture = CompletableFuture.completedFuture("");
+                }
+
+                try {
+                    CompletableFuture.allOf(imapFuture, zabbixFuture, debtorsFuture).join();
+                } catch (CompletionException e) {
+                    Throwable cause = e.getCause();
+                    if (cause instanceof RuntimeException re && re.getCause() instanceof MessagingException me) {
+                        throw me;
+                    }
+                    if (cause instanceof RuntimeException re && re.getCause() instanceof IOException ioe) {
+                        throw ioe;
+                    }
+                    if (cause instanceof MessagingException me) {
+                        throw me;
+                    }
+                    throw new IOException("Initialization failed: " + cause.getMessage(), cause);
+                }
+
+                msgLogGroup = imapFuture.join();
+                zabbix = zabbixFuture.join();
+                debtorsHtml = debtorsFuture.join();
             }
 
             String subject;
@@ -105,9 +158,7 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
                     message.append(ImapClient.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
                 }
-                if (config.isDebtorsEnabled()) {
-                    message.append(new Debtors(config));
-                }
+                message.append(debtorsHtml);
             }
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {

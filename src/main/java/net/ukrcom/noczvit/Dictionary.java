@@ -22,9 +22,10 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,10 +33,12 @@ public class Dictionary {
 
     private final Map<Pattern, String> pdDictionary;
     private final Map<Pattern, String> sdhDictionary;
+    private final ConcurrentHashMap<String, String> pdCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> sdhCache = new ConcurrentHashMap<>();
 
     public Dictionary(Config config) throws IOException {
-        pdDictionary = new HashMap<>();
-        sdhDictionary = new HashMap<>();
+        pdDictionary = new LinkedHashMap<>();
+        sdhDictionary = new LinkedHashMap<>();
         loadDictionary(config.getDictionaryPdPath(), "dictionary_pd.txt", pdDictionary);
         loadDictionary(config.getDictionarySdhPath(), "dictionary_sdh.txt", sdhDictionary);
     }
@@ -91,24 +94,24 @@ public class Dictionary {
     }
 
     public String lookupPD(String key) {
-        for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
-            Matcher matcher = entry.getKey().matcher(key);
-            if (matcher.find()) {
-                //return matcher.replaceAll(entry.getValue());
-                return entry.getValue();
+        return pdCache.computeIfAbsent(key, k -> {
+            for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
+                if (entry.getKey().matcher(k).find()) {
+                    return entry.getValue();
+                }
             }
-        }
-        return key;
+            return k;
+        });
     }
 
     public String lookupSDH(String key) {
-        for (Map.Entry<Pattern, String> entry : sdhDictionary.entrySet()) {
-            Matcher matcher = entry.getKey().matcher(key);
-            if (matcher.find()) {
-                //return matcher.replaceAll(entry.getValue());
-                return entry.getValue();
+        return sdhCache.computeIfAbsent(key, k -> {
+            for (Map.Entry<Pattern, String> entry : sdhDictionary.entrySet()) {
+                if (entry.getKey().matcher(k).find()) {
+                    return entry.getValue();
+                }
             }
-        }
-        return key;
+            return k;
+        });
     }
 }
