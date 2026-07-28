@@ -87,7 +87,7 @@ public class ZabbixClient {
             if (config.isDebug()) {
                 System.err.println("Zabbix API login failed: " + resp);
             }
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             if (config.isDebug()) {
                 System.err.println("Zabbix API login error: " + e.getMessage());
             }
@@ -130,21 +130,21 @@ public class ZabbixClient {
             // or if zbx_sessionid was set in cookies.
             boolean hasCookie = http.cookieHandler()
                     .map(ch -> ch instanceof CookieManager cm
-                            && cm.getCookieStore().getCookies().stream()
-                                    .anyMatch(c -> c.getName().startsWith("zbx_session")))
+                    && cm.getCookieStore().getCookies().stream()
+                            .anyMatch(c -> c.getName().startsWith("zbx_session")))
                     .orElse(false);
 
             if (config.isDebug()) {
                 System.err.println("Zabbix web session cookie present: " + hasCookie);
                 if (http.cookieHandler().isPresent()) {
                     CookieManager cm = (CookieManager) http.cookieHandler().get();
-                    cm.getCookieStore().getCookies().forEach(c ->
-                            System.err.println("  cookie: " + c.getName() + "=" + c.getValue().substring(0, Math.min(8, c.getValue().length())) + "..."));
+                    cm.getCookieStore().getCookies().forEach(c
+                            -> System.err.println("  cookie: " + c.getName() + "=" + c.getValue().substring(0, Math.min(8, c.getValue().length())) + "..."));
                 }
             }
 
             return hasCookie;
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             if (config.isDebug()) {
                 System.err.println("Zabbix web login error: " + e.getMessage());
             }
@@ -159,13 +159,19 @@ public class ZabbixClient {
         }
         try {
             String hostId = resolveHostId(shortHostname);
-            if (hostId == null) return "";
+            if (hostId == null) {
+                return "";
+            }
 
             String graphId = resolveGraphId(hostId, desc);
-            if (graphId == null) return "";
+            if (graphId == null) {
+                return "";
+            }
 
             byte[] img = downloadGraph(graphId, from, to);
-            if (img == null || img.length == 0) return "";
+            if (img == null || img.length == 0) {
+                return "";
+            }
 
             int w = config.getZabbixGraphWidth();
             int h = config.getZabbixGraphHeight();
@@ -173,7 +179,7 @@ public class ZabbixClient {
                     + "<img src=\"data:image/png;base64," + Base64.getEncoder().encodeToString(img) + "\""
                     + " width=\"" + w + "\" height=\"" + h + "\" style=\"display:block;max-width:100%\">"
                     + "</td></tr>\n";
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             if (config.isDebug()) {
                 System.err.println("Zabbix getGraphRow(" + shortHostname + ", " + desc + "): " + e.getMessage());
             }
@@ -182,7 +188,7 @@ public class ZabbixClient {
     }
 
     private String resolveHostId(String shortName) {
-        return hostIdCache.computeIfAbsent(shortName, k -> {
+        return hostIdCache.computeIfAbsent(shortName, (var k) -> {
             try {
                 JsonObject params = new JsonObject();
                 params.add("output", GSON.toJsonTree(new String[]{"hostid", "host"}));
@@ -203,7 +209,7 @@ public class ZabbixClient {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-            } catch (Exception e) {
+            } catch (IOException e) {
                 if (config.isDebug()) {
                     System.err.println("Zabbix host.get(" + shortName + "): " + e.getMessage());
                 }
@@ -239,7 +245,7 @@ public class ZabbixClient {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-            } catch (Exception e) {
+            } catch (IOException e) {
                 if (config.isDebug()) {
                     System.err.println("Zabbix graph.get(hostId=" + hostId + ", desc=" + desc + "): " + e.getMessage());
                 }
