@@ -12,6 +12,52 @@ NOCZvit — Java-програма, яка автоматично формує щ
 - Отримує список боржників із MSSQL (опціонально)
 - Надсилає готовий HTML-звіт на e-mail
 
+## Схема роботи
+
+### Загальний потік
+
+```mermaid
+flowchart TD
+    CLI([java -jar NOCZvit.jar]) --> CFG[Config\nнастройки + словники]
+    CFG --> PAR{{"Паралельна ініціалізація\nvirtual threads"}}
+
+    PAR --> IMAP[imap.Client\nчитання IMAP]
+    PAR --> ZAB[zabbix.Client\nlogin]
+    PAR --> DB[(Debtors\nMSSQL)]
+
+    IMAP --> INC[/"List&lt;Incident&gt;"/]
+    ZAB  --> ZS[/ZabbixSession/]
+    DB   --> DH[/HTML боржників/]
+
+    INC & ZS --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
+    INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
+
+    ISB  --> HTML[HTML-звіт]
+    SNMP --> HTML
+    DH   --> HTML
+
+    HTML --> MAIL[EmailSender\nsendmail]
+    MAIL --> OUT([e-mail NOC])
+```
+
+### Маршрутизація IMAP-повідомлень
+
+```mermaid
+flowchart LR
+    FOLDER[IMAP-папка\nZabbix] --> RDR[ImapReader]
+    RDR --> |"List&lt;RawMessage&gt;"| DEDUP["Дедуплікація\nadlink ≤ 60 s"]
+    DEDUP --> RT{{"imap.Client\nмаршрутизація"}}
+
+    RT -->|"Unavailable by ICMP ping\nhas been restarted"| PD[PdIncidentParser\nджерело: PD]
+    RT -->|ospfNbrStateChange|                              OSPF[OspfIncidentParser\nджерело: PD]
+    RT -->|"adlink.* - Fault"|                             ADL[AdlinkIncidentParser\nджерело: PD]
+    RT -->|"Power / STM-N ≥ 2"|                           OSM[OsmIncidentParser\nджерело: OSM]
+
+    DICT[(Dictionary\nPD / SDH)] -. lookup .-> PD & OSPF & ADL & OSM
+
+    PD & OSPF & ADL & OSM -->|"Optional&lt;Incident&gt;"| LST[/"List&lt;Incident&gt;"/]
+```
+
 ## Вимоги
 
 - **JDK**: 21 або новіше (перевірено на JDK 21 та JDK 24+)
