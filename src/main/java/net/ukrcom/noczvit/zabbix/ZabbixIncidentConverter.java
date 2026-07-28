@@ -26,16 +26,15 @@ import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
 
 /**
- * Перетворює {@link ZabbixProblem} на {@link Incident}-об'єкти для включення
- * до єдиного списку інцидентів зміни (разом з IMAP-інцидентами).
+ * Перетворює {@link ZabbixProblem} на {@link Incident}-об'єкти для відображення
+ * в таблиці звіту поряд з IMAP-інцидентами.
  *
  * <p>Правила:
  * <ul>
- *   <li>Завжди створюється START-інцидент по {@code clock}</li>
- *   <li>Якщо проблему вирішено ({@code rClock > 0}) — також END-інцидент</li>
+ *   <li>START-інцидент по {@code clock}; END-інцидент по {@code rClock} якщо вирішено</li>
  *   <li>Локація шукається у PD-словнику за hostname; якщо не знайдено —
  *       hostname залишається як локація і додається до {@code reviewNames}</li>
- *   <li>Якщо hostname починається з 'r' — у опис додається слово «маршрутизаторі»</li>
+ *   <li>Якщо hostname починається з 'r' — у опис додається «маршрутизаторі»</li>
  * </ul>
  */
 @Slf4j
@@ -64,18 +63,15 @@ public class ZabbixIncidentConverter {
         boolean needsReview = location.equals(host);
         List<String> reviewNames = needsReview ? List.of(host) : List.of();
 
-        // Якщо hostname починається з 'r' — маршрутизатор
         String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
         String descSuffix = p.name() + " на " + deviceWord + host;
 
         List<Incident> result = new ArrayList<>(2);
 
-        // START
         result.add(buildIncident(p.clock(), location, host,
                 "Zabbix зареєстровано початок інциденту, " + descSuffix,
                 Status.START, reviewNames));
 
-        // END (якщо вирішено)
         if (!p.isActive()) {
             result.add(buildIncident(p.rClock(), location, host,
                     "Zabbix зареєстровано кінець інциденту, " + descSuffix,
