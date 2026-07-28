@@ -21,6 +21,8 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -29,6 +31,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,12 +51,26 @@ public class ZabbixClient {
 
     public ZabbixClient(Config config) {
         this.config = config;
+        // CookieManager stores the zbx_sessionid from web login and sends it automatically
+        // with every subsequent request (including chart2.php).
         this.http = HttpClient.newBuilder()
+                .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .version(HttpClient.Version.HTTP_1_1)
                 .build();
     }
 
+    // Performs both API login (for host.get / graph.get) and web login (for chart2.php).
     public boolean login() {
+        boolean apiOk = apiLogin();
+        boolean webOk = webLogin();
+        if (config.isDebug()) {
+            System.err.println("Zabbix login: apiOk=" + apiOk + ", webOk=" + webOk);
+        }
+        return apiOk && webOk;
+    }
+
+    private boolean apiLogin() {
         try {
             JsonObject params = new JsonObject();
             params.addProperty("user", config.getZabbixUsername());
@@ -62,17 +79,77 @@ public class ZabbixClient {
             JsonElement result = resp.get("result");
             if (result != null && result.isJsonPrimitive()) {
                 authToken = result.getAsString();
+                if (config.isDebug()) {
+                    System.err.println("Zabbix API login OK, token=" + authToken.substring(0, 8) + "...");
+                }
                 return true;
             }
-            if (config.isDebug() && resp.has("error")) {
-                System.err.println("Zabbix login error: " + resp.get("error"));
+            if (config.isDebug()) {
+                System.err.println("Zabbix API login failed: " + resp);
             }
         } catch (Exception e) {
             if (config.isDebug()) {
-                System.err.println("Zabbix login failed: " + e.getMessage());
+                System.err.println("Zabbix API login error: " + e.getMessage());
             }
         }
         return false;
+    }
+
+    // Web login via POST to index.php — Zabbix sets zbx_sessionid cookie,
+    // which is stored in CookieManager and sent automatically with chart2.php requests.
+    private boolean webLogin() {
+        try {
+            String formBody = "name=" + URLEncoder.encode(config.getZabbixUsername(), StandardCharsets.UTF_8)
+                    + "&password=" + URLEncoder.encode(config.getZabbixPassword(), StandardCharsets.UTF_8)
+                    + "&autologin=1&enter=Sign+in";
+
+            String loginUrl = config.getZabbixUrl() + "/index.php";
+            if (config.isDebug()) {
+                System.err.println("Zabbix web login POST: " + loginUrl);
+            }
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(loginUrl))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(formBody))
+                    .build();
+
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+
+            if (config.isDebug()) {
+                System.err.println("Zabbix web login response: HTTP " + resp.statusCode()
+                        + ", final URI: " + resp.uri());
+                resp.headers().map().forEach((k, v) -> {
+                    if (k.equalsIgnoreCase("set-cookie") || k.equalsIgnoreCase("location")) {
+                        System.err.println("  " + k + ": " + v);
+                    }
+                });
+            }
+
+            // Success if we ended up anywhere other than the login page (redirected to dashboard),
+            // or if zbx_sessionid was set in cookies.
+            boolean hasCookie = http.cookieHandler()
+                    .map(ch -> ch instanceof CookieManager cm
+                            && cm.getCookieStore().getCookies().stream()
+                                    .anyMatch(c -> c.getName().startsWith("zbx_session")))
+                    .orElse(false);
+
+            if (config.isDebug()) {
+                System.err.println("Zabbix web session cookie present: " + hasCookie);
+                if (http.cookieHandler().isPresent()) {
+                    CookieManager cm = (CookieManager) http.cookieHandler().get();
+                    cm.getCookieStore().getCookies().forEach(c ->
+                            System.err.println("  cookie: " + c.getName() + "=" + c.getValue().substring(0, Math.min(8, c.getValue().length())) + "..."));
+                }
+            }
+
+            return hasCookie;
+        } catch (Exception e) {
+            if (config.isDebug()) {
+                System.err.println("Zabbix web login error: " + e.getMessage());
+            }
+            return false;
+        }
     }
 
     // Returns extra <tr> row with embedded graph PNG, or "" on any failure.
@@ -115,10 +192,14 @@ public class ZabbixClient {
 
                 JsonArray result = apiCall("host.get", params, authToken).getAsJsonArray("result");
                 if (result != null && result.size() > 0) {
-                    return result.get(0).getAsJsonObject().get("hostid").getAsString();
+                    String hostId = result.get(0).getAsJsonObject().get("hostid").getAsString();
+                    if (config.isDebug()) {
+                        System.err.println("Zabbix host.get: " + shortName + " → hostId=" + hostId);
+                    }
+                    return hostId;
                 }
                 if (config.isDebug()) {
-                    System.err.println("Zabbix: host not found: " + shortName);
+                    System.err.println("Zabbix host.get: host not found: " + shortName);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -135,19 +216,26 @@ public class ZabbixClient {
         String cacheKey = hostId + "\0" + desc;
         return graphIdCache.computeIfAbsent(cacheKey, k -> {
             try {
+                String searchName = desc + ": Temperature";
                 JsonObject params = new JsonObject();
                 params.add("output", GSON.toJsonTree(new String[]{"graphid", "name"}));
                 params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
                 JsonObject search = new JsonObject();
-                search.addProperty("name", desc + ": Temperature");
+                search.addProperty("name", searchName);
                 params.add("search", search);
 
                 JsonArray result = apiCall("graph.get", params, authToken).getAsJsonArray("result");
                 if (result != null && result.size() > 0) {
-                    return result.get(0).getAsJsonObject().get("graphid").getAsString();
+                    String graphId = result.get(0).getAsJsonObject().get("graphid").getAsString();
+                    String graphName = result.get(0).getAsJsonObject().get("name").getAsString();
+                    if (config.isDebug()) {
+                        System.err.println("Zabbix graph.get: hostId=" + hostId + " search='" + searchName
+                                + "' → graphId=" + graphId + " name='" + graphName + "'");
+                    }
+                    return graphId;
                 }
                 if (config.isDebug()) {
-                    System.err.println("Zabbix: graph not found for hostId=" + hostId + " desc=" + desc);
+                    System.err.println("Zabbix graph.get: no graph found for hostId=" + hostId + " search='" + searchName + "'");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -169,19 +257,50 @@ public class ZabbixClient {
                 + "&width=" + config.getZabbixGraphWidth()
                 + "&profileIdx=web.charts.filter";
 
+        if (config.isDebug()) {
+            System.err.println("Zabbix chart2.php GET: " + url);
+        }
+
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Cookie", "zbx_sessionid=" + authToken)
                 .GET()
                 .build();
 
         HttpResponse<byte[]> resp = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
+        String contentType = resp.headers().firstValue("Content-Type").orElse("unknown");
+
+        if (config.isDebug()) {
+            System.err.println("Zabbix chart2.php response: HTTP " + resp.statusCode()
+                    + ", Content-Type: " + contentType
+                    + ", size: " + resp.body().length + " bytes");
+        }
+
         if (resp.statusCode() != 200) {
             if (config.isDebug()) {
-                System.err.println("Zabbix chart2.php HTTP " + resp.statusCode() + " for graphId=" + graphId);
+                System.err.println("Zabbix chart2.php non-200 status for graphId=" + graphId);
             }
             return null;
         }
+
+        if (!contentType.startsWith("image/")) {
+            if (config.isDebug()) {
+                byte[] preview = Arrays.copyOf(resp.body(), Math.min(resp.body().length, 300));
+                System.err.println("Zabbix chart2.php returned non-image (" + contentType + "): "
+                        + new String(preview, StandardCharsets.UTF_8).replaceAll("\\s+", " "));
+            }
+            return null;
+        }
+
+        // Verify PNG magic bytes
+        if (resp.body().length < 4
+                || resp.body()[0] != (byte) 0x89 || resp.body()[1] != 0x50
+                || resp.body()[2] != 0x4e || resp.body()[3] != 0x47) {
+            if (config.isDebug()) {
+                System.err.println("Zabbix chart2.php: Content-Type is image but PNG magic missing, graphId=" + graphId);
+            }
+            return null;
+        }
+
         return resp.body();
     }
 
