@@ -56,7 +56,7 @@ public class Debtors {
 
     private void getDebtors() {
         returnMessage.append("<p>\n<h1>Список тимчасово заблокованих абонентів</h1>\n")
-                .append("<table class=\"table-debtors\" width=\"75%\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<table class=\"table-debtors\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
                 .append("<th style=\"width:30px\">№</th>")
                 .append("<th>Абонент</th>")
