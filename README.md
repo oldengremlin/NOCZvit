@@ -58,6 +58,131 @@ flowchart LR
     PD & OSPF & ADL & OSM -->|"Optional&lt;Incident&gt;"| LST[/"List&lt;Incident&gt;"/]
 ```
 
+### Структура класів
+
+```mermaid
+classDiagram
+    class NOCZvit {
+        +main(String[] args)
+    }
+    class Config {
+        +isIncidentsEnabled() bool
+        +isZabbixEnabled() bool
+        +isDebug() bool
+    }
+    class Dictionary {
+        +lookupPD(key) String
+        +lookupSDH(key) String
+    }
+    class EmailSender {
+        +sendReport(subject, body)
+    }
+    class Debtors {
+        +toString() String
+    }
+
+    class ImapClient["imap.Client"] {
+        +prepareImapFolder() List~Incident~
+        -deduplicateAdlink()
+    }
+    class ImapReader {
+        +readMessages() List~RawMessage~
+    }
+    class RawMessage {
+        <<record>>
+        +subject() String
+        +body() String
+        +unixDate() long
+        +dateStr() String
+    }
+    class PdIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+    class OsmIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+    class OspfIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+    class AdlinkIncidentParser {
+        +parse(msg) Optional~Incident~
+    }
+
+    class Incident {
+        <<record>>
+        +location() String
+        +device() String
+        +messageTs() long
+        +eventTs() long
+        +source() Source
+        +status() Status
+        +description() String
+        +reviewNames() List~String~
+    }
+    class Source {
+        <<enumeration>>
+        PD
+        OSM
+    }
+    class Status {
+        <<enumeration>>
+        START
+        END
+        NONE
+    }
+
+    class IncidentSectionBuilder {
+        +build(incidents, zabbix, from, to) String
+    }
+    class SnmpClient["snmp.Client"] {
+        +getCelsius(from, to, zabbix) String
+        +getRamos() String
+    }
+    class ZabbixClient["zabbix.Client"] {
+        +login() bool
+        +getPingGraphRow() String
+        +getGraphRow() String
+    }
+
+    NOCZvit --> Config
+    NOCZvit --> ImapClient
+    NOCZvit --> ZabbixClient
+    NOCZvit --> SnmpClient
+    NOCZvit --> IncidentSectionBuilder
+    NOCZvit --> EmailSender
+    NOCZvit --> Debtors
+
+    ImapClient --> ImapReader
+    ImapClient --> Dictionary
+    ImapClient --> PdIncidentParser
+    ImapClient --> OsmIncidentParser
+    ImapClient --> OspfIncidentParser
+    ImapClient --> AdlinkIncidentParser
+
+    ImapReader ..> RawMessage : creates
+
+    PdIncidentParser ..> RawMessage : reads
+    PdIncidentParser ..> Dictionary : lookup
+    PdIncidentParser ..> Incident : creates
+    OsmIncidentParser ..> RawMessage : reads
+    OsmIncidentParser ..> Dictionary : lookup
+    OsmIncidentParser ..> Incident : creates
+    OspfIncidentParser ..> RawMessage : reads
+    OspfIncidentParser ..> Dictionary : lookup
+    OspfIncidentParser ..> Incident : creates
+    AdlinkIncidentParser ..> RawMessage : reads
+    AdlinkIncidentParser ..> Dictionary : lookup
+    AdlinkIncidentParser ..> Incident : creates
+
+    Incident --> Source
+    Incident --> Status
+
+    IncidentSectionBuilder ..> Incident : renders
+    IncidentSectionBuilder ..> ZabbixClient : Ping-графіки
+
+    SnmpClient ..> ZabbixClient : температурні графіки
+```
+
 ## Вимоги
 
 - **JDK**: 21 або новіше (перевірено на JDK 21 та JDK 24+)
