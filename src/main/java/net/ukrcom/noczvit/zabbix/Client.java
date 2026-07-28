@@ -30,9 +30,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
@@ -128,6 +132,56 @@ public class Client {
         } catch (IOException | InterruptedException e) {
             log.warn("Zabbix web login error: {}", e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Повертає список подій Zabbix за вказаний період зміни.
+     * Запитує problem.get з фільтром по time_from/time_till (час початку проблеми).
+     * Повертає порожній список при будь-якій помилці або якщо авторизація не виконана.
+     */
+    public List<ZabbixProblem> getProblems(LocalDateTime from, LocalDateTime to) {
+        if (authToken == null) {
+            return Collections.emptyList();
+        }
+
+        long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long ctTo   = to.atZone(ZoneId.systemDefault()).toEpochSecond();
+
+        try {
+            JsonObject params = new JsonObject();
+            params.addProperty("time_from", ctFrom);
+            params.addProperty("time_till", ctTo);
+            params.add("output", GSON.toJsonTree(new String[]{"eventid", "name", "clock", "r_clock"}));
+            params.add("selectHosts", GSON.toJsonTree(new String[]{"host"}));
+
+            JsonObject resp = apiCall("problem.get", params, authToken);
+            JsonArray result = resp.getAsJsonArray("result");
+            if (result == null) {
+                return Collections.emptyList();
+            }
+
+            List<ZabbixProblem> problems = new ArrayList<>(result.size());
+            for (JsonElement el : result) {
+                JsonObject obj = el.getAsJsonObject();
+                String name  = obj.get("name").getAsString();
+                long clock   = obj.get("clock").getAsLong();
+                long rClock  = obj.get("r_clock").getAsLong();
+
+                JsonArray hosts = obj.getAsJsonArray("hosts");
+                String host = (hosts != null && !hosts.isEmpty())
+                        ? hosts.get(0).getAsJsonObject().get("host").getAsString()
+                        : "";
+
+                problems.add(new ZabbixProblem(host, name, clock, rClock));
+            }
+
+            log.debug("Zabbix problem.get: {} подій у [{}, {}]", problems.size(), from, to);
+            return problems;
+
+        } catch (IOException | InterruptedException e) {
+            log.warn("Zabbix problem.get помилка: {}", e.getMessage());
+            return Collections.emptyList();
         }
     }
 
