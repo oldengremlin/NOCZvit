@@ -22,7 +22,7 @@ import net.ukrcom.noczvit.model.Incident;
  * Фільтрує та дедублікує події Zabbix відносно до переліку інцидентів IMAP.
  *
  * <p>IMAP-папка є основним джерелом даних. Zabbix — вторинним.
- * Тому виключаємо:
+ * Виключаємо:
  * <ul>
  *   <li>хост SDH-OSM (події OSM вже присутні через OsmIncidentParser)</li>
  *   <li>проблеми "No SNMP data collection" (технічний шум моніторингу)</li>
@@ -45,7 +45,7 @@ public class ProblemFilter {
     /**
      * Повертає відфільтрований список подій, що не дублюються в IMAP.
      *
-     * @param problems     повний список подій Zabbix за зміну
+     * @param problems      повний список подій Zabbix за зміну
      * @param imapIncidents інциденти, вже присутні з IMAP-джерела
      * @return відфільтрований список
      */

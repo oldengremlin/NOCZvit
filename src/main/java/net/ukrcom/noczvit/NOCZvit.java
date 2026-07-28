@@ -14,7 +14,6 @@
  */
 package net.ukrcom.noczvit;
 
-import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
@@ -59,6 +58,7 @@ public class NOCZvit {
         try {
             Config config = new Config(args);
             Dictionary dictionary = new Dictionary(config);
+
             if (!config.isValid()) {
                 log.error("Invalid configuration. Ensure all required email properties are set.");
                 System.exit(1);
@@ -110,17 +110,16 @@ public class NOCZvit {
                         if (zc.login()) {
                             return zc;
                         }
-                        log.warn("Zabbix: логін не вдався, графіки та події вимкнено");
+                        log.warn("Zabbix: login failed, graphs disabled");
                         return null;
                     }, ioExecutor);
                 } else {
                     zabbixFuture = CompletableFuture.completedFuture(null);
                 }
 
-                // Завантажуємо події Zabbix після успішного логіну, тільки якщо Claude увімкнений.
-                // Якщо Zabbix недоступний (null), повертаємо порожній список.
+                // Завантажуємо Zabbix-події після логіну (якщо Zabbix недоступний — порожній список).
                 CompletableFuture<List<ZabbixProblem>> zabbixProblemsFuture;
-                if (config.isZabbixEnabled() && config.isClaudeEnabled()) {
+                if (config.isZabbixEnabled() && config.isIncidentsEnabled()) {
                     zabbixProblemsFuture = zabbixFuture.thenApplyAsync(zc -> {
                         if (zc == null) return Collections.<ZabbixProblem>emptyList();
                         return zc.getProblems(reportFrom, reportTo);
@@ -159,6 +158,19 @@ public class NOCZvit {
                 debtorsHtml    = debtorsFuture.join();
             }
 
+            // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP для таблиці.
+            // Claude отримує лише оригінальний список IMAP (incidents) — без змін.
+            ZabbixIncidentConverter zabbixConverter = new ZabbixIncidentConverter(dictionary);
+            List<Incident> zabbixIncidents = (incidents != null)
+                    ? ProblemFilter.filter(zabbixProblems, incidents).stream()
+                            .flatMap(p -> zabbixConverter.convert(p).stream())
+                            .toList()
+                    : Collections.emptyList();
+
+            List<Incident> incidentsForTable = (incidents != null)
+                    ? Stream.concat(incidents.stream(), zabbixIncidents.stream()).toList()
+                    : Collections.emptyList();
+
             String subject;
             StringBuilder message = new StringBuilder(
                     "<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\"><style>"
@@ -181,34 +193,22 @@ public class NOCZvit {
                     + "</style></head><body>");
 
             IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
+            // Claude отримує лише incidents (IMAP) — Zabbix-події до мовної моделі не йдуть
             SummaryClient summaryClient = config.isClaudeEnabled() ? new SummaryClient(config) : null;
-            ZabbixIncidentConverter zabbixConverter = new ZabbixIncidentConverter(dictionary);
-
-            // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP-переліком.
-            // Результат передається лише в Claude — HTML-таблиця інцидентів залишається незмінною.
-            List<Incident> zabbixIncidents = (summaryClient != null && incidents != null)
-                    ? ProblemFilter.filter(zabbixProblems, incidents).stream()
-                            .flatMap(p -> zabbixConverter.convert(p).stream())
-                            .toList()
-                    : Collections.emptyList();
-
-            List<Incident> incidentsForClaude = (incidents != null)
-                    ? Stream.concat(incidents.stream(), zabbixIncidents.stream()).toList()
-                    : Collections.emptyList();
 
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidentsForClaude, prevDutyBegin, prevDutyEnd) : null;
-                    message.append(incidentBuilder.build(incidentsForClaude, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
+                            ? summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd) : null;
+                    message.append(incidentBuilder.build(incidentsForTable, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidentsForClaude, currDutyBegin, currDutyEnd) : null;
-                    message.append(incidentBuilder.build(incidentsForClaude, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
+                            ? summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd) : null;
+                    message.append(incidentBuilder.build(incidentsForTable, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
             }
