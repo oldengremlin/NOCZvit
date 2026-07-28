@@ -31,12 +31,12 @@ NOCZvit — Java-програма, яка автоматично формує щ
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.6.0.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.9.0.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.6.0.jar [OPTIONS]
+java -jar target/NOCZvit-1.9.0.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -57,7 +57,7 @@ java -jar target/NOCZvit-1.6.0.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.6.0.jar --debug --no-incidents
+java -jar target/NOCZvit-1.9.0.jar --debug --no-incidents
 ```
 
 ## Налаштування
@@ -123,16 +123,31 @@ accequipment-mssql-password=secret
 ```
 NOCZvit/
 ├── src/main/java/net/ukrcom/noczvit/
-│   ├── NOCZvit.java          — точка входу
-│   ├── Config.java           — зчитування та валідація конфігурації (Lombok)
-│   ├── ImapClient.java       — читання IMAP, парсинг повідомлень
-│   ├── SnmpClient.java       — SNMP-опитування (паралельно, virtual threads)
-│   ├── Debtors.java          — список боржників із MSSQL
-│   └── ...
+│   ├── NOCZvit.java               — точка входу
+│   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
+│   ├── Dictionary.java            — словники PD/SDH (regex-lookup з кешем)
+│   ├── Debtors.java               — список боржників із MSSQL
+│   ├── imap/
+│   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
+│   │   ├── ImapReader.java        — I/O: читання сирих повідомлень з IMAP-папки
+│   │   ├── RawMessage.java        — record: незмінний DTO (subject, body, unixDate, dateStr)
+│   │   ├── PdIncidentParser.java  — Zabbix ICMP ping / restarted
+│   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події
+│   │   ├── OspfIncidentParser.java — Zabbix ospfNbrStateChange
+│   │   ├── AdlinkIncidentParser.java — сухі контакти adlink (card/port/line → словник)
+│   │   └── DateUtils.java         — конвертація місяців у локалізований рядок
+│   ├── model/
+│   │   └── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
+│   ├── report/
+│   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (групування, Ping-графіки)
+│   ├── snmp/
+│   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
+│   └── zabbix/
+│       └── Client.java            — Zabbix API + web login; host/graph lookup; chart2.php PNG
 ├── src/main/resources/
-│   ├── noczvit.properties    — конфігурація за замовчуванням
-│   ├── dictionary_pd.txt
-│   ├── dictionary_sdh.txt
+│   ├── noczvit.properties         — конфігурація за замовчуванням
+│   ├── dictionary_pd.txt          — словник PD/OSPF/adlink (regex → назва / опис)
+│   ├── dictionary_sdh.txt         — словник SDH/OSM (regex → назва виносу)
 │   ├── help.txt
 │   └── version.properties
 └── pom.xml
