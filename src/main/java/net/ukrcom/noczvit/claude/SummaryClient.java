@@ -148,13 +148,15 @@ public class SummaryClient {
         if (!zabbixProblems.isEmpty()) {
             sb.append("\nДодаткові події Zabbix (").append(zabbixProblems.size())
               .append(" шт., не включені до основного переліку):\n");
+            sb.append("УВАГА: при написанні резюме ОБОВ'ЯЗКОВО вказуй значення поля \"Пристрій\".\n");
             int n = 0;
             for (ZabbixProblem p : zabbixProblems) {
                 LocalDateTime dt = Instant.ofEpochSecond(p.clock())
                         .atZone(ZoneId.systemDefault()).toLocalDateTime();
                 sb.append(++n).append(". ");
+                sb.append("Пристрій: ").append(p.host()).append(", ");
                 sb.append("[").append(dt.format(TS_FORMAT)).append("] ");
-                sb.append(p.host()).append(" — ").append(p.name());
+                sb.append(p.name());
                 if (p.isActive()) {
                     sb.append(" [АКТИВНА]");
                 } else {
