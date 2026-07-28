@@ -165,18 +165,16 @@ public class NOCZvit {
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
-                    if (summaryClient != null) {
-                        message.append(summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd));
-                    }
-                    message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd));
+                    String summaryHtml = summaryClient != null
+                            ? summaryClient.generateSummary(incidents, prevDutyBegin, prevDutyEnd) : null;
+                    message.append(incidentBuilder.build(incidents, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
-                    if (summaryClient != null) {
-                        message.append(summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd));
-                    }
-                    message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd));
+                    String summaryHtml = summaryClient != null
+                            ? summaryClient.generateSummary(incidents, currDutyBegin, currDutyEnd) : null;
+                    message.append(incidentBuilder.build(incidents, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
             }
