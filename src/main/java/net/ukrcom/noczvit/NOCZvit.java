@@ -14,6 +14,7 @@
  */
 package net.ukrcom.noczvit;
 
+import net.ukrcom.noczvit.imap.Client;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import jakarta.mail.MessagingException;
@@ -84,7 +85,7 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled()) {
                     imapFuture = CompletableFuture.supplyAsync(() -> {
                         try {
-                            return new ImapClient(config).prepareImapFolder(
+                            return new Client(config).prepareImapFolder(
                                     isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
@@ -161,12 +162,12 @@ public class NOCZvit {
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(ImapClient.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup, zabbix));
+                    message.append(Client.formatReport(config, prevDutyBegin, prevDutyEnd, msgLogGroup, zabbix));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && msgLogGroup != null) {
-                    message.append(ImapClient.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
+                    message.append(Client.formatReport(config, currDutyBegin, currDutyEnd, msgLogGroup, zabbix));
                 }
                 message.append(debtorsHtml);
             }

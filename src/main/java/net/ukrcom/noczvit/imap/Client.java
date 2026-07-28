@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and limitations
  * under the License.
  */
-package net.ukrcom.noczvit;
+package net.ukrcom.noczvit.imap;
 
 import com.sun.mail.imap.IMAPFolder;
 import com.sun.mail.imap.IMAPStore;
@@ -48,10 +48,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.Config;
+import net.ukrcom.noczvit.Dictionary;
+import net.ukrcom.noczvit.NOCZvit;
+import net.ukrcom.noczvit.ZabbixClient;
 import org.apache.commons.text.StringEscapeUtils;
 
 @Slf4j
-public class ImapClient {
+public class Client {
 
     //private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
@@ -78,7 +82,7 @@ public class ImapClient {
 
     }
 
-    public ImapClient(Config config) throws IOException {
+    public Client(Config config) throws IOException {
         this.config = config;
         this.dictionary = new Dictionary(config);
     }
@@ -647,7 +651,7 @@ public class ImapClient {
             }
             return Optional.of(new MessageHeader(dateStr, unixDate, subject, body));
         } catch (MessagingException ex) {
-            System.getLogger(ImapClient.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
+            System.getLogger(Client.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
             return Optional.empty();
         }
     }
