@@ -42,6 +42,9 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.apache.commons.text.StringEscapeUtils;
@@ -63,7 +66,7 @@ public class ImapClient {
     private static final DateTimeFormatter TRAP_DATE_INPUT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter TRAP_DATE_OUTPUT_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
-    private final String PATTERN_ORIGINALFROMNAME = Pattern.compile(":$").pattern();
+    private static final String PATTERN_ORIGINALFROMNAME = ":$";
     private final Pattern PATTERN_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
 
     private final Config config;
@@ -173,7 +176,7 @@ public class ImapClient {
             }
         } catch (MessagingException e) {
             System.err.println("IMAP error: " + e.getMessage());
-            System.exit(2);
+            throw new RuntimeException("IMAP error: " + e.getMessage(), e);
         }
         return msgLogGroup;
     }
@@ -212,21 +215,20 @@ public class ImapClient {
                                         boolean isInteractive,
                                         Config config) {
 
-        for (String group : tempMsgLogGroup.keySet()) {
-            for (String device : tempMsgLogGroup.get(group).keySet()) {
-                for (Long ts : tempMsgLogGroup.get(group).get(device).keySet()) {
+        for (var groupEntry : tempMsgLogGroup.entrySet()) {
+            String group = groupEntry.getKey();
+            for (var deviceEntry : groupEntry.getValue().entrySet()) {
+                String device = deviceEntry.getKey();
+                for (var tsEntry : deviceEntry.getValue().entrySet()) {
+                    Long ts = tsEntry.getKey();
                     if (ts >= ctPrevDutyBegin && ts <= ctCurrDutyEnd) {
                         Map<Long, List<String>> existingTtsMap = msgLogGroup
                                 .computeIfAbsent(group, k -> new HashMap<>())
                                 .computeIfAbsent(device, k -> new HashMap<>())
                                 .computeIfAbsent(ts, k -> new HashMap<>());
-                        // Додаємо всі tts-повідомлення
-                        for (Map.Entry<Long, List<String>> ttsEntry : tempMsgLogGroup.get(group).get(device).get(ts).entrySet()) {
+                        for (Map.Entry<Long, List<String>> ttsEntry : tsEntry.getValue().entrySet()) {
                             existingTtsMap
-                                    .computeIfAbsent(
-                                            ttsEntry.getKey(),
-                                            k -> new ArrayList<>()
-                                    )
+                                    .computeIfAbsent(ttsEntry.getKey(), k -> new ArrayList<>())
                                     .addAll(ttsEntry.getValue());
                         }
                         if (config.isDebug()) {
@@ -411,11 +413,29 @@ public class ImapClient {
                         .append("</tr>\n");
             });
             if (zabbix != null) {
-                groupIncidents.stream()
+                List<String> pingDevices = groupIncidents.stream()
                         .map(Incident::device)
                         .filter(d -> !d.isEmpty())
                         .distinct()
-                        .forEach(device -> html.append(zabbix.getPingGraphRow(device, dutyBegin, dutyEnd)));
+                        .toList();
+                if (!pingDevices.isEmpty()) {
+                    try (var pingExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+                        List<CompletableFuture<String>> pingFutures = pingDevices.stream()
+                                .map(device -> CompletableFuture.supplyAsync(
+                                        () -> zabbix.getPingGraphRow(device, dutyBegin, dutyEnd),
+                                        pingExecutor))
+                                .toList();
+                        CompletableFuture.allOf(pingFutures.toArray(new CompletableFuture[0])).join();
+                        pingFutures.forEach(f -> {
+                            try {
+                                html.append(f.get());
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            } catch (ExecutionException ignored) {
+                            }
+                        });
+                    }
+                }
             }
             html.append("</tbody></table>\n</div>\n");
         });
@@ -627,7 +647,7 @@ public class ImapClient {
     private String convertMonthNumToMnemo(String dt) {
         dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\+\\d{4}$", "");
         Matcher matcher = MONTH_PATTERN.matcher(dt);
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
             matcher.appendReplacement(sb, MONTH_MAP.get(matcher.group()));
         }
