@@ -71,7 +71,7 @@ public class OspfIncidentParser {
 
         log.debug("OSPF parsed: router={}, channel={}, ts={}", router, channel, msg.unixDate());
         return Optional.of(new Incident(
-                router, "",
+                router, originalRouter,
                 msg.unixDate(), msg.unixDate(),
                 dateLoc, dateLoc,
                 Source.PD, status,

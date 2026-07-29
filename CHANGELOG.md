@@ -6,6 +6,20 @@
 
 ---
 
+## [1.11.3] — 2026-07-29
+
+### Змінено
+- `SummaryClient.buildHtml()`: заголовок секції резюме тепер залежить від часу початку зміни — «Резюме зміни» для денної (08:00–19:59) та «Резюме за звітний період» для нічної (20:00–07:59)
+
+---
+
+## [1.11.2] — 2026-07-29
+
+### Виправлено
+- `OspfIncidentParser`: колонка «Обладнання» в таблиці звіту була порожньою для OSPF-інцидентів — `device` передавався як `""` замість `originalRouter` (raw hostname до підстановки зі словника)
+
+---
+
 ## [1.11.1] — 2026-07-29
 
 ### Змінено (уточнення промпту Claude)
@@ -258,6 +272,8 @@
 
 ---
 
+[1.11.3]: https://github.com/oldengremlin/noczvit/compare/v1.11.2...v1.11.3
+[1.11.2]: https://github.com/oldengremlin/noczvit/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/oldengremlin/noczvit/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/oldengremlin/noczvit/compare/v1.10.0...v1.11.0
 [1.9.0]: https://github.com/oldengremlin/noczvit/compare/v1.8.0...v1.9.0
