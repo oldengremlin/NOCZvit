@@ -33,6 +33,16 @@ import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Application configuration loaded from a properties file and overridden by CLI arguments.
+ *
+ * <p>Construction sequence (all called from the constructor in order):
+ * {@link #initValues()} → {@link #parsePathArgs(String[])} → {@link #loadProperties()} →
+ * {@link #generalProperties()} → {@link #parseFlagArgs(String[])} →
+ * {@link #hostsProperties()} → {@link #ramosProperties()} → {@link #celsiusProperties()} →
+ * {@link #emailProperties()} → {@link #mssqlProperties()} → {@link #zabbixProperties()} →
+ * {@link #claudeProperties()}.
+ */
 @Slf4j
 @ToString(includeFieldNames = true)
 @EqualsAndHashCode
@@ -121,6 +131,12 @@ public class Config {
     @NonNull
     private String accequipmentMssqlDatabase;
 
+    /**
+     * Loads and validates the full configuration.
+     *
+     * @param args CLI arguments passed to {@code main()}
+     * @throws IOException if the properties file or a dictionary file cannot be read
+     */
     public Config(String[] args) throws IOException {
         initValues();
         parsePathArgs(args);
@@ -136,6 +152,7 @@ public class Config {
         claudeProperties();
     }
 
+    /** Sets safe defaults for all fields before any properties or CLI arguments are applied. */
     private void initValues() {
         properties = new Properties();
         hosts = Collections.emptyMap();
@@ -149,6 +166,12 @@ public class Config {
         claudeExplicit = null;
     }
 
+    /**
+     * Loads properties from the file pointed to by {@code --config=}, or from the bundled
+     * {@code noczvit.properties} resource when no external path was given.
+     *
+     * @throws IOException if the file is missing or unreadable
+     */
     private void loadProperties() throws IOException {
         if (configPath != null) {
             try (InputStream input = new FileInputStream(configPath)) {
@@ -166,6 +189,10 @@ public class Config {
         }
     }
 
+    /**
+     * Scans {@code args} for path-type arguments ({@code --config=}, {@code --dictionarypd=},
+     * {@code --dictionarysdh=}) that must be known before properties are loaded.
+     */
     private void parsePathArgs(String[] args) {
         for (String arg : args) {
             if (arg.startsWith("--config=")) {
@@ -178,6 +205,10 @@ public class Config {
         }
     }
 
+    /**
+     * Processes boolean and feature-toggle CLI flags ({@code --incidents}, {@code --debug},
+     * {@code --claude}, etc.). Prints help and exits on any unrecognised argument.
+     */
     private void parseFlagArgs(String[] args) {
         for (String arg : args) {
             if (arg.startsWith("--config=") || arg.startsWith("--dictionarypd=") || arg.startsWith("--dictionarysdh=")) {
@@ -217,6 +248,7 @@ public class Config {
         }
     }
 
+    /** Prints the bundled {@code help.txt} resource to stderr. */
     private void printHelp() {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(HELP_PATH)) {
             if (input == null) {
@@ -234,6 +266,7 @@ public class Config {
         }
     }
 
+    /** Reads top-level boolean flags ({@code debug}, {@code incidents}, etc.) from properties. */
     private void generalProperties() {
         debug = Boolean.parseBoolean(properties.getProperty("debug", "false"));
         incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
@@ -246,6 +279,10 @@ public class Config {
         }
     }
 
+    /**
+     * Parses {@code snmp.hosts} into an immutable {@code Map<hostname, Map<attr, value>>}.
+     * Each entry has the form {@code hostname:key=val;key=val,...}.
+     */
     private void hostsProperties() {
         Map<String, Map<String, String>> mutableHosts = new HashMap<>();
         String hostsStr = properties.getProperty("snmp.hosts");
@@ -268,6 +305,10 @@ public class Config {
         hosts = Collections.unmodifiableMap(mutableHosts);
     }
 
+    /**
+     * Parses {@code snmp.ramos} into an immutable {@code Map<ip, Map<attr, value>>}.
+     * Each entry has the form {@code ip:key=val;key=val,...}.
+     */
     private void ramosProperties() {
         Map<String, Map<String, String>> mutableRamos = new HashMap<>();
         String ramosStr = properties.getProperty("snmp.ramos");
@@ -290,6 +331,7 @@ public class Config {
         ramos = Collections.unmodifiableMap(mutableRamos);
     }
 
+    /** Reads SNMP community strings and OID settings for Celsius / temperature polling. */
     private void celsiusProperties() {
         jnxOperatingDescr = properties.getProperty("snmp.jnxOperatingDescr");
         jnxOperatingTemp = properties.getProperty("snmp.jnxOperatingTemp");
@@ -299,6 +341,7 @@ public class Config {
         snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
     }
 
+    /** Reads Zabbix API URL, credentials, and graph dimensions from properties. */
     private void zabbixProperties() {
         zabbixApi = properties.getProperty("zabbix.api", "");
         zabbixUrl = properties.getProperty("zabbix.url", "");
@@ -308,6 +351,9 @@ public class Config {
         zabbixGraphHeight = parseIntSafe(properties.getProperty("zabbix.graphheight"), 83);
     }
 
+    /**
+     * Parses an integer property value, returning {@code defaultValue} on null or format error.
+     */
     private int parseIntSafe(String value, int defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -319,6 +365,7 @@ public class Config {
         }
     }
 
+    /** Reads MSSQL credentials for both the account DB and accequipment DB. */
     private void mssqlProperties() {
         accountMssqlUser = properties.getProperty("account-mssql-user", "");
         accountMssqlPassword = properties.getProperty("account-mssql-password", "");
@@ -330,6 +377,7 @@ public class Config {
         accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
     }
 
+    /** Reads IMAP and SMTP/sendmail settings together with email address lists. */
     private void emailProperties() {
         mailHostname = properties.getProperty("mail.hostname");
         mailUsername = properties.getProperty("mail.username");
@@ -351,6 +399,13 @@ public class Config {
         emailTo = toList;
     }
 
+    /**
+     * Reads Claude AI settings and resolves the effective {@code claudeEnabled} flag.
+     *
+     * <p>Priority order: CLI flag ({@code --claude} / {@code --no-claude}) overrides the
+     * {@code claude} property, which overrides the default (enabled iff not in debug mode).
+     * Claude is auto-disabled when {@code claude.apikey} is blank.
+     */
     private void claudeProperties() {
         String key = stripInlineComment(properties.getProperty("claude.apikey", ""));
         if (!key.isBlank()) {
@@ -369,6 +424,10 @@ public class Config {
         }
     }
 
+    /**
+     * Strips a trailing inline comment ({@code # ...}) from a property value and trims whitespace.
+     * Returns an empty string for null input.
+     */
     private static String stripInlineComment(String value) {
         if (value == null) {
             return "";
@@ -377,11 +436,20 @@ public class Config {
         return idx >= 0 ? value.substring(0, idx).trim() : value.trim();
     }
 
+    /**
+     * Returns {@code true} when all four MSSQL connection properties (for both the account
+     * and accequipment databases) are non-empty.
+     */
     public boolean isDebtorsEnabled() {
         return !accountMssqlServer.isEmpty() && !accountMssqlDatabase.isEmpty()
                 && !accequipmentMssqlServer.isEmpty() && !accequipmentMssqlDatabase.isEmpty();
     }
 
+    /**
+     * Returns {@code true} when the minimum required settings are present: email addresses
+     * ({@code from}, {@code replyTo}, at least one {@code to}) and, if SNMP sections are
+     * enabled, at least one community string.
+     */
     public boolean isValid() {
         boolean isEmailValid = emailFrom != null && emailReplyTo != null && !emailTo.isEmpty();
         boolean isSnmpValid = true;

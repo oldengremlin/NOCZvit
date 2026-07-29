@@ -106,6 +106,10 @@ public class PdIncidentParser {
         ));
     }
 
+    /**
+     * Returns {@code true} for subjects that should be silently skipped (IVR, SDH-OSM,
+     * console, UVPN, paired host-port patterns, etc.).
+     */
     private boolean isIgnored(String subject) {
         return subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
                 || subject.contains("UVPN") || subject.contains("SDH-OSM") || subject.contains("astashov")
@@ -114,6 +118,10 @@ public class PdIncidentParser {
                 || (subject.matches(".*: [ap][^:]+: [ap][^:]+ has.*") && !subject.contains("alca"));
     }
 
+    /**
+     * Determines the incident status from the subject keyword and event type token.
+     * {@code "Problem:"} with {@code type="been"} (restart) maps to {@code NONE}.
+     */
     private Status resolveStatus(String subject, String type) {
         if (subject.contains(" Problem:") && type.contains("been")) {
             return Status.NONE;
@@ -127,6 +135,10 @@ public class PdIncidentParser {
         return Status.NONE;
     }
 
+    /**
+     * Assembles the plain-text incident description from the status prefix, event-type token,
+     * and resolved location name.
+     */
     private String buildDescription(Status status, String type, String from) {
         String state = switch (status) {
             case START ->

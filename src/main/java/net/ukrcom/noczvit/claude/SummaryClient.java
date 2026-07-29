@@ -114,6 +114,11 @@ public class SummaryClient {
         }
     }
 
+    /**
+     * Assembles the full Claude prompt: period metadata, a numbered incident list, pre-computed
+     * unclosed-incident count, and the system instruction block with domain knowledge and
+     * formatting rules.
+     */
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to) {
         StringBuilder sb = new StringBuilder();
         long startCount = incidents.stream()
@@ -174,8 +179,10 @@ public class SummaryClient {
     }
 
     /**
-     * Групує інциденти за (location, device) і рахує START vs END. Повертає
-     * людиночитаний рядок про незакриті інциденти або "немає".
+     * Groups incidents by {@code (location, device)} and counts START vs END events per group.
+     *
+     * @return human-readable Ukrainian string listing groups where START count exceeds END count,
+     *         or {@code "немає"} when all incidents are closed
      */
     private String computeUnclosed(List<Incident> incidents) {
         record GroupKey(String location, String device) {
@@ -210,6 +217,13 @@ public class SummaryClient {
         return open.isEmpty() ? "немає" : String.join("; ", open);
     }
 
+    /**
+     * Wraps the plain-text Claude summary in an HTML card with an appropriate title.
+     *
+     * <p>Title selection: "Резюме зміни" for day shifts (08:00–19:59), "Резюме за звітний
+     * період" for night periods (20:00–07:59) where monitoring runs unattended.
+     * Light Markdown remnants (headings, bold) are converted to safe HTML before injection.
+     */
     private String buildHtml(String summary, LocalDateTime from) {
         // День: 08:00–19:59; ніч: 20:00–07:59
         String title = (from.getHour() >= 8 && from.getHour() < 20)

@@ -243,12 +243,12 @@ classDiagram
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.11.4.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.11.5.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.11.4.jar [OPTIONS]
+java -jar target/NOCZvit-1.11.5.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -270,7 +270,7 @@ java -jar target/NOCZvit-1.11.4.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.11.4.jar --debug --no-incidents
+java -jar target/NOCZvit-1.11.5.jar --debug --no-incidents
 ```
 
 ## Налаштування

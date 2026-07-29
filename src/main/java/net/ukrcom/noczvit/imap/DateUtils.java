@@ -33,6 +33,13 @@ class DateUtils {
     private DateUtils() {
     }
 
+    /**
+     * Replaces English month abbreviations in an IMAP date string with Ukrainian equivalents
+     * and strips the leading day-of-week prefix and trailing timezone offset.
+     *
+     * @param dt raw date string (e.g. {@code "Mon, 01 Jan 2025 08:00:00 +0200"})
+     * @return localised date string (e.g. {@code "01 січ 2025 08:00:00"})
+     */
     static String convertMonthNumToMnemo(String dt) {
         dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\+\\d{4}$", "");
         Matcher matcher = MONTH_PATTERN.matcher(dt);
