@@ -99,7 +99,7 @@ public class SummaryClient {
             }
 
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
-            return buildHtml(summary);
+            return buildHtml(summary, from);
 
         } catch (AnthropicServiceException e) {
             log.warn("Claude API помилка (HTTP {}): {}", e.statusCode(), e.getMessage());
@@ -204,7 +204,10 @@ public class SummaryClient {
         return open.isEmpty() ? "немає" : String.join("; ", open);
     }
 
-    private String buildHtml(String summary) {
+    private String buildHtml(String summary, LocalDateTime from) {
+        // День: 08:00–19:59; ніч: 20:00–07:59
+        String title = (from.getHour() >= 8 && from.getHour() < 20)
+                ? "Резюме зміни" : "Резюме за звітний період";
         // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
 
@@ -223,7 +226,7 @@ public class SummaryClient {
         return "<div class=\"section\" style=\"background:#fff;padding:12px 16px;"
                 + "border-left:4px solid #1976d2;margin-bottom:20px;"
                 + "box-shadow:2px 2px 6px rgba(0,0,0,.1)\">\n"
-                + "<h2 style=\"color:#1976d2;margin-top:0\">Резюме зміни</h2>\n"
+                + "<h2 style=\"color:#1976d2;margin-top:0\">" + title + "</h2>\n"
                 + "<p>" + escaped + "</p>\n"
                 + "</div>\n";
     }
