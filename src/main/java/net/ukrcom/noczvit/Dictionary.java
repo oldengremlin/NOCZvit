@@ -37,7 +37,7 @@ public class Dictionary {
     //   і лише якщо префікс знятий — знімаємо суфікс -N (порядковий номер вузла).
     // Якщо prefix не збігся — суфікс НЕ знімаємо (щоб не ламати adlink-hoh15-1 тощо).
     private static final Pattern PD_HOST_PREFIX = Pattern.compile("^(?:[rsp]|(?:ies\\d?|alca)-)");
-    private static final Pattern PD_HOST_SUFFIX  = Pattern.compile("-\\d+$");
+    private static final Pattern PD_HOST_SUFFIX = Pattern.compile("-\\d+$");
 
     private final Map<Pattern, String> pdDictionary;
     private final Map<Pattern, String> sdhDictionary;
@@ -104,9 +104,9 @@ public class Dictionary {
     public String lookupPD(String key) {
         return pdCache.computeIfAbsent(key, k -> {
             String afterPrefix = PD_HOST_PREFIX.matcher(k).replaceFirst("");
-            String normalized  = afterPrefix.equals(k)
-                    ? k
-                    : PD_HOST_SUFFIX.matcher(afterPrefix).replaceFirst("");
+            String normalized = afterPrefix.equals(k)
+                                ? k
+                                : PD_HOST_SUFFIX.matcher(afterPrefix).replaceFirst("");
 
             for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
                 if (entry.getKey().matcher(normalized).find()) {

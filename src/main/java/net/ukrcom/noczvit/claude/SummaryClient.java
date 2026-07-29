@@ -33,15 +33,15 @@ import net.ukrcom.noczvit.NOCZvit;
 import net.ukrcom.noczvit.model.Incident;
 
 /**
- * Формує короткий текст резюме зміни NOC за допомогою Claude API.
- * Отримує єдиний список інцидентів (IMAP + Zabbix API, вже злиті та відфільтровані).
+ * Формує короткий текст резюме зміни NOC за допомогою Claude API. Отримує
+ * єдиний список інцидентів (IMAP + Zabbix API, вже злиті та відфільтровані).
  */
 @Slf4j
 public class SummaryClient {
 
     // Запасні конвертери на випадок, якщо модель повертає Markdown всупереч інструкціям
     private static final Pattern MD_HEADING = Pattern.compile("(?m)^#{1,6}\\s+");
-    private static final Pattern MD_BOLD    = Pattern.compile("\\*\\*(.+?)\\*\\*");
+    private static final Pattern MD_BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
 
     private final AnthropicClient client;
     private final String model;
@@ -54,20 +54,24 @@ public class SummaryClient {
     }
 
     /**
-     * Викликає Claude API для формування короткого резюме зміни українською мовою.
+     * Викликає Claude API для формування короткого резюме зміни українською
+     * мовою.
      *
-     * <p>Приймає єдиний злитий список інцидентів: IMAP-інциденти + сконвертовані Zabbix-події.
-     * Фільтрує за {@code from}/{@code to} так само як
+     * <p>
+     * Приймає єдиний злитий список інцидентів: IMAP-інциденти + сконвертовані
+     * Zabbix-події. Фільтрує за {@code from}/{@code to} так само як
      * {@link net.ukrcom.noczvit.report.IncidentSectionBuilder}.
      *
-     * @param allIncidents всі інциденти зміни (IMAP + Zabbix, можуть охоплювати кілька змін)
-     * @param from         початок звітного періоду
-     * @param to           кінець звітного періоду
-     * @return HTML-фрагмент (ніколи не null); порожній рядок при помилці або відсутності даних
+     * @param allIncidents всі інциденти зміни (IMAP + Zabbix, можуть охоплювати
+     * кілька змін)
+     * @param from початок звітного періоду
+     * @param to кінець звітного періоду
+     * @return HTML-фрагмент (ніколи не null); порожній рядок при помилці або
+     * відсутності даних
      */
     public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to) {
         long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
-        long ctTo   = to.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long ctTo = to.atZone(ZoneId.systemDefault()).toEpochSecond();
 
         List<Incident> incidents = allIncidents.stream()
                 .filter(i -> i.messageTs() >= ctFrom && i.messageTs() <= ctTo)
@@ -115,13 +119,13 @@ public class SummaryClient {
         long startCount = incidents.stream()
                 .filter(i -> i.status() == Incident.Status.START).count();
         sb.append("Звітний період: з ")
-          .append(from.format(NOCZvit.DATE_TIME_FORMATTER))
-          .append(" по ")
-          .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
-          .append("\n\nУнікальних подій: ").append(startCount)
-          .append(" (рядків у таблиці: ").append(incidents.size())
-          .append(" — кожна подія має START і може мати END)\n")
-          .append("Інциденти:\n");
+                .append(from.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append(" по ")
+                .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append("\n\nУнікальних подій: ").append(startCount)
+                .append(" (рядків у таблиці: ").append(incidents.size())
+                .append(" — кожна подія має START і може мати END)\n")
+                .append("Інциденти:\n");
 
         int n = 0;
         for (Incident inc : incidents) {
@@ -137,8 +141,8 @@ public class SummaryClient {
 
         // Попередньо обчислений факт — Claude не аналізує пари START/END самостійно
         sb.append("\nНезакриті інциденти на кінець зміни: ")
-          .append(computeUnclosed(incidents))
-          .append("\n");
+                .append(computeUnclosed(incidents))
+                .append("\n");
 
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
@@ -170,11 +174,13 @@ public class SummaryClient {
     }
 
     /**
-     * Групує інциденти за (location, device) і рахує START vs END.
-     * Повертає людиночитаний рядок про незакриті інциденти або "немає".
+     * Групує інциденти за (location, device) і рахує START vs END. Повертає
+     * людиночитаний рядок про незакриті інциденти або "немає".
      */
     private String computeUnclosed(List<Incident> incidents) {
-        record GroupKey(String location, String device) {}
+        record GroupKey(String location, String device) {
+
+        }
 
         Map<GroupKey, Long> starts = incidents.stream()
                 .filter(i -> i.status() == Incident.Status.START)
@@ -207,7 +213,7 @@ public class SummaryClient {
     private String buildHtml(String summary, LocalDateTime from) {
         // День: 08:00–19:59; ніч: 20:00–07:59
         String title = (from.getHour() >= 8 && from.getHour() < 20)
-                ? "Резюме зміни" : "Резюме за звітний період";
+                       ? "Резюме зміни" : "Резюме за звітний період";
         title = title.concat(" (<i>згенеровано за допомогою <b>Claude Anthropic API</b></i>)");
         // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
@@ -224,11 +230,8 @@ public class SummaryClient {
         // 4. Абзаци та переноси рядків
         escaped = escaped.replace("\n\n", "</p><p>").replace("\n", "<br>");
 
-        return "<div class=\"section\" style=\"background:#fff;padding:12px 16px;"
-                + "border-left:4px solid #1976d2;margin-bottom:20px;"
-                + "box-shadow:2px 2px 6px rgba(0,0,0,.1)\">\n"
-                + "<h2 style=\"color:#1976d2;margin-top:0\">" + title + "</h2>\n"
-                + "<p>" + escaped + "</p>\n"
-                + "</div>\n";
+        return """
+               <div class="section" style="background:#fff;padding:12px 16px;border-left:4px solid #1976d2;margin-bottom:20px;box-shadow:2px 2px 6px rgba(0,0,0,.1)">
+               <h2 style="color:#1976d2;margin-top:0">""" + title + "</h2><p>" + escaped + "</p></div>\n";
     }
 }

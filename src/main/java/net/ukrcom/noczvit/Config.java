@@ -242,7 +242,7 @@ public class Config {
         zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
         String claudeProp = properties.getProperty("claude");
         if (claudeProp != null) {
-            claudeExplicit = Boolean.parseBoolean(claudeProp);
+            claudeExplicit = Boolean.valueOf(claudeProp);
         }
     }
 
@@ -370,7 +370,9 @@ public class Config {
     }
 
     private static String stripInlineComment(String value) {
-        if (value == null) return "";
+        if (value == null) {
+            return "";
+        }
         int idx = value.indexOf('#');
         return idx >= 0 ? value.substring(0, idx).trim() : value.trim();
     }

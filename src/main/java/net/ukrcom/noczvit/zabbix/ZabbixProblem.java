@@ -17,9 +17,9 @@ package net.ukrcom.noczvit.zabbix;
 /**
  * Подія (проблема) Zabbix, отримана через API problem.get.
  *
- * @param host   коротке ім'я хоста ураженого вузла
- * @param name   назва проблеми (опис тригера)
- * @param clock  unix-епоха початку проблеми
+ * @param host коротке ім'я хоста ураженого вузла
+ * @param name назва проблеми (опис тригера)
+ * @param clock unix-епоха початку проблеми
  * @param rClock unix-епоха вирішення проблеми (0 = ще активна)
  */
 public record ZabbixProblem(String host, String name, long clock, long rClock) {
