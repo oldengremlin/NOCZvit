@@ -15,8 +15,12 @@
 package net.ukrcom.noczvit.imap;
 
 /**
- * Raw IMAP message as read from the server — infrastructure DTO, no business
- * logic.
+ * Raw IMAP message as read from the server — infrastructure DTO, no business logic.
+ *
+ * @param dateStr   original {@code Date:} header value from the IMAP message
+ * @param unixDate  unix epoch derived from {@code dateStr}
+ * @param subject   message subject line (never null when constructed via {@link ImapReader})
+ * @param body      plain-text body; empty string when no {@code text/plain} part found
  */
 public record RawMessage(String dateStr, long unixDate, String subject, String body) {
 

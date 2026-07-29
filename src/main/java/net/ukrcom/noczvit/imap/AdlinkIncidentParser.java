@@ -108,6 +108,7 @@ public class AdlinkIncidentParser {
         ));
     }
 
+    /** Maps the subject keyword ({@code "Resolved:"} / {@code "Problem:"}) to a lifecycle status. */
     private Status resolveStatus(String subject) {
         if (subject.contains(" Resolved:")) {
             return Status.END;

@@ -37,12 +37,24 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringEscapeUtils;
 
+/**
+ * Builds the "temporarily blocked subscribers" HTML section by querying two MSSQL databases:
+ * the account DB for customer name resolution, and the accequipment DB for the current blocked
+ * list ({@code ServicesLastState} JSON parameter).
+ *
+ * <p>Database connection parameters are resolved through FreeTDS {@code freetds.conf} aliases
+ * (searched in {@code ~/.freetds.conf}, {@code /etc/freetds/freetds.conf}, and
+ * {@code /etc/freetds.conf}) with a fallback to direct host:1433.
+ */
 @Slf4j
 public class Debtors {
 
     private final StringBuilder returnMessage;
     private final Config config;
 
+    /**
+     * Constructs the HTML section immediately. The result is available via {@link #toString()}.
+     */
     public Debtors(Config config) {
         this.config = config;
         this.returnMessage = new StringBuilder();
@@ -54,6 +66,7 @@ public class Debtors {
         return returnMessage.toString();
     }
 
+    /** Queries the databases and appends the subscriber rows to {@code returnMessage}. */
     private void getDebtors() {
         returnMessage.append("<p>\n<h1>Список тимчасово заблокованих абонентів</h1>\n")
                 .append("<table class=\"table-debtors\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
@@ -110,6 +123,11 @@ public class Debtors {
         return new String[]{serverName, "1433"};
     }
 
+    /**
+     * Parses a single {@code freetds.conf} file for the given server alias.
+     *
+     * @return {@code [host, port]} if the section is found, {@code null} otherwise
+     */
     private String[] parseFreeTdsConf(String path, String serverName) {
         File file = new File(path);
         if (!file.exists()) {
@@ -147,6 +165,9 @@ public class Debtors {
         return null;
     }
 
+    /**
+     * Opens a jTDS MSSQL connection, resolving {@code server} through FreeTDS aliases first.
+     */
     private Connection connectTo(String server, String database, String user, String password) throws SQLException {
         String[] hostPort = resolveServer(server);
         String url = "jdbc:jtds:sqlserver://" + hostPort[0] + ":" + hostPort[1] + "/" + database;
@@ -154,6 +175,9 @@ public class Debtors {
         return DriverManager.getConnection(url, user, password);
     }
 
+    /**
+     * Loads {@code Customer_id → FirmId → Title} from the account DB's {@code Customers} table.
+     */
     private Map<Integer, Map<String, String>> buildAccountMap() throws SQLException {
         Map<Integer, Map<String, String>> accountMap = new HashMap<>();
         try (Connection conn = connectTo(
@@ -171,6 +195,10 @@ public class Debtors {
         return accountMap;
     }
 
+    /**
+     * Reads the latest {@code ServicesLastState} JSON blob from the accequipment DB and
+     * resolves each entry to a subscriber name using {@code accountMap}.
+     */
     private List<String> fetchDebtors(Map<Integer, Map<String, String>> accountMap) throws SQLException {
         List<String> result = new ArrayList<>();
         try (Connection conn = connectTo(
@@ -188,7 +216,10 @@ public class Debtors {
         return result;
     }
 
-    // ServicesLastState format: [{"Key":firmId,"Value":customerId},...]
+    /**
+     * Parses the {@code ServicesLastState} JSON array ({@code [{"Key":firmId,"Value":customerId},...]}
+     * ) into a list of {@code "customerId, Title"} strings, resolved via {@code accountMap}.
+     */
     private List<String> parseServicesLastState(String paramValue, Map<Integer, Map<String, String>> accountMap) {
         List<String> result = new ArrayList<>();
         if (paramValue == null || paramValue.isBlank()) {

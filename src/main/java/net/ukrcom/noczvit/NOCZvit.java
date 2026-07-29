@@ -39,15 +39,31 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
 /**
- * NOC report on incidents registered automatically by Zabbix and OSM systems
+ * Entry point for the NOC automated report generator.
+ *
+ * <p>Collects incidents from three sources in parallel (IMAP, Zabbix API, Debtors DB),
+ * merges them into a unified incident list, builds an HTML report, and sends it by email.
+ * Claude AI summary is generated from the merged incident list when enabled.
  *
  * @author olden
  */
 @Slf4j
 public class NOCZvit {
 
+    /** Date-time format used throughout the report for display and prompt strings. */
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * Application entry point.
+     *
+     * <p>Parses CLI arguments, initialises configuration, fetches IMAP incidents and Zabbix
+     * events in parallel, converts and merges them, builds the HTML report sections, and
+     * sends the result via sendmail (or SMTP in debug mode).
+     *
+     * @param args CLI arguments (see {@code help.txt} for the full list)
+     * @throws MessagingException if a fatal IMAP or SMTP error occurs
+     * @throws IOException        if configuration or dictionary files cannot be read
+     */
     public static void main(String[] args) throws MessagingException, IOException {
         // Set log level to DEBUG before Config is instantiated so all initialization is visible
         if (Arrays.asList(args).contains("--debug")) {
@@ -160,8 +176,8 @@ public class NOCZvit {
                 debtorsHtml = debtorsFuture.join();
             }
 
-            // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP для таблиці.
-            // Claude отримує лише оригінальний список IMAP (incidents) — без змін.
+            // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP-інцидентами.
+            // incidentsForTable йде і в HTML-таблицю, і до Claude (якщо увімкнено).
             ZabbixIncidentConverter zabbixConverter = new ZabbixIncidentConverter(dictionary);
             List<Incident> zabbixIncidents = (incidents != null)
                                              ? ProblemFilter.filter(zabbixProblems, incidents).stream()
@@ -195,7 +211,6 @@ public class NOCZvit {
                     + "</style></head><body>");
 
             IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
-            // Claude отримує лише incidents (IMAP) — Zabbix-події до мовної моделі не йдуть
             SummaryClient summaryClient = config.isClaudeEnabled() ? new SummaryClient(config) : null;
 
             if (nightShift) {

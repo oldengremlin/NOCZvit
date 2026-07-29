@@ -44,6 +44,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
+/**
+ * Zabbix API and web client used for fetching historical events and downloading graph images.
+ *
+ * <p>Maintains two sessions: a JSON-RPC API session (for {@code event.get}, {@code host.get},
+ * {@code graph.get}) and a web UI session (for {@code chart2.php} PNG downloads). Both are
+ * established by {@link #login()}. Host IDs and graph IDs are cached to avoid redundant API
+ * calls when building the same report section for multiple incidents.
+ */
 @Slf4j
 public class Client {
 
@@ -58,6 +66,11 @@ public class Client {
     private final ConcurrentHashMap<String, String> hostIdCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> graphIdCache = new ConcurrentHashMap<>();
 
+    /**
+     * Creates the Zabbix client. The HTTP client is configured with a shared cookie store so
+     * that the web session cookie ({@code zbx_sessionid}) set during {@link #webLogin()} is
+     * automatically attached to every subsequent {@code chart2.php} request.
+     */
     public Client(Config config) {
         this.config = config;
         // CookieManager stores the zbx_sessionid from web login and sends it automatically
@@ -69,7 +82,12 @@ public class Client {
                 .build();
     }
 
-    // Performs both API login (for host.get / graph.get) and web login (for chart2.php).
+    /**
+     * Authenticates against both the Zabbix JSON-RPC API and the Zabbix web UI.
+     * Both sessions must succeed for graph images to work correctly.
+     *
+     * @return {@code true} when both API and web logins succeeded
+     */
     public boolean login() {
         boolean apiOk = apiLogin();
         boolean webOk = webLogin();
@@ -77,6 +95,7 @@ public class Client {
         return apiOk && webOk;
     }
 
+    /** Authenticates via {@code user.login} and stores the returned auth token. */
     private boolean apiLogin() {
         try {
             JsonObject params = new JsonObject();
@@ -96,8 +115,11 @@ public class Client {
         return false;
     }
 
-    // Web login via POST to index.php — Zabbix sets zbx_sessionid cookie,
-    // which is stored in CookieManager and sent automatically with chart2.php requests.
+    /**
+     * Authenticates via a form POST to {@code index.php}. On success Zabbix sets the
+     * {@code zbx_sessionid} cookie, which is stored in the shared {@code CookieManager} and
+     * sent automatically with every subsequent {@code chart2.php} request.
+     */
     private boolean webLogin() {
         try {
             String formBody = "name=" + URLEncoder.encode(config.getZabbixUsername(), StandardCharsets.UTF_8)
@@ -228,7 +250,10 @@ public class Client {
         }
     }
 
-    // Отримує clock відновлювальних подій за їх eventid (один запит для всіх).
+    /**
+     * Fetches the {@code clock} (unix timestamp) for a batch of recovery event IDs in a single
+     * {@code event.get} call. Used to populate {@link ZabbixProblem#rClock()}.
+     */
     private Map<String, Long> fetchEventClocks(List<String> eventIds) {
         if (eventIds.isEmpty()) {
             return Collections.emptyMap();
@@ -256,7 +281,11 @@ public class Client {
         }
     }
 
-    // Резолюція хостів через trigger.get для тригерів, де event.get/selectHosts не повернув хост.
+    /**
+     * Resolves hostnames for trigger IDs where {@code event.get/selectHosts} returned an empty
+     * array (happens with template-level triggers). Falls back to a single {@code trigger.get}
+     * call for the whole batch.
+     */
     private Map<String, String> resolveTriggerHosts(List<String> triggerIds) {
         if (triggerIds.isEmpty()) {
             return Collections.emptyMap();
@@ -291,20 +320,31 @@ public class Client {
         }
     }
 
-    // Returns extra <tr> row with embedded temperature graph PNG, or "" on any failure.
+    /**
+     * Returns an extra {@code <tr>} row with an embedded temperature graph PNG for the given
+     * host and component description, or an empty string on any failure.
+     */
     public String getGraphRow(String shortHostname, String desc, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(shortHostname, desc + ": Temperature", from, to,
                 "getGraphRow(" + shortHostname + ", " + desc + ")");
     }
 
-    // Returns extra <tr> row with embedded Ping graph PNG, or "" on any failure.
-    // Graph name is "Ping" (standard Zabbix template name, without hostname prefix —
-    // the web UI prepends "hostname: " for display but the API name is just "Ping").
+    /**
+     * Returns an extra {@code <tr>} row with an embedded Ping graph PNG for the given host,
+     * or an empty string on any failure. The graph is looked up by the standard Zabbix name
+     * {@code "Ping"} (without the hostname prefix that the web UI prepends for display).
+     */
     public String getPingGraphRow(String hostname, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(hostname, "Ping", from, to,
                 "getPingGraphRow(" + hostname + ")");
     }
 
+    /**
+     * Resolves host ID and graph ID via the Zabbix API, downloads the PNG via {@code chart2.php},
+     * and returns a {@code <tr>} row with the image embedded as a base64 data URI.
+     *
+     * @param debugLabel context string used in log/warning messages
+     */
     private String getGraphRowForName(String shortHostname, String graphName, LocalDateTime from, LocalDateTime to, String debugLabel) {
         if (authToken == null) {
             return "";
@@ -337,6 +377,10 @@ public class Client {
         }
     }
 
+    /**
+     * Resolves a short hostname to its Zabbix {@code hostid} via {@code host.get},
+     * caching the result for subsequent calls.
+     */
     private String resolveHostId(String shortName) {
         return hostIdCache.computeIfAbsent(shortName, (var k) -> {
             try {
@@ -362,6 +406,10 @@ public class Client {
         });
     }
 
+    /**
+     * Resolves a graph name to its Zabbix {@code graphid} for the given host via
+     * {@code graph.get}, caching the result for subsequent calls.
+     */
     private String resolveGraphId(String hostId, String graphName) {
         String cacheKey = hostId + "\0" + graphName;
         return graphIdCache.computeIfAbsent(cacheKey, k -> {
@@ -391,6 +439,11 @@ public class Client {
         });
     }
 
+    /**
+     * Downloads a graph PNG from Zabbix {@code chart2.php} using the web session cookie.
+     * Validates the PNG magic bytes before returning; returns {@code null} on HTTP errors or
+     * non-image responses.
+     */
     private byte[] downloadGraph(String graphId, LocalDateTime from, LocalDateTime to) throws IOException, InterruptedException {
         String url = config.getZabbixUrl() + "/chart2.php"
                 + "?graphid=" + graphId
@@ -437,6 +490,11 @@ public class Client {
         return resp.body();
     }
 
+    /**
+     * Sends a Zabbix JSON-RPC 2.0 request and returns the parsed response object.
+     *
+     * @throws IOException if the HTTP request fails or the server returns a non-200 status
+     */
     private JsonObject apiCall(String method, JsonObject params, String auth) throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("jsonrpc", "2.0");

@@ -24,6 +24,7 @@ package net.ukrcom.noczvit.zabbix;
  */
 public record ZabbixProblem(String host, String name, long clock, long rClock) {
 
+    /** Returns {@code true} when the problem has not yet been resolved ({@code rClock == 0}). */
     public boolean isActive() {
         return rClock == 0;
     }

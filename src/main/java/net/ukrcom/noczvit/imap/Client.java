@@ -41,6 +41,11 @@ public class Client {
     private final OspfIncidentParser ospfParser;
     private final AdlinkIncidentParser adlinkParser;
 
+    /**
+     * Creates the client and loads both dictionaries.
+     *
+     * @throws IOException if a dictionary file cannot be read
+     */
     public Client(Config config) throws IOException {
         this.config = config;
         Dictionary dictionary = new Dictionary(config);
@@ -144,18 +149,25 @@ public class Client {
         return result;
     }
 
+    /** Returns {@code true} for ICMP-ping or device-restart alert subjects handled by {@link PdIncidentParser}. */
     private boolean isPdMessage(String subject) {
         return subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*");
     }
 
+    /** Returns {@code true} for OSPF neighbour state-change alert subjects handled by {@link OspfIncidentParser}. */
     private boolean isOspfMessage(String subject) {
         return subject.contains("ospfNbrStateChange");
     }
 
+    /** Returns {@code true} for Zabbix dry-contact (adlink) alert subjects handled by {@link AdlinkIncidentParser}. */
     private boolean isAdlinkMessage(String subject) {
         return subject.contains("adlink") && subject.contains("- Fault");
     }
 
+    /**
+     * Returns {@code true} for SDH/OSM power-loss or STM circuit alert subjects handled by
+     * {@link OsmIncidentParser}. In debug mode STM-1 alerts are also included.
+     */
     private boolean isOsmMessage(String subject) {
         String stmPattern = "2-9";
         if (config.isDebug()) {

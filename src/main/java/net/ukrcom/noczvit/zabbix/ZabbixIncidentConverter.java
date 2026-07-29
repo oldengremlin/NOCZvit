@@ -85,6 +85,9 @@ public class ZabbixIncidentConverter {
         return result;
     }
 
+    /**
+     * Constructs a single {@link Incident} from a Zabbix event timestamp and pre-resolved fields.
+     */
     private Incident buildIncident(long epochSec, String location, String host,
                                    String description, Status status, List<String> reviewNames) {
         LocalDateTime dt = Instant.ofEpochSecond(epochSec)
@@ -94,6 +97,10 @@ public class ZabbixIncidentConverter {
                 dateStr, dateStr, Source.ZABBIX, status, description, reviewNames);
     }
 
+    /**
+     * Formats a {@link LocalDateTime} as a Ukrainian-locale date-time string
+     * ({@code "d mmm yyyy HH:mm:ss"}, e.g. {@code "1 січ 2025 08:00:00"}).
+     */
     private static String formatUa(LocalDateTime dt) {
         return String.format("%d %s %d %02d:%02d:%02d",
                 dt.getDayOfMonth(), UA_MONTHS[dt.getMonthValue()], dt.getYear(),
