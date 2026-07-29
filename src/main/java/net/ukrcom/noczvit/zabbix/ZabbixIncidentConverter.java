@@ -29,12 +29,14 @@ import net.ukrcom.noczvit.model.Incident.Status;
  * Перетворює {@link ZabbixProblem} на {@link Incident}-об'єкти для відображення
  * в таблиці звіту поряд з IMAP-інцидентами.
  *
- * <p>Правила:
+ * <p>
+ * Правила:
  * <ul>
- *   <li>START-інцидент по {@code clock}; END-інцидент по {@code rClock} якщо вирішено</li>
- *   <li>Локація шукається у PD-словнику за hostname; якщо не знайдено —
- *       hostname залишається як локація і додається до {@code reviewNames}</li>
- *   <li>Якщо hostname починається з 'r' — у опис додається «маршрутизаторі»</li>
+ * <li>START-інцидент по {@code clock}; END-інцидент по {@code rClock} якщо
+ * вирішено</li>
+ * <li>Локація шукається у PD-словнику за hostname; якщо не знайдено — hostname
+ * залишається як локація і додається до {@code reviewNames}</li>
+ * <li>Якщо hostname починається з 'r' — у опис додається «маршрутизаторі»</li>
  * </ul>
  */
 @Slf4j

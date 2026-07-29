@@ -31,16 +31,16 @@ import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
 
 /**
- * Domain: parses OSM/SDH alert emails into {@link Incident} objects.
- * No I/O — receives a {@link RawMessage} and produces a domain object.
+ * Domain: parses OSM/SDH alert emails into {@link Incident} objects. No I/O —
+ * receives a {@link RawMessage} and produces a domain object.
  */
 @Slf4j
 public class OsmIncidentParser {
 
-    private static final DateTimeFormatter TRAP_DATE_INPUT_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final DateTimeFormatter TRAP_DATE_OUTPUT_FORMATTER =
-            DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+    private static final DateTimeFormatter TRAP_DATE_INPUT_FORMATTER
+            = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter TRAP_DATE_OUTPUT_FORMATTER
+            = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
     private static final Pattern PATTERN_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
 
     private final Dictionary dictionary;
@@ -51,6 +51,9 @@ public class OsmIncidentParser {
 
     /**
      * Returns an Incident if the message is a valid OSM alert, empty otherwise.
+     *
+     * @param msg
+     * @return
      */
     public Optional<Incident> parse(RawMessage msg) {
         String subject = msg.subject();
@@ -77,21 +80,24 @@ public class OsmIncidentParser {
         boolean needsReviewTo = !originalTo.isEmpty() && originalTo.equals(to);
 
         String geoMsg = "STM".equals(type)
-                ? (to.isEmpty() ? "на " + from : "з " + from + " на " + to)
-                : from;
+                        ? (to.isEmpty() ? "на " + from : "з " + from + " на " + to)
+                        : from;
 
         Status status = resolveStatus(subject);
 
         String statePart = switch (status) {
-            case START -> "OSM зареєстровано початок інциденту, ";
-            case END   -> "OSM зареєстровано кінець інциденту, ";
-            case NONE  -> "OSM зареєстровано інцидент, ";
+            case START ->
+                "OSM зареєстровано початок інциденту, ";
+            case END ->
+                "OSM зареєстровано кінець інциденту, ";
+            case NONE ->
+                "OSM зареєстровано інцидент, ";
         };
         String eventDesc;
         if ("Power".equals(type)) {
             eventDesc = subject.contains("Air Condition")
-                    ? "зникнення живлення на " + geoMsg + " до кондиціонерів"
-                    : "зникнення живлення на виносі " + geoMsg;
+                        ? "зникнення живлення на " + geoMsg + " до кондиціонерів"
+                        : "зникнення живлення на виносі " + geoMsg;
         } else {
             eventDesc = "втрата зв'язності " + geoMsg;
         }
@@ -146,8 +152,12 @@ public class OsmIncidentParser {
     }
 
     private Status resolveStatus(String subject) {
-        if (subject.contains(" Resolved:")) return Status.END;
-        if (subject.contains(" Problem:")) return Status.START;
+        if (subject.contains(" Resolved:")) {
+            return Status.END;
+        }
+        if (subject.contains(" Problem:")) {
+            return Status.START;
+        }
         return Status.NONE;
     }
 }

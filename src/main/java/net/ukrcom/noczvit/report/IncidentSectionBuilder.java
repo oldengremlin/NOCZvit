@@ -32,20 +32,22 @@ import net.ukrcom.noczvit.zabbix.Client;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
- * Presentation: converts a list of {@link Incident} objects into the HTML incidents section.
+ * Presentation: converts a list of {@link Incident} objects into the HTML
+ * incidents section.
  */
 @Slf4j
 public class IncidentSectionBuilder {
 
-    public IncidentSectionBuilder() {}
+    public IncidentSectionBuilder() {
+    }
 
     /**
      * Builds the full HTML section for incidents in the given duty period.
      *
      * @param allIncidents all parsed incidents (may span multiple duty periods)
-     * @param zabbix       Zabbix client for Ping graphs; null to skip graphs
-     * @param dutyBegin    start of the duty period to display
-     * @param dutyEnd      end of the duty period to display
+     * @param zabbix Zabbix client for Ping graphs; null to skip graphs
+     * @param dutyBegin start of the duty period to display
+     * @param dutyEnd end of the duty period to display
      * @return HTML fragment (never null)
      */
     public String build(List<Incident> allIncidents, Client zabbix,
@@ -56,7 +58,7 @@ public class IncidentSectionBuilder {
     public String build(List<Incident> allIncidents, Client zabbix,
                         LocalDateTime dutyBegin, LocalDateTime dutyEnd, String summaryHtml) {
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
-        long ctDutyEnd   = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long ctDutyEnd = dutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
         StringBuilder html = new StringBuilder();
         html.append("<p><h1>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
@@ -108,9 +110,12 @@ public class IncidentSectionBuilder {
 
     private String buildRow(Incident inc, AtomicInteger n) {
         String rowClass = switch (inc.status()) {
-            case START -> " class=\"row-start\"";
-            case END   -> " class=\"row-end\"";
-            case NONE  -> "";
+            case START ->
+                " class=\"row-start\"";
+            case END ->
+                " class=\"row-end\"";
+            case NONE ->
+                "";
         };
 
         String descHtml = StringEscapeUtils.escapeHtml4(inc.description());
@@ -143,9 +148,9 @@ public class IncidentSectionBuilder {
         try (var pingExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
             List<CompletableFuture<String>> futures = pingDevices.stream()
                     .map(device -> CompletableFuture.supplyAsync(
-                            () -> zabbix.getPingGraphRow(device, from, to), pingExecutor))
+                    () -> zabbix.getPingGraphRow(device, from, to), pingExecutor))
                     .toList();
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
             futures.forEach(f -> {
                 try {
                     html.append(f.get());

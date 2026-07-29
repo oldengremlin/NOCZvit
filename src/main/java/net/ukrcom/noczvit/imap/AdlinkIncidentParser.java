@@ -26,20 +26,21 @@ import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
 
 /**
- * Domain: parses Zabbix dry-contact (adlink) alert emails into {@link Incident} objects.
- * Subject format: "[±] Problem/Resolved: <device>: card N, port N, line N - Fault"
+ * Domain: parses Zabbix dry-contact (adlink) alert emails into {@link Incident}
+ * objects. Subject format: "[±] Problem/Resolved: <device>: card N, port N,
+ * line N - Fault"
  *
  * Dictionary (dictionary_pd.txt) controls semantics:
- *   ^adlink-hoh15-1:0:0:0=зникнення живлення на кондиціонери (лінія 0)
- *   ^adlink-hoh15-1=Г.Джонса 15
- * The line-key lookup returns the event description; device lookup returns the location.
- * Unknown keys fall back to a generic description and are added to reviewNames.
+ * ^adlink-hoh15-1:0:0:0=зникнення живлення на кондиціонери (лінія 0)
+ * ^adlink-hoh15-1=Г.Джонса 15 The line-key lookup returns the event
+ * description; device lookup returns the location. Unknown keys fall back to a
+ * generic description and are added to reviewNames.
  */
 @Slf4j
 public class AdlinkIncidentParser {
 
-    private static final Pattern ADLINK_PATTERN =
-            Pattern.compile("(adlink[\\w-]+):\\s*card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
+    private static final Pattern ADLINK_PATTERN
+            = Pattern.compile("(adlink[\\w-]+):\\s*card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
 
     private final Dictionary dictionary;
 
@@ -48,7 +49,11 @@ public class AdlinkIncidentParser {
     }
 
     /**
-     * Returns an Incident if the subject matches the adlink dry-contact pattern.
+     * Returns an Incident if the subject matches the adlink dry-contact
+     * pattern.
+     *
+     * @param msg
+     * @return
      */
     public Optional<Incident> parse(RawMessage msg) {
         String subject = msg.subject();
@@ -58,10 +63,10 @@ public class AdlinkIncidentParser {
             return Optional.empty();
         }
 
-        String device  = matcher.group(1);
-        String card    = matcher.group(2);
-        String port    = matcher.group(3);
-        String line    = matcher.group(4);
+        String device = matcher.group(1);
+        String card = matcher.group(2);
+        String port = matcher.group(3);
+        String line = matcher.group(4);
         String lineKey = device + ":" + card + ":" + port + ":" + line;
 
         String location = dictionary.lookupPD(device);
@@ -75,15 +80,22 @@ public class AdlinkIncidentParser {
 
         Status status = resolveStatus(subject);
         String statePart = switch (status) {
-            case START -> "Zabbix зареєстровано початок інциденту, ";
-            case END   -> "Zabbix зареєстровано кінець інциденту, ";
-            case NONE  -> "Zabbix зареєстровано ";
+            case START ->
+                "Zabbix зареєстровано початок інциденту, ";
+            case END ->
+                "Zabbix зареєстровано кінець інциденту, ";
+            case NONE ->
+                "Zabbix зареєстровано ";
         };
         String description = (statePart + eventDesc).replaceAll("\\s+", " ");
 
         List<String> reviewNames = new ArrayList<>();
-        if (needsReviewLocation) reviewNames.add(device);
-        if (needsReviewEvent)    reviewNames.add(lineKey);
+        if (needsReviewLocation) {
+            reviewNames.add(device);
+        }
+        if (needsReviewEvent) {
+            reviewNames.add(lineKey);
+        }
 
         String dateLoc = DateUtils.convertMonthNumToMnemo(msg.dateStr());
         log.debug("Adlink parsed: device={}, lineKey={}, ts={}", device, lineKey, msg.unixDate());
@@ -97,8 +109,12 @@ public class AdlinkIncidentParser {
     }
 
     private Status resolveStatus(String subject) {
-        if (subject.contains(" Resolved:")) return Status.END;
-        if (subject.contains(" Problem:"))  return Status.START;
+        if (subject.contains(" Resolved:")) {
+            return Status.END;
+        }
+        if (subject.contains(" Problem:")) {
+            return Status.START;
+        }
         return Status.NONE;
     }
 }

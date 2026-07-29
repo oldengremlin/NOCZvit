@@ -27,9 +27,9 @@ import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
 
 /**
- * Orchestrates IMAP reading and incident parsing.
- * Delegates I/O to {@link ImapReader}, business logic to {@link PdIncidentParser}
- * and {@link OsmIncidentParser}.
+ * Orchestrates IMAP reading and incident parsing. Delegates I/O to
+ * {@link ImapReader}, business logic to {@link PdIncidentParser} and
+ * {@link OsmIncidentParser}.
  */
 @Slf4j
 public class Client {
@@ -52,8 +52,14 @@ public class Client {
     }
 
     /**
-     * Reads messages from IMAP and parses them into incidents covering both duty periods.
+     * Reads messages from IMAP and parses them into incidents covering both
+     * duty periods.
      *
+     * @param isInteractive
+     * @param prevDutyBegin
+     * @param prevDutyEnd
+     * @param currDutyBegin
+     * @param currDutyEnd
      * @return all incidents found within [prevDutyBegin, currDutyEnd]
      */
     public List<Incident> prepareImapFolder(boolean isInteractive,
@@ -62,7 +68,7 @@ public class Client {
                                             LocalDateTime currDutyBegin,
                                             LocalDateTime currDutyEnd) {
         long fromEpoch = prevDutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
-        long toEpoch   = currDutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long toEpoch = currDutyEnd.atZone(ZoneId.systemDefault()).toEpochSecond();
 
         log.debug("Filter period: {} … {}", prevDutyBegin, currDutyEnd);
 
@@ -108,10 +114,11 @@ public class Client {
     }
 
     /**
-     * Removes duplicate adlink alerts: Zabbix sends each alert twice within seconds.
-     * Keeps the first occurrence of each (subject, status) pair within a 60-second window.
-     * Deduplication runs before duty-period filtering so cross-boundary duplicates
-     * (e.g. 07:59:59 and 08:00:03) are correctly collapsed into the earlier shift.
+     * Removes duplicate adlink alerts: Zabbix sends each alert twice within
+     * seconds. Keeps the first occurrence of each (subject, status) pair within
+     * a 60-second window. Deduplication runs before duty-period filtering so
+     * cross-boundary duplicates (e.g. 07:59:59 and 08:00:03) are correctly
+     * collapsed into the earlier shift.
      */
     private List<RawMessage> deduplicateAdlink(List<RawMessage> messages) {
         List<RawMessage> sorted = new ArrayList<>(messages);
@@ -124,8 +131,8 @@ public class Client {
                 result.add(msg);
                 continue;
             }
-            boolean isDuplicate = seenAdlinks.stream().anyMatch(seen ->
-                    seen.subject().equals(msg.subject())
+            boolean isDuplicate = seenAdlinks.stream().anyMatch(seen
+                    -> seen.subject().equals(msg.subject())
                     && msg.unixDate() - seen.unixDate() <= 60);
             if (!isDuplicate) {
                 result.add(msg);

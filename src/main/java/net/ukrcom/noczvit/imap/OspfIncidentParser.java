@@ -24,8 +24,9 @@ import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
 
 /**
- * Domain: parses Zabbix ospfNbrStateChange alert emails into {@link Incident} objects.
- * Subject format: "[±] Problem/Resolved: <host>: <router> <channel> ospfNbrStateChange"
+ * Domain: parses Zabbix ospfNbrStateChange alert emails into {@link Incident}
+ * objects. Subject format: "[±] Problem/Resolved: <host>: <router> <channel>
+ * ospfNbrStateChange"
  */
 @Slf4j
 public class OspfIncidentParser {
@@ -37,13 +38,16 @@ public class OspfIncidentParser {
     }
 
     /**
-     * Returns an Incident if the message is a valid OSPF neighbor state change alert.
+     * Returns an Incident if the message is a valid OSPF neighbor state change
+     * alert.
+     * @param msg
+     * @return 
      */
     public Optional<Incident> parse(RawMessage msg) {
         String subject = msg.subject();
         String[] parts = subject.split("\\s+");
         // parts[2] = "host:", parts[3] = router, parts[4] = channel
-        String router  = parts.length > 3 ? parts[3] : "";
+        String router = parts.length > 3 ? parts[3] : "";
         String channel = parts.length > 4 ? parts[4] : "";
 
         String originalRouter = router;
@@ -56,16 +60,23 @@ public class OspfIncidentParser {
 
         Status status = resolveStatus(subject);
         String statePart = switch (status) {
-            case START -> "Zabbix зареєстровано початок інциденту, ";
-            case END   -> "Zabbix зареєстровано кінець інциденту, ";
-            case NONE  -> "Zabbix зареєстровано ";
+            case START ->
+                "Zabbix зареєстровано початок інциденту, ";
+            case END ->
+                "Zabbix зареєстровано кінець інциденту, ";
+            case NONE ->
+                "Zabbix зареєстровано ";
         };
         String description = (statePart + "падіння каналу на " + router + " по каналу " + channel)
                 .replaceAll("\\s+", " ");
 
         List<String> reviewNames = new ArrayList<>();
-        if (needsReviewRouter)  reviewNames.add(originalRouter);
-        if (needsReviewChannel) reviewNames.add(originalChannel);
+        if (needsReviewRouter) {
+            reviewNames.add(originalRouter);
+        }
+        if (needsReviewChannel) {
+            reviewNames.add(originalChannel);
+        }
 
         String dateLoc = DateUtils.convertMonthNumToMnemo(msg.dateStr());
 
@@ -80,8 +91,12 @@ public class OspfIncidentParser {
     }
 
     private Status resolveStatus(String subject) {
-        if (subject.contains(" Resolved:")) return Status.END;
-        if (subject.contains(" Problem:"))  return Status.START;
+        if (subject.contains(" Resolved:")) {
+            return Status.END;
+        }
+        if (subject.contains(" Problem:")) {
+            return Status.START;
+        }
         return Status.NONE;
     }
 }

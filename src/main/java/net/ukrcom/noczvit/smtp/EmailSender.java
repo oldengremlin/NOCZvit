@@ -96,9 +96,7 @@ public class EmailSender {
         log.debug("Subject: {}", subject);
         log.debug("Message size: {} bytes", messageHtml.length());
 
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor();
-             PipedInputStream in = new PipedInputStream();
-             PipedOutputStream out = new PipedOutputStream(in)) {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor(); PipedInputStream in = new PipedInputStream(); PipedOutputStream out = new PipedOutputStream(in)) {
 
             Future<?> writerFuture = executor.submit(() -> {
                 message.writeTo(out);
@@ -120,7 +118,9 @@ public class EmailSender {
                 writerFuture.get();
             } catch (ExecutionException e) {
                 Throwable cause = e.getCause();
-                if (cause instanceof MessagingException me) throw me;
+                if (cause instanceof MessagingException me) {
+                    throw me;
+                }
                 throw new IOException("Message serialization failed: " + cause.getMessage(), cause);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
