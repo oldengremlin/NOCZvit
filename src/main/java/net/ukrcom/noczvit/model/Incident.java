@@ -17,18 +17,23 @@ package net.ukrcom.noczvit.model;
 import java.util.List;
 
 /**
- * Domain model for a single network incident from either PD (Zabbix) or OSM (SDH) source.
+ * Domain model for a single network incident from either PD (Zabbix) or OSM
+ * (SDH) source.
  *
- * @param location      dict-resolved location name used for grouping (e.g. "Обухів, Малишка 2")
- * @param device        raw device identifier for PD incidents; empty string for OSM
- * @param messageTs     unix epoch of the IMAP message
- * @param eventTs       unix epoch of the actual event (equals messageTs for PD; from Trap value for OSM)
+ * @param location dict-resolved location name used for grouping (e.g. "Обухів,
+ * Малишка 2")
+ * @param device raw device identifier for PD incidents; empty string for OSM
+ * @param messageTs unix epoch of the IMAP message
+ * @param eventTs unix epoch of the actual event (equals messageTs for PD; from
+ * Trap value for OSM)
  * @param messageDateStr localized date string of the IMAP message
- * @param eventDateStr  localized date string of the actual event (equals messageDateStr for PD)
- * @param source        which system detected the incident
- * @param status        incident lifecycle status
- * @param description   plain-text event description (no HTML)
- * @param reviewNames   device/location names not found in dictionary; empty when all resolved
+ * @param eventDateStr localized date string of the actual event (equals
+ * messageDateStr for PD)
+ * @param source which system detected the incident
+ * @param status incident lifecycle status
+ * @param description plain-text event description (no HTML)
+ * @param reviewNames device/location names not found in dictionary; empty when
+ * all resolved
  */
 public record Incident(
         String location,
@@ -41,7 +46,13 @@ public record Incident(
         Status status,
         String description,
         List<String> reviewNames
-) {
-    public enum Source { PD, OSM, ZABBIX }
-    public enum Status { START, END, NONE }
+        ) {
+
+    public enum Source {
+        PD, OSM, ZABBIX
+    }
+
+    public enum Status {
+        START, END, NONE
+    }
 }

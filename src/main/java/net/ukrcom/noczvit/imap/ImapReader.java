@@ -38,14 +38,14 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
 /**
- * Infrastructure: connects to an IMAP server and returns raw messages.
- * No business logic — callers decide what to do with the messages.
+ * Infrastructure: connects to an IMAP server and returns raw messages. No
+ * business logic — callers decide what to do with the messages.
  */
 @Slf4j
 public class ImapReader {
 
-    private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER =
-            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+    private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER
+            = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
 
@@ -56,10 +56,13 @@ public class ImapReader {
     /**
      * Reads messages from the configured IMAP folder.
      *
-     * @param fetchAll  when true, retrieves all messages regardless of date
-     * @param fromEpoch unix epoch lower bound (inclusive) for date-based filtering
-     * @param toEpoch   unix epoch upper bound (inclusive) for date-based filtering
+     * @param fetchAll when true, retrieves all messages regardless of date
+     * @param fromEpoch unix epoch lower bound (inclusive) for date-based
+     * filtering
+     * @param toEpoch unix epoch upper bound (inclusive) for date-based
+     * filtering
      * @return parsed raw messages; never null
+     * @throws jakarta.mail.MessagingException
      */
     public List<RawMessage> readMessages(boolean fetchAll, long fromEpoch, long toEpoch) throws MessagingException {
         Properties props = new Properties();
@@ -154,9 +157,12 @@ public class ImapReader {
         if (message.isMimeType("text/plain")) {
             Object content = message.getContent();
             return switch (content) {
-                case String s -> s;
-                case InputStream is -> new String(is.readAllBytes(), "UTF-8");
-                default -> "";
+                case String s ->
+                    s;
+                case InputStream is ->
+                    new String(is.readAllBytes(), "UTF-8");
+                default ->
+                    "";
             };
         }
         if (message.isMimeType("multipart/*")) {

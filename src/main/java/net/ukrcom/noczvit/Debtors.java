@@ -76,23 +76,12 @@ public class Debtors {
                 }
                  */
 //
-//              АНТИПАТЕРН ФУНКЦІОНАЛЬНОГО СТИЛЮ (АЛЕ ТАКОЖ ПРАЦЮЄ)
-//
-                /*
-                AtomicInteger n = new AtomicInteger(0);
-                fetchDebtors(buildAccountMap()).stream()
-                        .forEach(debtor ->
-                                returnMessage.append("<tr><td>").append(n.incrementAndGet()).append(".</td>")
-                                        .append("<td>").append(StringEscapeUtils.escapeHtml4(debtor)).append("</td></tr>\n")
-                        );
-                 */
-//
 //              ФУНКЦІОНАЛЬНИЙ СТИЛЬ
 //
                 AtomicInteger n = new AtomicInteger(0);
                 String debtorsHtml = fetchDebtors(buildAccountMap()).stream()
                         .map(debtor -> "<tr><td>" + n.incrementAndGet() + ".</td>"
-                                + "<td>" + StringEscapeUtils.escapeHtml4(debtor) + "</td></tr>\n")
+                        + "<td>" + StringEscapeUtils.escapeHtml4(debtor) + "</td></tr>\n")
                         .collect(Collectors.joining());
                 returnMessage.append(debtorsHtml);
 
