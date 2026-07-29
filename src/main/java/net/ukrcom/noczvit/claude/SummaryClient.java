@@ -208,6 +208,7 @@ public class SummaryClient {
         // День: 08:00–19:59; ніч: 20:00–07:59
         String title = (from.getHour() >= 8 && from.getHour() < 20)
                 ? "Резюме зміни" : "Резюме за звітний період";
+        title = title.concat(" (<i>згенеровано за допомогою <b>Claude Anthropic API</b></i>)");
         // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
 
