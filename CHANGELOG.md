@@ -6,6 +6,13 @@
 
 ---
 
+## [1.11.4] — 2026-07-29
+
+### Змінено
+- `SummaryClient`: заголовок секції резюме тепер містить дисклеймер — `(згенеровано за допомогою Claude Anthropic API)` — щоб читач чітко розумів: текст написано AI, а не інженером NOC
+
+---
+
 ## [1.11.3] — 2026-07-29
 
 ### Змінено
@@ -272,6 +279,7 @@
 
 ---
 
+[1.11.4]: https://github.com/oldengremlin/noczvit/compare/v1.11.3...v1.11.4
 [1.11.3]: https://github.com/oldengremlin/noczvit/compare/v1.11.2...v1.11.3
 [1.11.2]: https://github.com/oldengremlin/noczvit/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/oldengremlin/noczvit/compare/v1.11.0...v1.11.1
