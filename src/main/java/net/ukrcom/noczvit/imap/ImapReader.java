@@ -49,6 +49,9 @@ public class ImapReader {
 
     private final Config config;
 
+    /**
+     * Creates a reader bound to the given configuration.
+     */
     public ImapReader(Config config) {
         this.config = config;
     }
@@ -121,6 +124,10 @@ public class ImapReader {
         return result;
     }
 
+    /**
+     * Converts a Jakarta Mail {@link Message} to a {@link RawMessage}.
+     * Returns empty if the {@code Date} header is missing, unparseable, or the subject is null.
+     */
     private Optional<RawMessage> parseRawMessage(Message msg) {
         try {
             String[] dateHeaders = msg.getHeader("Date");
@@ -153,6 +160,10 @@ public class ImapReader {
         }
     }
 
+    /**
+     * Extracts the plain-text body from a message. Returns an empty string when no
+     * {@code text/plain} part is found or the message has an unsupported MIME structure.
+     */
     private String extractText(Message message) throws MessagingException, IOException {
         if (message.isMimeType("text/plain")) {
             Object content = message.getContent();

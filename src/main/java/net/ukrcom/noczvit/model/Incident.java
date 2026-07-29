@@ -48,10 +48,21 @@ public record Incident(
         List<String> reviewNames
         ) {
 
+    /**
+     * Identifies which monitoring system generated the incident.
+     * {@code PD} — Zabbix email alerts parsed by {@code PdIncidentParser} or {@code OspfIncidentParser};
+     * {@code OSM} — SDH/OSM trap emails parsed by {@code OsmIncidentParser};
+     * {@code ZABBIX} — events fetched directly from the Zabbix API.
+     */
     public enum Source {
         PD, OSM, ZABBIX
     }
 
+    /**
+     * Incident lifecycle state.
+     * {@code START} — problem onset; {@code END} — problem resolved;
+     * {@code NONE} — informational event without a clear start/end pair.
+     */
     public enum Status {
         START, END, NONE
     }

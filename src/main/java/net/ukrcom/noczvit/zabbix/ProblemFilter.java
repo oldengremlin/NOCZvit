@@ -63,6 +63,10 @@ public class ProblemFilter {
                 .toList();
     }
 
+    /**
+     * Returns {@code true} when an IMAP incident for the same device exists within
+     * {@value #DEDUP_TOLERANCE_SEC} seconds of the Zabbix problem's start time.
+     */
     private static boolean isDuplicateOfImap(ZabbixProblem problem, List<Incident> imapIncidents) {
         if (problem.host().isBlank()) {
             return false;

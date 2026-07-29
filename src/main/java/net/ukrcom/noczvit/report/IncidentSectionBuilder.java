@@ -38,6 +38,7 @@ import org.apache.commons.text.StringEscapeUtils;
 @Slf4j
 public class IncidentSectionBuilder {
 
+    /** Creates the builder. Stateless — safe to reuse across calls. */
     public IncidentSectionBuilder() {
     }
 
@@ -55,6 +56,16 @@ public class IncidentSectionBuilder {
         return build(allIncidents, zabbix, dutyBegin, dutyEnd, null);
     }
 
+    /**
+     * Builds the full HTML section with an optional pre-rendered AI summary block.
+     *
+     * @param allIncidents all parsed incidents (may span multiple duty periods)
+     * @param zabbix       Zabbix client for Ping graphs; null to skip graphs
+     * @param dutyBegin    start of the duty period to display
+     * @param dutyEnd      end of the duty period to display
+     * @param summaryHtml  Claude AI summary HTML fragment, or {@code null} to omit it
+     * @return HTML fragment (never null)
+     */
     public String build(List<Incident> allIncidents, Client zabbix,
                         LocalDateTime dutyBegin, LocalDateTime dutyEnd, String summaryHtml) {
         long ctDutyBegin = dutyBegin.atZone(ZoneId.systemDefault()).toEpochSecond();
@@ -108,6 +119,10 @@ public class IncidentSectionBuilder {
         return html.toString();
     }
 
+    /**
+     * Renders a single table row ({@code <tr>}) for the given incident.
+     * Appends a "needs review" note when the incident contains unresolved device/location names.
+     */
     private String buildRow(Incident inc, AtomicInteger n) {
         String rowClass = switch (inc.status()) {
             case START ->
@@ -135,6 +150,10 @@ public class IncidentSectionBuilder {
                 + "</tr>\n";
     }
 
+    /**
+     * Appends inline PNG Ping graphs for all distinct devices in {@code group}.
+     * Each graph is fetched concurrently via virtual threads and embedded as a base64 data URI.
+     */
     private void appendPingGraphs(StringBuilder html, List<Incident> group,
                                   Client zabbix, LocalDateTime from, LocalDateTime to) {
         List<String> pingDevices = group.stream()
