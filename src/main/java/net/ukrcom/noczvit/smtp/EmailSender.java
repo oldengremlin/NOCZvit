@@ -37,12 +37,25 @@ import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
+/**
+ * Sends the HTML report email by piping the serialised MIME message to the system
+ * {@code sendmail} binary (or SMTP in debug mode).
+ *
+ * <p>Writing the message and reading from the pipe run in separate virtual threads to avoid
+ * the deadlock that would occur if the pipe buffer filled before the process started reading.
+ */
 @Slf4j
 public class EmailSender {
 
     private final Config config;
     private final String version;
 
+    /**
+     * Creates the sender and reads the project version from the bundled
+     * {@code version.properties} resource (injected by Maven resource filtering).
+     *
+     * @throws IOException if {@code version.properties} is missing from the classpath
+     */
     public EmailSender(Config config) throws IOException {
         this.config = config;
         Properties versionProps = new Properties();
@@ -55,6 +68,17 @@ public class EmailSender {
         this.version = versionProps.getProperty("project.version", "unknown");
     }
 
+    /**
+     * Assembles a MIME email and delivers it via sendmail.
+     *
+     * <p>In debug mode the message goes to {@code emailToDebug} only. The sendmail process is
+     * given 30 seconds to complete; it is killed and an exception is thrown on timeout.
+     *
+     * @param subject     email subject line
+     * @param messageHtml complete HTML body
+     * @throws MessagingException if the MIME message cannot be built or serialised
+     * @throws IOException        if sendmail cannot be started, times out, or is interrupted
+     */
     public void sendReport(String subject, String messageHtml) throws MessagingException, IOException {
         Properties props = new Properties();
         props.put("mail.smtp.host", config.getMailHostname());
