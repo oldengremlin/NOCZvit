@@ -24,8 +24,8 @@ import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
 
 /**
- * Domain: parses Zabbix/PD alert emails into {@link Incident} objects.
- * No I/O — receives a {@link RawMessage} and produces a domain object.
+ * Domain: parses Zabbix/PD alert emails into {@link Incident} objects. No I/O —
+ * receives a {@link RawMessage} and produces a domain object.
  */
 @Slf4j
 public class PdIncidentParser {
@@ -41,6 +41,9 @@ public class PdIncidentParser {
 
     /**
      * Returns an Incident if the message is a valid PD alert, empty otherwise.
+     *
+     * @param msg
+     * @return
      */
     public Optional<Incident> parse(RawMessage msg) {
         String subject = msg.subject();
@@ -66,8 +69,8 @@ public class PdIncidentParser {
             String[] fromParts = from.split(":");
             String fromName = fromParts[0];
             String fromObject = fromName.matches(".*-\\d+$")
-                    ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "")
-                    : fromName;
+                                ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "")
+                                : fromName;
             from = fromObject.replace("-65535", "");
             String transformedFrom = dictionary.lookupPD(fromObject);
             boolean needsReview = fromObject.equals(transformedFrom);
@@ -126,15 +129,22 @@ public class PdIncidentParser {
 
     private String buildDescription(Status status, String type, String from) {
         String state = switch (status) {
-            case START -> "Zabbix зареєстровано початок інциденту, ";
-            case END   -> "Zabbix зареєстровано кінець інциденту, ";
-            case NONE  -> "Zabbix зареєстровано ";
+            case START ->
+                "Zabbix зареєстровано початок інциденту, ";
+            case END ->
+                "Zabbix зареєстровано кінець інциденту, ";
+            case NONE ->
+                "Zabbix зареєстровано ";
         };
         String eventDesc = switch (type) {
-            case "ICMP"              -> "зникнення зв'язку з обладнанням на ";
-            case "Unavailable", "by" -> "зникнення підключення ";
-            case "been"              -> "перезавантаження обладнання ";
-            default                  -> type + " ";
+            case "ICMP" ->
+                "зникнення зв'язку з обладнанням на ";
+            case "Unavailable", "by" ->
+                "зникнення підключення ";
+            case "been" ->
+                "перезавантаження обладнання ";
+            default ->
+                type + " ";
         };
         return (state + eventDesc + from).replaceAll("\\s+", " ");
     }

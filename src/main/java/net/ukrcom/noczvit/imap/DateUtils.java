@@ -18,7 +18,9 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Package-private utilities for date string localisation. */
+/**
+ * Package-private utilities for date string localisation.
+ */
 class DateUtils {
 
     private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
@@ -28,7 +30,8 @@ class DateUtils {
             Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
     );
 
-    private DateUtils() {}
+    private DateUtils() {
+    }
 
     static String convertMonthNumToMnemo(String dt) {
         dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\+\\d{4}$", "");

@@ -43,7 +43,9 @@ public class Client {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_CONCURRENT_SNMP = 10;
 
-    private record CelsiusResult(String cells, String graphRow) {}
+    private record CelsiusResult(String cells, String graphRow) {
+
+    }
 
     private final Config config;
 
@@ -126,9 +128,9 @@ public class Client {
                 String error = response != null ? response.getErrorStatusText() : "Timeout";
                 log.warn("SNMP celsius {}: {}", host + "." + domain, error);
                 return new CelsiusResult(
-                    "<td><b>" + host + "</b></td>"
-                    + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>",
-                    ""
+                        "<td><b>" + host + "</b></td>"
+                        + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>",
+                        ""
                 );
             }
 
@@ -140,17 +142,17 @@ public class Client {
 
             String graphRow = (zabbix != null) ? zabbix.getGraphRow(host, desc, from, to) : "";
             return new CelsiusResult(
-                "<td><b>" + host + "." + domain + "</b></td>"
-                + "<td>" + desc + "</td>"
-                + "<td><b>" + temp + "</b>°C</td>",
-                graphRow
+                    "<td><b>" + host + "." + domain + "</b></td>"
+                    + "<td>" + desc + "</td>"
+                    + "<td><b>" + temp + "</b>°C</td>",
+                    graphRow
             );
         } catch (IOException e) {
             log.warn("SNMP celsius {}: {}", host, e.getMessage());
             return new CelsiusResult(
-                "<td><b>" + host + "</b></td>"
-                + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>",
-                ""
+                    "<td><b>" + host + "</b></td>"
+                    + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>",
+                    ""
             );
         }
     }

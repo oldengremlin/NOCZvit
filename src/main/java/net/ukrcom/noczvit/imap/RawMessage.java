@@ -15,6 +15,9 @@
 package net.ukrcom.noczvit.imap;
 
 /**
- * Raw IMAP message as read from the server — infrastructure DTO, no business logic.
+ * Raw IMAP message as read from the server — infrastructure DTO, no business
+ * logic.
  */
-public record RawMessage(String dateStr, long unixDate, String subject, String body) {}
+public record RawMessage(String dateStr, long unixDate, String subject, String body) {
+
+}

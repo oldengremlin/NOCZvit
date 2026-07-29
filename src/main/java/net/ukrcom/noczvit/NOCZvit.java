@@ -74,13 +74,13 @@ public class NOCZvit {
             LocalDate yesterday = currentDate.minusDays(1);
 
             LocalDateTime prevDutyBegin = LocalDateTime.parse(yesterday + " 20:00:00", DATE_TIME_FORMATTER);
-            LocalDateTime prevDutyEnd   = LocalDateTime.parse(currentDate + " 07:59:59", DATE_TIME_FORMATTER);
+            LocalDateTime prevDutyEnd = LocalDateTime.parse(currentDate + " 07:59:59", DATE_TIME_FORMATTER);
             LocalDateTime currDutyBegin = LocalDateTime.parse(currentDate + " 08:00:00", DATE_TIME_FORMATTER);
-            LocalDateTime currDutyEnd   = LocalDateTime.parse(currentDate + " 19:59:59", DATE_TIME_FORMATTER);
+            LocalDateTime currDutyEnd = LocalDateTime.parse(currentDate + " 19:59:59", DATE_TIME_FORMATTER);
 
             boolean nightShift = LocalDateTime.now().getHour() < 12;
             LocalDateTime reportFrom = nightShift ? prevDutyBegin : currDutyBegin;
-            LocalDateTime reportTo   = nightShift ? prevDutyEnd   : currDutyEnd;
+            LocalDateTime reportTo = nightShift ? prevDutyEnd : currDutyEnd;
 
             List<Incident> incidents = null;
             net.ukrcom.noczvit.zabbix.Client zabbix = null;
@@ -121,7 +121,9 @@ public class NOCZvit {
                 CompletableFuture<List<ZabbixProblem>> zabbixProblemsFuture;
                 if (config.isZabbixEnabled() && config.isIncidentsEnabled()) {
                     zabbixProblemsFuture = zabbixFuture.thenApplyAsync(zc -> {
-                        if (zc == null) return Collections.<ZabbixProblem>emptyList();
+                        if (zc == null) {
+                            return Collections.<ZabbixProblem>emptyList();
+                        }
                         return zc.getProblems(reportFrom, reportTo);
                     }, ioExecutor);
                 } else {
@@ -152,24 +154,24 @@ public class NOCZvit {
                     throw new IOException("Initialization failed: " + cause.getMessage(), cause);
                 }
 
-                incidents      = imapFuture.join();
-                zabbix         = zabbixFuture.join();
+                incidents = imapFuture.join();
+                zabbix = zabbixFuture.join();
                 zabbixProblems = zabbixProblemsFuture.join();
-                debtorsHtml    = debtorsFuture.join();
+                debtorsHtml = debtorsFuture.join();
             }
 
             // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP для таблиці.
             // Claude отримує лише оригінальний список IMAP (incidents) — без змін.
             ZabbixIncidentConverter zabbixConverter = new ZabbixIncidentConverter(dictionary);
             List<Incident> zabbixIncidents = (incidents != null)
-                    ? ProblemFilter.filter(zabbixProblems, incidents).stream()
+                                             ? ProblemFilter.filter(zabbixProblems, incidents).stream()
                             .flatMap(p -> zabbixConverter.convert(p).stream())
                             .toList()
-                    : Collections.emptyList();
+                                             : Collections.emptyList();
 
             List<Incident> incidentsForTable = (incidents != null)
-                    ? Stream.concat(incidents.stream(), zabbixIncidents.stream()).toList()
-                    : Collections.emptyList();
+                                               ? Stream.concat(incidents.stream(), zabbixIncidents.stream()).toList()
+                                               : Collections.emptyList();
 
             String subject;
             StringBuilder message = new StringBuilder(
@@ -200,14 +202,14 @@ public class NOCZvit {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidentsForTable, prevDutyBegin, prevDutyEnd) : null;
+                                         ? summaryClient.generateSummary(incidentsForTable, prevDutyBegin, prevDutyEnd) : null;
                     message.append(incidentBuilder.build(incidentsForTable, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
-                            ? summaryClient.generateSummary(incidentsForTable, currDutyBegin, currDutyEnd) : null;
+                                         ? summaryClient.generateSummary(incidentsForTable, currDutyBegin, currDutyEnd) : null;
                     message.append(incidentBuilder.build(incidentsForTable, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);

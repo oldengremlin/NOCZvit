@@ -125,8 +125,8 @@ public class Client {
             log.debug("Zabbix web session cookie present: {}", hasCookie);
             if (log.isDebugEnabled() && http.cookieHandler().isPresent()) {
                 CookieManager cm = (CookieManager) http.cookieHandler().get();
-                cm.getCookieStore().getCookies().forEach(c ->
-                        log.debug("  cookie: {}={}...", c.getName(),
+                cm.getCookieStore().getCookies().forEach(c
+                        -> log.debug("  cookie: {}={}...", c.getName(),
                                 c.getValue().substring(0, Math.min(8, c.getValue().length()))));
             }
 
@@ -138,13 +138,17 @@ public class Client {
     }
 
     /**
-     * Повертає список подій Zabbix за вказаний період зміни.
-     * Запитує лише Середні (3), Високі (4) та Критичні (5) severity.
-     * Повертає порожній список якщо авторизація не виконана або при помилці.
+     * Повертає список подій Zabbix за вказаний період зміни. Запитує лише
+     * Середні (3), Високі (4) та Критичні (5) severity. Повертає порожній
+     * список якщо авторизація не виконана або при помилці.
      *
-     * Використовує event.get (таблиця events) замість problem.get (таблиця problems),
-     * бо problem.get повертає лише активні або нещодавно вирішені проблеми —
-     * Zabbix housekeeping видаляє вирішені записи з problem-таблиці.
+     * Використовує event.get (таблиця events) замість problem.get (таблиця
+     * problems), бо problem.get повертає лише активні або нещодавно вирішені
+     * проблеми — Zabbix housekeeping видаляє вирішені записи з problem-таблиці.
+     *
+     * @param from
+     * @param to
+     * @return
      */
     public List<ZabbixProblem> getProblems(LocalDateTime from, LocalDateTime to) {
         if (authToken == null) {
@@ -152,7 +156,7 @@ public class Client {
         }
 
         long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
-        long ctTo   = to.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long ctTo = to.atZone(ZoneId.systemDefault()).toEpochSecond();
 
         try {
             JsonObject params = new JsonObject();
@@ -172,22 +176,24 @@ public class Client {
                 return Collections.emptyList();
             }
 
-            record EventEntry(String objectId, String rEventId, String name, long clock, String host) {}
+            record EventEntry(String objectId, String rEventId, String name, long clock, String host) {
+
+            }
             List<EventEntry> entries = new ArrayList<>(result.size());
             List<String> rEventIds = new ArrayList<>();
             List<String> missingHostTriggerIds = new ArrayList<>();
 
             for (JsonElement el : result) {
                 JsonObject obj = el.getAsJsonObject();
-                String objectId  = obj.get("objectid").getAsString();
-                String rEventId  = obj.get("r_eventid").getAsString(); // "0" якщо ще активна
-                String name      = obj.get("name").getAsString();
-                long clock       = obj.get("clock").getAsLong();
+                String objectId = obj.get("objectid").getAsString();
+                String rEventId = obj.get("r_eventid").getAsString(); // "0" якщо ще активна
+                String name = obj.get("name").getAsString();
+                long clock = obj.get("clock").getAsLong();
 
                 JsonArray hosts = obj.getAsJsonArray("hosts");
                 String host = (hosts != null && !hosts.isEmpty())
-                        ? hosts.get(0).getAsJsonObject().get("host").getAsString()
-                        : "";
+                              ? hosts.get(0).getAsJsonObject().get("host").getAsString()
+                              : "";
 
                 if (host.isBlank()) {
                     missingHostTriggerIds.add(objectId);
@@ -206,10 +212,10 @@ public class Client {
             List<ZabbixProblem> problems = new ArrayList<>(entries.size());
             for (EventEntry e : entries) {
                 String host = e.host().isBlank()
-                        ? triggerHostMap.getOrDefault(e.objectId(), "")
-                        : e.host();
+                              ? triggerHostMap.getOrDefault(e.objectId(), "")
+                              : e.host();
                 long rClock = "0".equals(e.rEventId()) ? 0L
-                        : rEventClocks.getOrDefault(e.rEventId(), 0L);
+                              : rEventClocks.getOrDefault(e.rEventId(), 0L);
                 problems.add(new ZabbixProblem(host, e.name(), e.clock(), rClock));
             }
 
@@ -229,7 +235,7 @@ public class Client {
         }
         try {
             JsonObject params = new JsonObject();
-            params.add("eventids", GSON.toJsonTree(eventIds.toArray(new String[0])));
+            params.add("eventids", GSON.toJsonTree(eventIds.toArray(String[]::new)));
             params.add("output", GSON.toJsonTree(new String[]{"eventid", "clock"}));
 
             JsonObject resp = apiCall("event.get", params, authToken);
@@ -257,7 +263,7 @@ public class Client {
         }
         try {
             JsonObject params = new JsonObject();
-            params.add("triggerids", GSON.toJsonTree(triggerIds.toArray(new String[0])));
+            params.add("triggerids", GSON.toJsonTree(triggerIds.toArray(String[]::new)));
             params.add("output", GSON.toJsonTree(new String[]{"triggerid"}));
             params.add("selectHosts", GSON.toJsonTree(new String[]{"host"}));
 

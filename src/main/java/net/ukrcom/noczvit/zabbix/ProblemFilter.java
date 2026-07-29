@@ -21,32 +21,34 @@ import net.ukrcom.noczvit.model.Incident;
 /**
  * Фільтрує та дедублікує події Zabbix відносно до переліку інцидентів IMAP.
  *
- * <p>IMAP-папка є основним джерелом даних. Zabbix — вторинним.
- * Виключаємо:
+ * <p>
+ * IMAP-папка є основним джерелом даних. Zabbix — вторинним. Виключаємо:
  * <ul>
- *   <li>події без хоста (порожній рядок — тригер на шаблоні або API не повернув хост)</li>
- *   <li>хост SDH-OSM (події OSM вже присутні через OsmIncidentParser)</li>
- *   <li>проблеми "No SNMP data collection" (технічний шум моніторингу)</li>
- *   <li>OSPF-події (вже надходять через OspfIncidentParser)</li>
- *   <li>події перезавантаження (вже надходять через PdIncidentParser)</li>
- *   <li>події, що збігаються за хостом і часом (~5 хв) з IMAP-інцидентом</li>
+ * <li>події без хоста (порожній рядок — тригер на шаблоні або API не повернув
+ * хост)</li>
+ * <li>хост SDH-OSM (події OSM вже присутні через OsmIncidentParser)</li>
+ * <li>проблеми "No SNMP data collection" (технічний шум моніторингу)</li>
+ * <li>OSPF-події (вже надходять через OspfIncidentParser)</li>
+ * <li>події перезавантаження (вже надходять через PdIncidentParser)</li>
+ * <li>події, що збігаються за хостом і часом (~5 хв) з IMAP-інцидентом</li>
  * </ul>
  */
 public class ProblemFilter {
 
-    private static final Pattern OSPF    = Pattern.compile("(?i)ospf");
+    private static final Pattern OSPF = Pattern.compile("(?i)ospf");
     private static final Pattern RESTART = Pattern.compile("(?i)(restarted|rebooted)");
     private static final Pattern NO_SNMP = Pattern.compile("(?i)no snmp data collection");
 
     // Допустиме розходження у секундах між часом події Zabbix і часом IMAP-інциденту
     private static final long DEDUP_TOLERANCE_SEC = 300;
 
-    private ProblemFilter() {}
+    private ProblemFilter() {
+    }
 
     /**
      * Повертає відфільтрований список подій, що не дублюються в IMAP.
      *
-     * @param problems      повний список подій Zabbix за зміну
+     * @param problems повний список подій Zabbix за зміну
      * @param imapIncidents інциденти, вже присутні з IMAP-джерела
      * @return відфільтрований список
      */
@@ -65,8 +67,8 @@ public class ProblemFilter {
         if (problem.host().isBlank()) {
             return false;
         }
-        return imapIncidents.stream().anyMatch(inc ->
-                !inc.device().isEmpty()
+        return imapIncidents.stream().anyMatch(inc
+                -> !inc.device().isEmpty()
                 && inc.device().equalsIgnoreCase(problem.host())
                 && Math.abs(inc.eventTs() - problem.clock()) <= DEDUP_TOLERANCE_SEC
         );
