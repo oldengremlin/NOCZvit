@@ -83,7 +83,7 @@ public class EmersonTrapSection {
 
         StringBuilder html = new StringBuilder();
         html.append("<div class=\"section\">\n")
-                .append("<h2>Зареєстровані події по ДБЖ та кондиціонерах Emerson на Датацентрі</h2>\n");
+                .append("<h2 class=\"trap-title\">Зареєстровані події по ДБЖ та кондиціонерах Emerson на Датацентрі</h2>\n");
 
         StringBuilder text = new StringBuilder();
         text.append("=== ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ (ТІЛЬКИ ЦЯ ЗМІНА — НЕ ПЕРЕНОСИТИ В НАСТУПНІ) ===\n");
@@ -93,8 +93,8 @@ public class EmersonTrapSection {
             String ip = first.ip();
 
             // HTML device block
-            html.append("<h3><a href=\"http://").append(StringEscapeUtils.escapeHtml4(ip))
-                    .append("/\">").append(StringEscapeUtils.escapeHtml4(hostname))
+            html.append("<h3 class=\"trap-device\"><a href=\"http://").append(StringEscapeUtils.escapeHtml4(ip))
+                    .append("/\" style=\"color:#1b5e20\">").append(StringEscapeUtils.escapeHtml4(hostname))
                     .append("</a> (").append(StringEscapeUtils.escapeHtml4(ip)).append(")</h3>\n")
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
@@ -111,11 +111,6 @@ public class EmersonTrapSection {
             int n = 0;
             for (TrapIncident inc : devIncidents) {
                 n++;
-                String rowClass = switch (inc.severity()) {
-                    case ALARM, WARNING -> " class=\"row-start\"";
-                    case INFO -> "";
-                };
-
                 String startStr = HTML_FMT.format(inc.activatedAt());
                 String endStr = inc.clearedAt() != null ? HTML_FMT.format(inc.clearedAt()) : "—";
                 String durStr = inc.clearedAt() != null
@@ -131,7 +126,7 @@ public class EmersonTrapSection {
                             .collect(Collectors.joining("; ")) + "</small>";
                 }
 
-                html.append("<tr").append(rowClass).append(">")
+                html.append("<tr>")
                         .append("<td>").append(n).append(".</td>")
                         .append("<td>").append(startStr).append("</td>")
                         .append("<td>").append(endStr).append("</td>")
