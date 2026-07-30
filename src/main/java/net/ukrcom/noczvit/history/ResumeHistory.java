@@ -19,20 +19,24 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * Persistent store for Claude shift summaries backed by a SQLite database.
  *
- * <p>Each reporting period is identified by {@code (period_from, period_to)} (Unix epoch seconds).
- * At most one record exists per period — subsequent saves for the same period perform an in-place
- * update via SQLite 3.24+ UPSERT semantics, which is safe for test re-runs.
+ * <p>
+ * Each reporting period is identified by {@code (period_from, period_to)} (Unix
+ * epoch seconds). At most one record exists per period — subsequent saves for
+ * the same period perform an in-place update via SQLite 3.24+ UPSERT semantics,
+ * which is safe for test re-runs.
  *
- * <p>A new connection is opened and closed for every operation (connection-per-operation pattern)
- * to avoid SQLite write-lock issues between invocations.
+ * <p>
+ * A new connection is opened and closed for every operation
+ * (connection-per-operation pattern) to avoid SQLite write-lock issues between
+ * invocations.
  *
- * <p>DDL (applied on construction):
+ * <p>
+ * DDL (applied on construction):
  * <pre>{@code
  * CREATE TABLE IF NOT EXISTS resume_history (
  *     period_from  INTEGER NOT NULL,
@@ -75,33 +79,41 @@ public class ResumeHistory {
     private final String jdbcUrl;
 
     /**
-     * Creates the store and initialises the {@code resume_history} table if it does not exist.
+     * Creates the store and initialises the {@code resume_history} table if it
+     * does not exist.
      *
      * @param jdbcUrl JDBC URL of the SQLite file, e.g.
-     *                {@code jdbc:sqlite:/var/lib/noczvit/history.db}
+     * {@code jdbc:sqlite:/var/lib/noczvit/history.db}
      * @throws SQLException if the database cannot be opened or the DDL fails
      */
     public ResumeHistory(String jdbcUrl) throws SQLException {
         this.jdbcUrl = jdbcUrl;
-        try (Connection conn = DriverManager.getConnection(jdbcUrl);
-             Statement st = conn.createStatement()) {
-            st.execute(DDL);
-            log.debug("ResumeHistory: таблицю перевірено/створено у {}", jdbcUrl);
+        try (Connection conn = DriverManager.getConnection(jdbcUrl)) {
+            try (var pragmaStmt = conn.createStatement()) {
+                pragmaStmt.execute("PRAGMA journal_mode = WAL");
+                pragmaStmt.execute("PRAGMA busy_timeout = 30000");
+            }
+            conn.setAutoCommit(true);
+            try (var st = conn.createStatement()) {
+                st.execute("PRAGMA auto_vacuum = INCREMENTAL");
+                st.execute(DDL);
+                log.debug("ResumeHistory: таблицю перевірено/створено у {}", jdbcUrl);
+            }
         }
+
     }
 
     /**
-     * Returns the most recent summary whose reporting period ended before {@code currentFrom},
-     * or {@code null} when no such record exists.
+     * Returns the most recent summary whose reporting period ended before
+     * {@code currentFrom}, or {@code null} when no such record exists.
      *
-     * @param currentFrom Unix epoch (seconds) start of the current reporting period; records
-     *                    with {@code period_to >= currentFrom} are excluded
+     * @param currentFrom Unix epoch (seconds) start of the current reporting
+     * period; records with {@code period_to >= currentFrom} are excluded
      * @return the latest previous {@link ResumeRecord}, or {@code null}
      * @throws SQLException if the query fails
      */
     public ResumeRecord findPrevious(long currentFrom) throws SQLException {
-        try (Connection conn = DriverManager.getConnection(jdbcUrl);
-             PreparedStatement ps = conn.prepareStatement(SELECT_PREVIOUS)) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl); PreparedStatement ps = conn.prepareStatement(SELECT_PREVIOUS)) {
             ps.setLong(1, currentFrom);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -117,20 +129,21 @@ public class ResumeHistory {
     }
 
     /**
-     * Saves (or updates) the plain-text Claude summary for the given reporting period.
+     * Saves (or updates) the plain-text Claude summary for the given reporting
+     * period.
      *
-     * <p>If a record for {@code (periodFrom, periodTo)} already exists it is updated in place;
-     * the row identity (primary key) is preserved.
+     * <p>
+     * If a record for {@code (periodFrom, periodTo)} already exists it is
+     * updated in place; the row identity (primary key) is preserved.
      *
-     * @param periodFrom  Unix epoch (seconds) start of the reporting period
-     * @param periodTo    Unix epoch (seconds) end of the reporting period
+     * @param periodFrom Unix epoch (seconds) start of the reporting period
+     * @param periodTo Unix epoch (seconds) end of the reporting period
      * @param summaryText plain-text Claude summary (no HTML)
      * @throws SQLException if the write fails
      */
     public void save(long periodFrom, long periodTo, String summaryText) throws SQLException {
         long now = System.currentTimeMillis() / 1000L;
-        try (Connection conn = DriverManager.getConnection(jdbcUrl);
-             PreparedStatement ps = conn.prepareStatement(UPSERT)) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl); PreparedStatement ps = conn.prepareStatement(UPSERT)) {
             ps.setLong(1, periodFrom);
             ps.setLong(2, periodTo);
             ps.setLong(3, now);
