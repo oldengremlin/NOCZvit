@@ -137,10 +137,13 @@ public class SummaryClient {
         try {
             log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів)", model, incidents.size());
 
+            String prompt = buildPrompt(incidents, from, to, previous, trapPlainText);
+            log.debug("Claude prompt:\n{}", prompt);
+
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1500L)
-                    .addUserMessage(buildPrompt(incidents, from, to, previous, trapPlainText))
+                    .addUserMessage(prompt)
                     .build();
 
             Message response = client.messages().create(params);
