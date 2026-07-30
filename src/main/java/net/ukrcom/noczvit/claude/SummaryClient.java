@@ -200,9 +200,14 @@ public class SummaryClient {
                 .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
                 .append("\n\nУнікальних подій: ").append(startCount)
                 .append(" (рядків у таблиці: ").append(incidents.size())
-                .append(" — кожна подія має START і може мати END)\n")
-                .append("Інциденти:\n");
+                .append(" — кожна подія має START і може мати END)\n");
 
+        // Trap block placed BEFORE the incident list — avoids "lost in the middle" effect
+        if (trapPlainText != null && !trapPlainText.isBlank()) {
+            sb.append("\n").append(trapPlainText).append("\n");
+        }
+
+        sb.append("\nІнциденти:\n");
         int n = 0;
         for (Incident inc : incidents) {
             sb.append(++n).append(". ");
@@ -226,9 +231,11 @@ public class SummaryClient {
               .append("\n");
         }
 
-        if (trapPlainText != null && !trapPlainText.isBlank()) {
-            sb.append("\n").append(trapPlainText).append("\n");
-        }
+        // Closing reminder when DC events are present — placed last so Claude reads it
+        // immediately before generating the response
+        String trapReminder = (trapPlainText != null && !trapPlainText.isBlank())
+                ? "\nНАГАДУВАННЯ: у даних вище є блок ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ — обов'язково включи ці події у резюме.\n"
+                : "";
 
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
@@ -258,7 +265,7 @@ public class SummaryClient {
                 ЗАБОРОНЕНО будь-яке Markdown-форматування: жодних **, __, #, -, *, _ та подібних символів.
                 НЕ перелічуй всі інциденти по одному. Дай загальну картину зміни.
 
-                %s""".formatted(sb.toString());
+                %s%s""".formatted(sb.toString(), trapReminder);
     }
 
     /**
