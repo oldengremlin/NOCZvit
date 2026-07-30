@@ -157,6 +157,7 @@ public class SummaryClient {
                 return "";
             }
 
+            summary = sanitizeRussianisms(summary);
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
 
             if (resumeHistory != null) {
@@ -305,6 +306,25 @@ public class SummaryClient {
         });
 
         return open.isEmpty() ? "немає" : String.join("; ", open);
+    }
+
+    /**
+     * Replaces Russian declension forms of "событие" with the correct Ukrainian "подія".
+     * Applied as a safety net after the Claude API response, in case the model ignores the
+     * prompt instruction about Russianisms.
+     */
+    private static String sanitizeRussianisms(String text) {
+        // All declension forms of Russian "событие" → Ukrainian "подія"
+        text = text.replaceAll("(?i)\\bподий\\b",     "подій");      // catch typos
+        text = text.replaceAll("(?i)\\bсобытий\\b",   "подій");
+        text = text.replaceAll("(?i)\\bсобытиях\\b",  "подіях");
+        text = text.replaceAll("(?i)\\bсобытиям\\b",  "подіям");
+        text = text.replaceAll("(?i)\\bсобытиями\\b", "подіями");
+        text = text.replaceAll("(?i)\\bсобытием\\b",  "подією");
+        text = text.replaceAll("(?i)\\bсобытии\\b",   "події");
+        text = text.replaceAll("(?i)\\bсобытия\\b",   "події");
+        text = text.replaceAll("(?i)\\bсобытие\\b",   "подія");
+        return text;
     }
 
     /**
