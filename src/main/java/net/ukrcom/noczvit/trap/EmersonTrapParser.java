@@ -44,7 +44,7 @@ import net.ukrcom.noczvit.imap.RawMessage;
 public class EmersonTrapParser {
 
     private static final Pattern SUBJECT_RE = Pattern.compile(
-            "^Got trap from ([\\w-]+)\\s+-\\s+Trap",
+            "^Got trap from ([\\w-]+)",
             Pattern.CASE_INSENSITIVE);
 
     private static final Pattern BODY_RE = Pattern.compile(
