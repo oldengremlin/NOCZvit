@@ -55,6 +55,13 @@ import net.ukrcom.noczvit.trap.TrapIncident.Severity;
 @Slf4j
 public class TrapCorrelator {
 
+    // Traps for which "До кінця зміни не відновлено." is not appended when unclosed —
+    // they describe an ongoing process, not a fault condition requiring resolution.
+    private static final Set<String> NO_UNRESOLVED_SUFFIX = Set.of(
+            "Active:Alarm:Battery Discharging",
+            "Active:Alarm:MMS On Battery"
+    );
+
     // Traps that represent normal operational transitions — suppress entirely
     private static final Set<String> IGNORE_TRAPS = Set.of(
             "Active:Alarm:Unit On Standby",
@@ -132,7 +139,7 @@ public class TrapCorrelator {
     private static final Map<String, String> TRAP_DESCRIPTIONS = new HashMap<>();
     static {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Loss of Mains",          "Зникнення мережевого живлення.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "Розряд батарей ДБЖ.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "ДБЖ переходить на живлення від батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:MMS On Battery",         "MMS переключено на живлення від батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Bypass Not Available",   "Байпас недоступний.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Low Battery",            "Низький заряд батарей ДБЖ.");
@@ -272,6 +279,12 @@ public class TrapCorrelator {
 
             // Standalone active trap
             if (ACTIVE_TO_CLEARED.containsKey(trap)) {
+                // MMS On Battery is the second step of the same battery-switch process as
+                // Battery Discharging. If BD is already open, absorb MMS into that incident.
+                if ("Active:Alarm:MMS On Battery".equals(trap)
+                        && openStandalones.containsKey("Active:Alarm:Battery Discharging")) {
+                    continue;
+                }
                 if (openStandalones.containsKey(trap)) {
                     log.debug("TrapCorrelator PDC {}: duplicate Active «{}» while already open", hostname, trap);
                 }
@@ -281,6 +294,12 @@ public class TrapCorrelator {
 
             // Standalone cleared trap
             if (CLEARED_TO_ACTIVE.containsKey(trap)) {
+                // MMS On Battery Cleared while Battery Discharging is still open — ignore;
+                // the combined incident will close when Battery Discharging Cleared arrives.
+                if ("Cleared:Alarm:MMS On Battery".equals(trap)
+                        && openStandalones.containsKey("Active:Alarm:Battery Discharging")) {
+                    continue;
+                }
                 String activeType = CLEARED_TO_ACTIVE.get(trap);
                 TrapEvent startEv = openStandalones.remove(activeType);
                 if (startEv != null) {
@@ -389,6 +408,11 @@ public class TrapCorrelator {
             if (CLEARED_TO_ACTIVE.containsKey(activeType)) {
                 continue; // skip clear events in secondaries list
             }
+            // Battery Discharging + MMS On Battery are one process; already in main description
+            if ("Active:Alarm:Battery Discharging".equals(activeType)
+                    || "Active:Alarm:MMS On Battery".equals(activeType)) {
+                continue;
+            }
             String secDesc = TRAP_DESCRIPTIONS.getOrDefault(activeType, activeType);
             details.add(secDesc);
         }
@@ -403,7 +427,7 @@ public class TrapCorrelator {
                                                   Instant clearedAt) {
         Severity severity = TRAP_SEVERITY.getOrDefault(activeTrapType, Severity.WARNING);
         String desc = TRAP_DESCRIPTIONS.getOrDefault(activeTrapType, activeTrapType);
-        if (clearedAt == null) {
+        if (clearedAt == null && !NO_UNRESOLVED_SUFFIX.contains(activeTrapType)) {
             desc = desc + " До кінця зміни не відновлено.";
         }
         String deviceClass = startEvent.deviceClass();
