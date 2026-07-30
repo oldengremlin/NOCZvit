@@ -78,9 +78,16 @@ public class TrapCorrelator {
             "Cleared:Alarm:Unit On"
     );
 
-    // PDC root power-outage trap
-    private static final String LOSS_OF_MAINS_ACTIVE = "Active:Alarm:Loss of Mains";
-    private static final String LOSS_OF_MAINS_CLEARED = "Cleared:Alarm:Loss of Mains";
+    // PDC root power-outage traps — multiple firmware variants open the same chain
+    // r1/r2 send "Loss of Mains"; r3/r4 send "System Input Power Problem"
+    private static final Set<String> CHAIN_ROOT_ACTIVE = Set.of(
+            "Active:Alarm:Loss of Mains",
+            "Active:Alarm:System Input Power Problem"
+    );
+    private static final Set<String> CHAIN_ROOT_CLEARED = Set.of(
+            "Cleared:Alarm:Loss of Mains",
+            "Cleared:Alarm:System Input Power Problem"
+    );
 
     // PDC secondary traps that accompany a power outage (attached as details)
     private static final Set<String> PDC_POWER_OUTAGE_SECONDARIES = Set.of(
@@ -88,6 +95,8 @@ public class TrapCorrelator {
             "Cleared:Alarm:Battery Discharging",
             "Active:Alarm:MMS On Battery",
             "Cleared:Alarm:MMS On Battery",
+            "Active:Alarm:Battery Charging Inhibited",
+            "Cleared:Alarm:Battery Charging Inhibited",
             "Active:Alarm:Bypass Not Available",
             "Cleared:Alarm:Bypass Not Available",
             "Active:Alarm:Low Battery",
@@ -115,8 +124,9 @@ public class TrapCorrelator {
         ACTIVE_TO_CLEARED.put("Active:Alarm:High Humidity",           "Cleared:Alarm:High Humidity");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Low Humidity",            "Cleared:Alarm:Low Humidity");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Fan Fault",               "Cleared:Alarm:Fan Fault");
-        ACTIVE_TO_CLEARED.put("Active:Alarm:Battery Charging Inhibited", "Cleared:Alarm:Battery Charging Inhibited");
-        ACTIVE_TO_CLEARED.put("Active:Alarm:System Input Power Problem",  "Cleared:Alarm:System Input Power Problem");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Unit Shutdown",            "Cleared:Alarm:Unit Shutdown");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor Low Suction Pressure",  "Cleared:Alarm:Compressor Low Suction Pressure");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor High Head Pressure",    "Cleared:Alarm:Compressor High Head Pressure");
     }
 
     // Maps Cleared trap type → its Active counterpart (reverse of ACTIVE_TO_CLEARED)
@@ -143,8 +153,9 @@ public class TrapCorrelator {
         TRAP_SEVERITY.put("Active:Alarm:High Humidity",               Severity.WARNING);
         TRAP_SEVERITY.put("Active:Alarm:Low Humidity",                Severity.WARNING);
         TRAP_SEVERITY.put("Active:Alarm:Fan Fault",                   Severity.WARNING);
-        TRAP_SEVERITY.put("Active:Alarm:Battery Charging Inhibited",   Severity.WARNING);
-        TRAP_SEVERITY.put("Active:Alarm:System Input Power Problem",   Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Unit Shutdown",               Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Compressor Low Suction Pressure",  Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Compressor High Head Pressure",    Severity.ALARM);
     }
 
     // Ukrainian descriptions for active trap types
@@ -166,6 +177,10 @@ public class TrapCorrelator {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Fan Fault",              "Несправність вентилятора.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Charging Inhibited", "Заборонено заряджання батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:System Input Power Problem",  "Проблема з мережевим живленням.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Shutdown",          "Аварійне вимкнення кондиціонера.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Low Suction Pressure", "Низький тиск всмоктування компресора.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor High Head Pressure",   "Підвищений тиск нагнітання компресора.");
+        TRAP_DESCRIPTIONS.put("Monitoring Card Reboot",              "Перезапуск картки моніторингу.");
         TRAP_DESCRIPTIONS.put("Cold Start",                           "Перезапуск картки моніторингу.");
     }
 
@@ -250,6 +265,20 @@ public class TrapCorrelator {
                 continue;
             }
 
+            if (TrapDeduplicator.COLD_START.equalsIgnoreCase(trap)) {
+                incidents.add(new TrapIncident(TrapEvent.CLASS_PDC, hostname, ip,
+                        Severity.INFO, ev.timestamp(), ev.timestamp(),
+                        TRAP_DESCRIPTIONS.get("Cold Start"), List.of()));
+                continue;
+            }
+
+            if (trap.startsWith("Monitoring Card Reboot")) {
+                incidents.add(new TrapIncident(TrapEvent.CLASS_PDC, hostname, ip,
+                        Severity.INFO, ev.timestamp(), null,
+                        TRAP_DESCRIPTIONS.get("Monitoring Card Reboot"), List.of()));
+                continue;
+            }
+
             if (SYSTEM_RETURN_TO_NORMAL.equals(trap)) {
                 // Close power outage chain if open
                 if (openOutageRoot != null) {
@@ -266,13 +295,13 @@ public class TrapCorrelator {
                 continue;
             }
 
-            if (LOSS_OF_MAINS_ACTIVE.equals(trap)) {
+            if (CHAIN_ROOT_ACTIVE.contains(trap)) {
                 openOutageRoot = ev;
                 openOutageSecondaries.clear();
                 continue;
             }
 
-            if (LOSS_OF_MAINS_CLEARED.equals(trap)) {
+            if (CHAIN_ROOT_CLEARED.contains(trap)) {
                 if (openOutageRoot != null) {
                     incidents.add(buildPowerOutageIncident(hostname, ip, openOutageRoot,
                             openOutageSecondaries, ev.timestamp()));
@@ -280,7 +309,7 @@ public class TrapCorrelator {
                     openOutageRoot = null;
                     openOutageSecondaries.clear();
                 } else {
-                    log.debug("TrapCorrelator PDC {}: Cleared:Loss of Mains without matching Active", hostname);
+                    log.debug("TrapCorrelator PDC {}: chain root Cleared «{}» without matching Active", hostname, trap);
                 }
                 continue;
             }
@@ -358,6 +387,13 @@ public class TrapCorrelator {
                 continue;
             }
 
+            if (trap.startsWith("Monitoring Card Reboot")) {
+                incidents.add(new TrapIncident(TrapEvent.CLASS_ADC, hostname, ip,
+                        Severity.INFO, ev.timestamp(), null,
+                        TRAP_DESCRIPTIONS.get("Monitoring Card Reboot"), List.of()));
+                continue;
+            }
+
             if (TrapDeduplicator.COLD_START.equalsIgnoreCase(trap)) {
                 String desc = TRAP_DESCRIPTIONS.get("Cold Start");
                 // Check if this Cold Start is linked to a PDC power restoration in the same room
@@ -407,7 +443,8 @@ public class TrapCorrelator {
                 "Active:Alarm:Battery Discharging".equals(e.trapType())
                 || "Active:Alarm:MMS On Battery".equals(e.trapType()));
 
-        StringBuilder desc = new StringBuilder(TRAP_DESCRIPTIONS.get(LOSS_OF_MAINS_ACTIVE));
+        StringBuilder desc = new StringBuilder(TRAP_DESCRIPTIONS.getOrDefault(
+                root.trapType(), "Зникнення мережевого живлення."));
         if (hasBattery) {
             desc.append(" ДБЖ живив навантаження від батарей.");
         }
