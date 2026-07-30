@@ -72,6 +72,8 @@ public class TrapCorrelator {
     private static final Set<String> IGNORE_TRAPS = Set.of(
             "Active:Alarm:Unit On Standby",
             "Cleared:Alarm:Unit On Standby",
+            "Active:Alarm:Unit Standby",      // Room4 firmware variant
+            "Cleared:Alarm:Unit Standby",     // Room4 firmware variant
             "Active:Alarm:Unit On",
             "Cleared:Alarm:Unit On"
     );
@@ -113,6 +115,8 @@ public class TrapCorrelator {
         ACTIVE_TO_CLEARED.put("Active:Alarm:High Humidity",           "Cleared:Alarm:High Humidity");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Low Humidity",            "Cleared:Alarm:Low Humidity");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Fan Fault",               "Cleared:Alarm:Fan Fault");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Battery Charging Inhibited", "Cleared:Alarm:Battery Charging Inhibited");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:System Input Power Problem",  "Cleared:Alarm:System Input Power Problem");
     }
 
     // Maps Cleared trap type → its Active counterpart (reverse of ACTIVE_TO_CLEARED)
@@ -139,6 +143,8 @@ public class TrapCorrelator {
         TRAP_SEVERITY.put("Active:Alarm:High Humidity",               Severity.WARNING);
         TRAP_SEVERITY.put("Active:Alarm:Low Humidity",                Severity.WARNING);
         TRAP_SEVERITY.put("Active:Alarm:Fan Fault",                   Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Battery Charging Inhibited",   Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:System Input Power Problem",   Severity.ALARM);
     }
 
     // Ukrainian descriptions for active trap types
@@ -158,6 +164,8 @@ public class TrapCorrelator {
         TRAP_DESCRIPTIONS.put("Active:Alarm:High Humidity",          "Висока вологість.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Low Humidity",           "Низька вологість.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Fan Fault",              "Несправність вентилятора.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Charging Inhibited", "Заборонено заряджання батарей.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:System Input Power Problem",  "Проблема з мережевим живленням.");
         TRAP_DESCRIPTIONS.put("Cold Start",                           "Перезапуск картки моніторингу.");
     }
 
@@ -236,7 +244,7 @@ public class TrapCorrelator {
         Map<String, TrapEvent> openStandalones = new LinkedHashMap<>();
 
         for (TrapEvent ev : events) {
-            String trap = ev.trapType();
+            String trap = normalizeCategory(ev.trapType());
 
             if (IGNORE_TRAPS.contains(trap)) {
                 continue;
@@ -337,7 +345,7 @@ public class TrapCorrelator {
         Map<String, TrapEvent> openStandalones = new LinkedHashMap<>();
 
         for (TrapEvent ev : events) {
-            String trap = ev.trapType();
+            String trap = normalizeCategory(ev.trapType());
 
             if (IGNORE_TRAPS.contains(trap)) {
                 continue;
@@ -443,6 +451,31 @@ public class TrapCorrelator {
         String deviceClass = startEvent.deviceClass();
         return new TrapIncident(deviceClass, hostname, ip, severity,
                 startEvent.timestamp(), clearedAt, desc, List.of());
+    }
+
+    /**
+     * Normalises Room4 firmware trap-type categories to the canonical {@code Alarm:} form.
+     * <ul>
+     *   <li>{@code Active:Message:X}  → {@code Active:Alarm:X}
+     *   <li>{@code Active:Warning:X}  → {@code Active:Alarm:X}
+     *   <li>{@code Cleared:Message:X} → {@code Cleared:Alarm:X}
+     *   <li>{@code Cleared:Warning:X} → {@code Cleared:Alarm:X}
+     *   <li>{@code Message:System Return to Normal} → {@code System Return to Normal}
+     * </ul>
+     */
+    static String normalizeCategory(String trap) {
+        if (trap.startsWith("Active:Message:") || trap.startsWith("Active:Warning:")) {
+            // "Active:" = 7 chars; find the ':' after the category word
+            return "Active:Alarm:" + trap.substring(trap.indexOf(':', 7) + 1);
+        }
+        if (trap.startsWith("Cleared:Message:") || trap.startsWith("Cleared:Warning:")) {
+            // "Cleared:" = 8 chars
+            return "Cleared:Alarm:" + trap.substring(trap.indexOf(':', 8) + 1);
+        }
+        if (trap.startsWith("Message:")) {
+            return trap.substring("Message:".length());
+        }
+        return trap;
     }
 
     static String extractRoom(String hostname) {
