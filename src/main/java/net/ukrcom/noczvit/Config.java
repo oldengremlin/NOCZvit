@@ -41,7 +41,7 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #generalProperties()} → {@link #parseFlagArgs(String[])} →
  * {@link #hostsProperties()} → {@link #ramosProperties()} → {@link #celsiusProperties()} →
  * {@link #emailProperties()} → {@link #mssqlProperties()} → {@link #zabbixProperties()} →
- * {@link #claudeProperties()} → {@link #historyResumeProperties()}.
+ * {@link #claudeProperties()} → {@link #historyResumeProperties()} → {@link #trapProperties()}.
  */
 @Slf4j
 @ToString(includeFieldNames = true)
@@ -117,6 +117,12 @@ public class Config {
     private Boolean claudeExplicit; // null = not explicitly set via property or CLI
 
     @NonNull
+    private String snmpTrapFolder;
+    private int snmpTrapDedupSeconds;
+    private int snmpTrapCorrelationMinutes;
+    private int snmpTrapColdstartLinkMinutes;
+
+    @NonNull
     private String accountMssqlUser;
     @NonNull
     private String accountMssqlPassword;
@@ -153,6 +159,7 @@ public class Config {
         zabbixProperties();
         claudeProperties();
         historyResumeProperties();
+        trapProperties();
     }
 
     /** Sets safe defaults for all fields before any properties or CLI arguments are applied. */
@@ -168,6 +175,10 @@ public class Config {
         claudeModel = "claude-haiku-4-5";
         historyResumeUrl = "";
         claudeExplicit = null;
+        snmpTrapFolder = "";
+        snmpTrapDedupSeconds = 30;
+        snmpTrapCorrelationMinutes = 10;
+        snmpTrapColdstartLinkMinutes = 5;
     }
 
     /**
@@ -437,6 +448,48 @@ public class Config {
         if (!url.isBlank()) {
             historyResumeUrl = url;
         }
+    }
+
+    /**
+     * Reads SNMP trap folder pattern and tuning parameters.
+     * Leaves {@link #snmpTrapFolder} empty (feature disabled) when the property is absent or blank.
+     */
+    private void trapProperties() {
+        String folder = stripInlineComment(properties.getProperty("snmp.trap.folder", ""));
+        if (!folder.isBlank()) {
+            snmpTrapFolder = folder;
+        }
+        try {
+            String dedup = stripInlineComment(properties.getProperty("snmp.trap.dedup.seconds", ""));
+            if (!dedup.isBlank()) {
+                snmpTrapDedupSeconds = Integer.parseInt(dedup);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("snmp.trap.dedup.seconds: invalid value, using default {}", snmpTrapDedupSeconds);
+        }
+        try {
+            String corr = stripInlineComment(properties.getProperty("snmp.trap.correlation.minutes", ""));
+            if (!corr.isBlank()) {
+                snmpTrapCorrelationMinutes = Integer.parseInt(corr);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("snmp.trap.correlation.minutes: invalid value, using default {}", snmpTrapCorrelationMinutes);
+        }
+        try {
+            String link = stripInlineComment(properties.getProperty("snmp.trap.coldstart.link.minutes", ""));
+            if (!link.isBlank()) {
+                snmpTrapColdstartLinkMinutes = Integer.parseInt(link);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("snmp.trap.coldstart.link.minutes: invalid value, using default {}", snmpTrapColdstartLinkMinutes);
+        }
+    }
+
+    /**
+     * Returns {@code true} when the SNMP trap folder is configured (feature is enabled).
+     */
+    public boolean isTrapEnabled() {
+        return !snmpTrapFolder.isBlank();
     }
 
     /**

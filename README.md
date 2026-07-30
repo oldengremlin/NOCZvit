@@ -25,16 +25,24 @@ flowchart TD
     PAR --> IMAP[imap.Client\nчитання IMAP]
     PAR --> ZAB[zabbix.Client\nlogin]
     PAR --> DB[(Debtors\nMSSQL)]
+    PAR --> TRAP[ImapTrapReader\nSNMP trap emails]
 
     IMAP --> INC[/IMAP incidents/]
     ZAB  --> ZS[/Zabbix session/]
     DB   --> DH[/HTML боржників/]
+    TRAP --> TRAW[/RawMessage трапів/]
 
     ZS --> ZEVT["event.get history\n→ ProblemFilter\n→ ZabbixIncidentConverter"]
     INC  --> MERGE[/incidentsForTable\nIMAP + Zabbix/]
     ZEVT --> MERGE
 
+    TRAW --> TPARS[EmersonTrapParser]
+    TPARS --> TDEDUP[TrapDeduplicator\nCold Start dedup]
+    TDEDUP --> TCORR[TrapCorrelator\nstate machine]
+    TCORR --> TSECT[EmersonTrapSection\nHTML + plain text]
+
     MERGE --> CLAUDE["claude.SummaryClient\nAI-резюме зміни\n(опціонально)"]
+    TSECT -. plain text .-> CLAUDE
     MERGE --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
     ZS    --> ISB
     INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
@@ -45,6 +53,7 @@ flowchart TD
 
     CLAUDE --> HTML[HTML-звіт]
     ISB  --> HTML
+    TSECT --> HTML
     SNMP --> HTML
     DH   --> HTML
 
@@ -67,6 +76,28 @@ flowchart LR
 
     DICT[(Словник)] -.-> PD & OSPF & ADL & OSM
     PD & OSPF & ADL & OSM --> OUT[/List of Incident/]
+```
+
+### Обробка SNMP-трапів Emerson (ДБЖ/кондиціонери)
+
+```mermaid
+flowchart LR
+    FOLDERS["DC-Room* folders\n(IMAP wildcard)"] --> TR[ImapTrapReader]
+    TR --> RAW[/RawMessage/]
+    RAW --> PARSE[EmersonTrapParser\nsubject+body → TrapEvent]
+    PARSE --> DEDUP2[TrapDeduplicator\nCold Start ±window]
+    DEDUP2 --> CORR{TrapCorrelator}
+
+    CORR -- PDC --> PDC_SM["PDC state machine\npower outage chain\nstandalone alarms"]
+    CORR -- ADC --> ADC_SM["ADC state machine\nstandalone alarms\nCold Start → INFO"]
+
+    PDC_SM -. pdc restorations .-> ADC_SM
+    PDC_SM --> INC2[/TrapIncident/]
+    ADC_SM --> INC2
+
+    INC2 --> SECT[EmersonTrapSection\nHTML + plain text]
+    SECT --> HTML2[HTML-секція]
+    SECT -. plain text .-> CLAUDE2[SummaryClient\nAI-промпт]
 ```
 
 ### Структура класів
@@ -167,7 +198,8 @@ classDiagram
         +build(incidents, zabbix, from, to, summaryHtml) String
     }
     class SummaryClient["claude.SummaryClient"] {
-        +generateSummary(incidentsForTable, from, to) String
+        +generateSummary(incidents, from, to) String
+        +generateSummary(incidents, from, to, trapPlainText) String
     }
     class ResumeHistory["history.ResumeHistory"] {
         +findPrevious(currentFrom) ResumeRecord
@@ -240,6 +272,61 @@ classDiagram
     ResumeHistory ..> ResumeRecord : creates
 
     SnmpClient ..> ZabbixClient : температурні графіки
+
+    class ImapTrapReader["trap.ImapTrapReader"] {
+        +readTraps(fetchAll, from, to) List~RawMessage~
+    }
+    class EmersonTrapParser["trap.EmersonTrapParser"] {
+        +parse(messages) List~TrapEvent~
+    }
+    class TrapDeduplicator["trap.TrapDeduplicator"] {
+        +deduplicate(events, windowSec) List~TrapEvent~
+    }
+    class TrapCorrelator["trap.TrapCorrelator"] {
+        +correlate(events) List~TrapIncident~
+    }
+    class EmersonTrapSection["trap.EmersonTrapSection"] {
+        +build(incidents) SectionResult
+    }
+    class TrapEvent["trap.TrapEvent"] {
+        <<record>>
+        +timestamp() Instant
+        +ip() String
+        +hostname() String
+        +trapType() String
+        +deviceClass() String
+    }
+    class TrapIncident["trap.TrapIncident"] {
+        <<record>>
+        +deviceClass() String
+        +hostname() String
+        +ip() String
+        +severity() Severity
+        +activatedAt() Instant
+        +clearedAt() Instant
+        +description() String
+        +details() List~String~
+        +isClosed() bool
+        +roomId() String
+    }
+    class TrapSeverity["TrapIncident.Severity"] {
+        <<enumeration>>
+        ALARM
+        WARNING
+        INFO
+    }
+
+    NOCZvit --> ImapTrapReader
+    NOCZvit --> EmersonTrapSection
+    ImapTrapReader ..> RawMessage : creates
+    EmersonTrapParser ..> RawMessage : reads
+    EmersonTrapParser ..> TrapEvent : creates
+    TrapDeduplicator ..> TrapEvent : filters
+    TrapCorrelator ..> TrapEvent : reads
+    TrapCorrelator ..> TrapIncident : creates
+    EmersonTrapSection ..> TrapIncident : renders
+    TrapIncident --> TrapSeverity
+    SummaryClient ..> EmersonTrapSection : plain text
 ```
 
 ## Вимоги
@@ -263,12 +350,12 @@ classDiagram
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.12.0.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.13.0.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.12.0.jar [OPTIONS]
+java -jar target/NOCZvit-1.13.0.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -290,7 +377,7 @@ java -jar target/NOCZvit-1.12.0.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.12.0.jar --debug --no-incidents
+java -jar target/NOCZvit-1.13.0.jar --debug --no-incidents
 ```
 
 ## Налаштування
@@ -352,6 +439,13 @@ accequipment-mssql-password=secret
 # claude=false  ← явно вимкнути завжди; claude=true ← вмикати навіть в --debug
 # Міжзмінна пам'ять: зберігає резюме попередньої зміни у SQLite для контексту
 # history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
+
+# SNMP-трапи Emerson (ДБЖ/кондиціонери Датацентру — опціонально)
+# Підтримує wildcard-патерн (* = будь-які суфікси на тому ж рівні)
+# snmp.trap.folder=INBOX/Internal/SNMP Traps/DC-Room*
+# snmp.trap.dedup.seconds=30
+# snmp.trap.correlation.minutes=10
+# snmp.trap.coldstart.link.minutes=5
 ```
 
 ### Claude AI (резюме зміни)
@@ -404,6 +498,76 @@ history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 - Зберігається по одному запису на `(period_from, period_to)` — повторні запуски для того ж періоду оновлюють запис без дублювання
 - Якщо файл БД недоступний — програма продовжує роботу без міжзмінної пам'яті (попередження в лозі)
 
+### SNMP-трапи Emerson (ДБЖ та кондиціонери Датацентру)
+
+Опціональна секція звіту — «Зареєстровані події по ДБЖ та кондиціонерах Emerson на Датацентрі». Читає листи з SNMP-трапами від пристроїв Emerson/Liebert (ДБЖ та прецизійні кондиціонери) із папок IMAP, корелює сирі трапи в логічні події та вбудовує HTML-таблицю між розділом інцидентів і температурою.
+
+Вмикається через `snmp.trap.folder` — підтримує wildcard (наприклад, `DC-Room*`).
+
+#### Класифікація пристроїв
+
+| Клас | Hostname-префікс | Опис |
+|------|-----------------|------|
+| `adc` | `adc-*` | Прецизійний кондиціонер (Air-handling DC unit) |
+| `pdc` | `pdc-*` | Блок безперебійного живлення (Power DC unit, UPS) |
+
+#### Таблиця типів трапів
+
+| Trap type (нормалізований) | Опис українською | Клас | Severity | Примітка |
+|---|---|---|---|---|
+| `Active:Alarm:Loss of Mains` | Зникнення мережевого живлення | PDC | ALARM | Корінь ланцюжка відключення |
+| `Cleared:Alarm:Loss of Mains` | Відновлення мережевого живлення | PDC | — | Закриває ланцюжок |
+| `Active:Alarm:Battery Discharging` | Розряд батарей ДБЖ | PDC | ALARM | Вторинна в ланцюжку |
+| `Active:Alarm:MMS On Battery` | MMS переключено на живлення від батарей | PDC | ALARM | Вторинна в ланцюжку (прошивка r3/r4) |
+| `Active:Alarm:Bypass Not Available` | Байпас недоступний | PDC | WARNING | Вторинна в ланцюжку |
+| `Active:Alarm:Low Battery` | Низький заряд батарей ДБЖ | PDC | ALARM | Вторинна або самостійна |
+| `Active:Alarm:Unit Off` | Пристрій вимкнено | PDC/ADC | WARNING | Самостійна подія |
+| `Active:Alarm:Loss of Air Flow` | Відсутність потоку повітря | ADC | ALARM | Самостійна подія |
+| `Active:Alarm:Compressor Fault` | Несправність компресора | ADC | ALARM | Самостійна подія |
+| `Active:Alarm:Master Unit Communication Lost` | Втрата зв'язку з основним блоком | ADC | WARNING | Самостійна подія |
+| `Active:Alarm:High Temperature` | Висока температура | ADC | WARNING | Самостійна подія |
+| `Active:Alarm:Low Temperature` | Низька температура | ADC | WARNING | Самостійна подія |
+| `Active:Alarm:High Humidity` | Висока вологість | ADC | WARNING | Самостійна подія |
+| `Active:Alarm:Low Humidity` | Низька вологість | ADC | WARNING | Самостійна подія |
+| `Active:Alarm:Fan Fault` | Несправність вентилятора | ADC | WARNING | Самостійна подія |
+| `Active:Alarm:Unit On Standby` | — | PDC/ADC | — | **Ігнорується** (нормальний стан) |
+| `Active:Alarm:Unit On` | — | PDC/ADC | — | **Ігнорується** (нормальний стан) |
+| `Cold Start` | Перезапуск картки моніторингу | PDC/ADC | INFO | Дедуплікується (±30 с) |
+| `System Return to Normal` | — | PDC/ADC | — | Закриває всі відкриті події на пристрої |
+
+> **Важливо:** Liebert-специфічні трапи передаються в лапках (`"Active:Alarm:..."`) з нерівномірними пробілами після двокрапки (`": "`). `EmersonTrapParser` автоматично нормалізує їх: знімає лапки і стискає `": "` → `":"`.
+
+#### Ланцюжки подій (TrapCorrelator)
+
+**PDC — ланцюжок відключення живлення:**
+
+Коли приходить `Active:Alarm:Loss of Mains`, відкривається ланцюжок. Наступні трапи (`Battery Discharging`, `MMS On Battery`, `Bypass Not Available`, `Low Battery`) від того ж PDC вважаються вторинними і додаються до опису. Ланцюжок закривається при `Cleared:Alarm:Loss of Mains` або `System Return to Normal`.
+
+- Якщо серед вторинних є `Battery Discharging` або `MMS On Battery` → у описі додається: «ДБЖ живив навантаження від батарей.»
+- Якщо ланцюжок не закрито до кінця зміни → «До кінця зміни не відновлено.»
+
+**ADC — самостійні події:**
+
+Всі ADC-трапи є самостійними парами Active/Cleared. `System Return to Normal` закриває всі відкриті події на тому ж ADC-пристрої.
+
+**Cold Start — зв'язування з відновленням живлення:**
+
+ADC Cold Start, що з'являється протягом `snmp.trap.coldstart.link.minutes` (за замовчуванням 5 хв) після відновлення живлення на PDC **в тій же кімнаті** — автоматично анотується як «Пов'язано з відновленням мережевого живлення.» Кімната визначається з hostname: `adc-r1-1` → `r1`.
+
+#### Порядок виводу пристроїв у звіті
+
+Спочатку всі ADC-пристрої (кондиціонери) у алфавітному порядку, потім PDC (ДБЖ) у алфавітному порядку.
+
+#### Інтеграція з Claude AI
+
+Якщо увімкнено і трапи, і Claude — до промпту додається plain-text блок подій з маркерами ізоляції:
+```
+=== ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ (ТІЛЬКИ ЦЯ ЗМІНА — НЕ ПЕРЕНОСИТИ В НАСТУПНІ) ===
+...
+=== КІНЕЦЬ ПОДІЙ ОБЛАДНАННЯ ДАТАЦЕНТРУ ===
+```
+Claude отримує інструкцію: ці події належать **виключно поточній зміні** і не мають переноситися в резюме наступного звітного періоду.
+
 ### Словники
 
 - `dictionary_pd.txt` — фрази для розпізнавання PD-інцидентів
@@ -436,6 +600,14 @@ NOCZvit/
 │   ├── history/
 │   │   ├── ResumeHistory.java     — SQLite-сховище міжзмінних резюме (DDL, findPrevious, save/upsert)
 │   │   └── ResumeRecord.java      — record: DTO одного збереженого резюме
+│   ├── trap/
+│   │   ├── ImapTrapReader.java    — читання SNMP-трап листів з IMAP-папок (wildcard-підтримка)
+│   │   ├── EmersonTrapParser.java — парсинг subject+body листа → TrapEvent (нормалізація типу трапу)
+│   │   ├── TrapDeduplicator.java  — дедуплікація Cold Start трапів у часовому вікні
+│   │   ├── TrapCorrelator.java    — state machine: ланцюжки PDC + самостійні ADC + Cold Start linking
+│   │   ├── EmersonTrapSection.java — формування HTML-секції та plain-text для Claude
+│   │   ├── TrapEvent.java         — record: один сирий нормалізований трап
+│   │   └── TrapIncident.java      — record: логічна скорельована подія (Severity, activatedAt, clearedAt)
 │   ├── snmp/
 │   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
 │   └── zabbix/

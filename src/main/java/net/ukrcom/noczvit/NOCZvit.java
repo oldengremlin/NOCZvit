@@ -18,6 +18,13 @@ import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.smtp.EmailSender;
+import net.ukrcom.noczvit.trap.EmersonTrapParser;
+import net.ukrcom.noczvit.trap.EmersonTrapSection;
+import net.ukrcom.noczvit.trap.ImapTrapReader;
+import net.ukrcom.noczvit.trap.TrapCorrelator;
+import net.ukrcom.noczvit.trap.TrapDeduplicator;
+import net.ukrcom.noczvit.trap.TrapEvent;
+import net.ukrcom.noczvit.trap.TrapIncident;
 import net.ukrcom.noczvit.zabbix.ProblemFilter;
 import net.ukrcom.noczvit.zabbix.ZabbixIncidentConverter;
 import net.ukrcom.noczvit.zabbix.ZabbixProblem;
@@ -102,6 +109,7 @@ public class NOCZvit {
             net.ukrcom.noczvit.zabbix.Client zabbix = null;
             String debtorsHtml = "";
             List<ZabbixProblem> zabbixProblems = Collections.emptyList();
+            EmersonTrapSection.SectionResult trapResult = new EmersonTrapSection.SectionResult("", "");
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
@@ -154,8 +162,31 @@ public class NOCZvit {
                     debtorsFuture = CompletableFuture.completedFuture("");
                 }
 
+                CompletableFuture<EmersonTrapSection.SectionResult> trapFuture;
+                if (config.isTrapEnabled()) {
+                    final long fromEpoch = reportFrom.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+                    final long toEpoch = reportTo.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+                    trapFuture = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            ImapTrapReader reader = new ImapTrapReader(config);
+                            List<TrapEvent> events = EmersonTrapParser.parse(
+                                    reader.readTraps(isInteractive, fromEpoch, toEpoch));
+                            events = TrapDeduplicator.deduplicate(events, config.getSnmpTrapDedupSeconds());
+                            List<TrapIncident> trapIncidents = new TrapCorrelator(
+                                    config.getSnmpTrapCorrelationMinutes(),
+                                    config.getSnmpTrapColdstartLinkMinutes()).correlate(events);
+                            return new EmersonTrapSection().build(trapIncidents);
+                        } catch (MessagingException e) {
+                            log.warn("ImapTrapReader: IMAP error: {}", e.getMessage());
+                            return new EmersonTrapSection.SectionResult("", "");
+                        }
+                    }, ioExecutor);
+                } else {
+                    trapFuture = CompletableFuture.completedFuture(new EmersonTrapSection.SectionResult("", ""));
+                }
+
                 try {
-                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture).join();
+                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture, trapFuture).join();
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause();
                     if (cause instanceof RuntimeException re && re.getCause() instanceof MessagingException me) {
@@ -174,6 +205,7 @@ public class NOCZvit {
                 zabbix = zabbixFuture.join();
                 zabbixProblems = zabbixProblemsFuture.join();
                 debtorsHtml = debtorsFuture.join();
+                trapResult = trapFuture.join();
             }
 
             // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP-інцидентами.
@@ -217,17 +249,23 @@ public class NOCZvit {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
-                                         ? summaryClient.generateSummary(incidentsForTable, prevDutyBegin, prevDutyEnd) : null;
+                                         ? summaryClient.generateSummary(incidentsForTable, prevDutyBegin, prevDutyEnd,
+                                                                          trapResult.plainText()) : null;
                     message.append(incidentBuilder.build(incidentsForTable, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
                 subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
-                                         ? summaryClient.generateSummary(incidentsForTable, currDutyBegin, currDutyEnd) : null;
+                                         ? summaryClient.generateSummary(incidentsForTable, currDutyBegin, currDutyEnd,
+                                                                          trapResult.plainText()) : null;
                     message.append(incidentBuilder.build(incidentsForTable, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
                 message.append(debtorsHtml);
+            }
+
+            if (!trapResult.isEmpty()) {
+                message.append(trapResult.html());
             }
 
             if (config.isTemperatureEnabled() || config.isRamosEnabled()) {
