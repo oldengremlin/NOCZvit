@@ -143,6 +143,9 @@ public class SummaryClient {
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1500L)
+                    .system("Ти відповідаєш ВИКЛЮЧНО українською мовою. "
+                            + "Будь-яке слово, що не є українським, є помилкою. "
+                            + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ.")
                     .addUserMessage(prompt)
                     .build();
 
@@ -157,6 +160,7 @@ public class SummaryClient {
                 return "";
             }
 
+            warnIfRussian(summary);
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
 
             if (resumeHistory != null) {
@@ -305,6 +309,17 @@ public class SummaryClient {
         });
 
         return open.isEmpty() ? "немає" : String.join("; ", open);
+    }
+
+    /**
+     * Logs a warning if the summary contains Cyrillic letters that exist in Russian but not in
+     * Ukrainian (ы ъ э ё). This catches Russianisms without maintaining a word list.
+     */
+    private static void warnIfRussian(String text) {
+        if (text.chars().anyMatch(c -> "ыъэёЫЪЭЁ".indexOf(c) >= 0)) {
+            log.warn("Claude summary contains Russian-specific characters (ы/ъ/э/ё) — "
+                    + "check prompt language instructions");
+        }
     }
 
     /**
