@@ -233,7 +233,7 @@ public class SummaryClient {
         // Closing reminder when DC events are present — placed last so Claude reads it
         // immediately before generating the response
         String trapReminder = (trapPlainText != null && !trapPlainText.isBlank())
-                ? "\nНАГАДУВАННЯ: у даних вище є блок ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ — обов'язково включи ці події у резюме.\nПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ подай ОКРЕМИМ АБЗАЦЕМ."
+                ? "\nНАГАДУВАННЯ: у даних вище є блок ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ — обов'язково включи ці події у резюме.\nПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ подай ОКРЕМИМ АБЗАЦЕМ.\n"
                 : "";
 
         return """
