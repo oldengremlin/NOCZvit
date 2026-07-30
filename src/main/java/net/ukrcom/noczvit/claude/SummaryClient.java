@@ -49,12 +49,14 @@ public class SummaryClient {
     private final AnthropicClient client;
     private final String model;
     private final ResumeHistory resumeHistory;
+    private final boolean debug;
 
     public SummaryClient(Config config) {
         this.client = AnthropicOkHttpClient.builder()
                 .apiKey(config.getClaudeApiKey())
                 .build();
         this.model = config.getClaudeModel();
+        this.debug = config.isDebug();
         this.resumeHistory = initResumeHistory(config.getHistoryResumeUrl());
     }
 
@@ -163,12 +165,14 @@ public class SummaryClient {
             warnIfRussian(summary);
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
 
-            if (resumeHistory != null) {
+            if (resumeHistory != null && !debug) {
                 try {
                     resumeHistory.save(ctFrom, ctTo, summary);
                 } catch (SQLException e) {
                     log.warn("ResumeHistory: помилка збереження резюме: {}", e.getMessage());
                 }
+            } else if (resumeHistory != null) {
+                log.debug("ResumeHistory: збереження пропущено (--debug режим)");
             }
 
             return buildHtml(summary, from);
