@@ -55,6 +55,13 @@ import net.ukrcom.noczvit.trap.TrapIncident.Severity;
 @Slf4j
 public class TrapCorrelator {
 
+    // Traps for which "До кінця зміни не відновлено." is not appended when unclosed —
+    // they describe an ongoing process, not a fault condition requiring resolution.
+    private static final Set<String> NO_UNRESOLVED_SUFFIX = Set.of(
+            "Active:Alarm:Battery Discharging",
+            "Active:Alarm:MMS On Battery"
+    );
+
     // Traps that represent normal operational transitions — suppress entirely
     private static final Set<String> IGNORE_TRAPS = Set.of(
             "Active:Alarm:Unit On Standby",
@@ -420,7 +427,7 @@ public class TrapCorrelator {
                                                   Instant clearedAt) {
         Severity severity = TRAP_SEVERITY.getOrDefault(activeTrapType, Severity.WARNING);
         String desc = TRAP_DESCRIPTIONS.getOrDefault(activeTrapType, activeTrapType);
-        if (clearedAt == null) {
+        if (clearedAt == null && !NO_UNRESOLVED_SUFFIX.contains(activeTrapType)) {
             desc = desc + " До кінця зміни не відновлено.";
         }
         String deviceClass = startEvent.deviceClass();
