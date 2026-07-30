@@ -48,8 +48,9 @@ import net.ukrcom.noczvit.imap.RawMessage;
 @Slf4j
 public class ImapTrapReader {
 
+    // RFC 2822 allows single-digit day (e.g. "Thu, 9 Jul 2026") — use 'd' not 'dd'
     private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER
-            = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+            = DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
 
@@ -139,8 +140,14 @@ public class ImapTrapReader {
     private List<Folder> resolveFolders(IMAPStore store, String pattern) throws MessagingException {
         List<Folder> result = new ArrayList<>();
 
-        if (!pattern.contains("*")) {
-            Folder f = store.getFolder(pattern);
+        char sep = store.getDefaultFolder().getSeparator();
+
+        // Normalize: accept '/' as universal separator regardless of what the server uses.
+        // Replace '/' with the server separator so store.getFolder() receives a valid path.
+        String normalizedPattern = (sep != '/') ? pattern.replace('/', sep) : pattern;
+
+        if (!normalizedPattern.contains("*")) {
+            Folder f = store.getFolder(normalizedPattern);
             if (f.exists()) {
                 result.add(f);
             } else {
@@ -149,16 +156,15 @@ public class ImapTrapReader {
             return result;
         }
 
-        char sep = store.getDefaultFolder().getSeparator();
-        int lastSep = pattern.lastIndexOf(sep);
+        int lastSep = normalizedPattern.lastIndexOf(sep);
         String parentPath;
         String mask;
         if (lastSep >= 0) {
-            parentPath = pattern.substring(0, lastSep);
-            mask = pattern.substring(lastSep + 1);
+            parentPath = normalizedPattern.substring(0, lastSep);
+            mask = normalizedPattern.substring(lastSep + 1);
         } else {
             parentPath = "";
-            mask = pattern;
+            mask = normalizedPattern;
         }
 
         Folder parent = parentPath.isEmpty()
@@ -166,21 +172,6 @@ public class ImapTrapReader {
                 : store.getFolder(parentPath);
 
         Folder[] matched = parent.list(mask);
-        if (matched == null || matched.length == 0) {
-            // Try with '/' separator if the configured sep is '.'
-            if (sep != '/') {
-                String altPattern = pattern.replace(sep, '/');
-                int altLastSep = altPattern.lastIndexOf('/');
-                if (altLastSep >= 0) {
-                    String altParent = altPattern.substring(0, altLastSep);
-                    String altMask = altPattern.substring(altLastSep + 1);
-                    Folder altParentFolder = altParent.isEmpty()
-                            ? store.getDefaultFolder()
-                            : store.getFolder(altParent);
-                    matched = altParentFolder.list(altMask);
-                }
-            }
-        }
 
         if (matched != null) {
             for (Folder f : matched) {
