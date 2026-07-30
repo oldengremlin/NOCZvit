@@ -166,11 +166,18 @@ public class NOCZvit {
                 if (config.isTrapEnabled()) {
                     final long fromEpoch = reportFrom.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
                     final long toEpoch = reportTo.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+                    final java.time.Instant trapFrom = java.time.Instant.ofEpochSecond(fromEpoch);
+                    final java.time.Instant trapTo   = java.time.Instant.ofEpochSecond(toEpoch);
                     trapFuture = CompletableFuture.supplyAsync(() -> {
                         try {
                             ImapTrapReader reader = new ImapTrapReader(config);
                             List<TrapEvent> events = EmersonTrapParser.parse(
                                     reader.readTraps(isInteractive, fromEpoch, toEpoch));
+                            // Filter by body timestamp — works in both fetchAll and date modes
+                            events = events.stream()
+                                    .filter(e -> !e.timestamp().isBefore(trapFrom)
+                                              && !e.timestamp().isAfter(trapTo))
+                                    .toList();
                             events = TrapDeduplicator.deduplicate(events, config.getSnmpTrapDedupSeconds());
                             List<TrapIncident> trapIncidents = new TrapCorrelator(
                                     config.getSnmpTrapCorrelationMinutes(),
