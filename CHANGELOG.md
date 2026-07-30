@@ -6,6 +6,33 @@
 
 ---
 
+## [1.13.0] — 2026-07-30
+
+### Додано
+- **Нова секція звіту «SNMP-трапи Emerson»**: читає листи з SNMP-трапами від пристроїв ДБЖ та кондиціонерів Emerson/Liebert із IMAP-папок (підтримує wildcard-патерн, напр. `DC-Room*`)
+- Новий пакет `trap/` із 7 класами:
+  - `ImapTrapReader` — читання IMAP-папок (wildcard-роздільник IMAP через `store.getDefaultFolder().getSeparator()`)
+  - `EmersonTrapParser` — парсинг тема+тіло листа → `TrapEvent` (нормалізація: зняти лапки, `": "` → `":"`)
+  - `TrapDeduplicator` — дедуплікація `Cold Start` трапів у часовому вікні (за замовчуванням 30 с)
+  - `TrapCorrelator` — state machine: ланцюжок PDC-відключення (root `Loss of Mains` + secondary) + самостійні пари Active/Cleared + зв'язування ADC Cold Start із відновленням живлення PDC в тій самій кімнаті
+  - `EmersonTrapSection` — формування HTML-таблиці (ADC перед PDC, за алфавітом) і plain-text блоку для Claude
+  - `TrapEvent` — record: `timestamp, ip, hostname, trapType, deviceClass`
+  - `TrapIncident` — record: `deviceClass, hostname, ip, Severity, activatedAt, clearedAt, description, details`
+- Нові властивості конфігурації: `snmp.trap.folder`, `snmp.trap.dedup.seconds`, `snmp.trap.correlation.minutes`, `snmp.trap.coldstart.link.minutes`
+- `Config.isTrapEnabled()` — вмикач секції (аналогічно до `isClaudeEnabled()`)
+- `SummaryClient.generateSummary()` — новий overload з параметром `trapPlainText` (plain-text блок ізольований маркерами `=== ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ ===`)
+- Ланцюжки подій PDC: `Loss of Mains` + `Battery Discharging`/`MMS On Battery`/`Bypass Not Available`/`Low Battery` описуються як єдина подія «Зникнення мережевого живлення»; якщо батареї живили навантаження — зазначається
+- Cold Start ADC: якщо трап з'явився у вікні `coldstart.link.minutes` після відновлення живлення PDC в тій самій кімнаті — анотується «Пов'язано з відновленням мережевого живлення»
+- Ігноровані трапи (нормальні операційні переходи): `Active/Cleared:Alarm:Unit On Standby`, `Active/Cleared:Alarm:Unit On`
+
+### Змінено
+- `NOCZvit.java`: `trapFuture` запускається паралельно з IMAP/Zabbix/Debtors; trap-секція вставляється між блоком боржників і температурою
+- `SummaryClient`: метод `generateSummary()` без `trapPlainText` делегує до нового overload із порожнім рядком (зворотна сумісність)
+- `noczvit.properties.sample`: додано закоментований блок `snmp.trap.*`
+- README: нова схема потоку даних, діаграма обробки трапів, оновлена class diagram, розділ «SNMP-трапи Emerson» з таблицею класифікації та поясненням ланцюжків подій
+
+---
+
 ## [1.12.0] — 2026-07-30
 
 ### Додано
