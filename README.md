@@ -39,6 +39,10 @@ flowchart TD
     ZS    --> ISB
     INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
 
+    HIST[(history.ResumeHistory\nSQLite)]
+    HIST -. попереднє резюме .-> CLAUDE
+    CLAUDE -. зберегти .-> HIST
+
     CLAUDE --> HTML[HTML-звіт]
     ISB  --> HTML
     SNMP --> HTML
@@ -79,6 +83,7 @@ classDiagram
         +isDebug() bool
         +getClaudeApiKey() String
         +getClaudeModel() String
+        +getHistoryResumeUrl() String
     }
     class Dictionary {
         +lookupPD(key) String
@@ -159,9 +164,21 @@ classDiagram
 
     class IncidentSectionBuilder {
         +build(incidents, zabbix, from, to) String
+        +build(incidents, zabbix, from, to, summaryHtml) String
     }
     class SummaryClient["claude.SummaryClient"] {
         +generateSummary(incidentsForTable, from, to) String
+    }
+    class ResumeHistory["history.ResumeHistory"] {
+        +findPrevious(currentFrom) ResumeRecord
+        +save(periodFrom, periodTo, summaryText)
+    }
+    class ResumeRecord["history.ResumeRecord"] {
+        <<record>>
+        +periodFrom() long
+        +periodTo() long
+        +createdAt() long
+        +summaryText() String
     }
     class SnmpClient["snmp.Client"] {
         +getCelsius(from, to, zabbix) String
@@ -219,6 +236,8 @@ classDiagram
 
     SummaryClient ..> Incident : reads
     SummaryClient ..> Config : apiKey + model
+    SummaryClient --> ResumeHistory
+    ResumeHistory ..> ResumeRecord : creates
 
     SnmpClient ..> ZabbixClient : температурні графіки
 ```
@@ -236,6 +255,7 @@ classDiagram
   - jTDS `net.sourceforge.jtds:jtds:1.3.1`
   - Lombok `org.projectlombok:lombok:1.18.46` (provided)
   - Anthropic Java SDK `com.anthropic:anthropic-java:2.34.0` (опціонально, для Claude AI)
+  - SQLite JDBC `org.xerial:sqlite-jdbc:3.51.2.0` (опціонально, для міжзмінної пам'яті Claude)
 
 ## Збирання
 
