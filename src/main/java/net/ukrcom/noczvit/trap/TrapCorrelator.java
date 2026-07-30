@@ -132,7 +132,7 @@ public class TrapCorrelator {
     private static final Map<String, String> TRAP_DESCRIPTIONS = new HashMap<>();
     static {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Loss of Mains",          "Зникнення мережевого живлення.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "ДБЖ перейшов на живлення від батарей.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "ДБЖ переходить на живлення від батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:MMS On Battery",         "MMS переключено на живлення від батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Bypass Not Available",   "Байпас недоступний.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Low Battery",            "Низький заряд батарей ДБЖ.");
@@ -388,6 +388,11 @@ public class TrapCorrelator {
             String activeType = sec.trapType();
             if (CLEARED_TO_ACTIVE.containsKey(activeType)) {
                 continue; // skip clear events in secondaries list
+            }
+            // Battery Discharging + MMS On Battery are one process; already in main description
+            if ("Active:Alarm:Battery Discharging".equals(activeType)
+                    || "Active:Alarm:MMS On Battery".equals(activeType)) {
+                continue;
             }
             String secDesc = TRAP_DESCRIPTIONS.getOrDefault(activeType, activeType);
             details.add(secDesc);
