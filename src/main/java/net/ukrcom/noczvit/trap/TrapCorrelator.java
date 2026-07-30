@@ -132,7 +132,7 @@ public class TrapCorrelator {
     private static final Map<String, String> TRAP_DESCRIPTIONS = new HashMap<>();
     static {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Loss of Mains",          "Зникнення мережевого живлення.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "Розряд батарей ДБЖ.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "ДБЖ перейшов на живлення від батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:MMS On Battery",         "MMS переключено на живлення від батарей.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Bypass Not Available",   "Байпас недоступний.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Low Battery",            "Низький заряд батарей ДБЖ.");
