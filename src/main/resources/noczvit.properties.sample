@@ -13,6 +13,14 @@ debug=false
 # Cross-shift memory: saves each Claude summary to SQLite so the next report can reference it.
 # history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 
+# SNMP Trap emails (Emerson/Liebert UPS and AC units)
+# Enables the "DC equipment events" section. Leave blank to disable.
+# Supports wildcard pattern (e.g. INBOX/Internal/SNMP Traps/DC-Room*)
+# snmp.trap.folder=INBOX/Internal/SNMP Traps/DC-Room*
+# snmp.trap.dedup.seconds=30
+# snmp.trap.correlation.minutes=10
+# snmp.trap.coldstart.link.minutes=5
+
 # IMAP Configuration
 mail.hostname=smtp.example.com
 mail.username=user

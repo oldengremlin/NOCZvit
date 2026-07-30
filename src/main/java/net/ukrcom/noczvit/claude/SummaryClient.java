@@ -95,6 +95,21 @@ public class SummaryClient {
      * відсутності даних
      */
     public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to) {
+        return generateSummary(allIncidents, from, to, "");
+    }
+
+    /**
+     * Викликає Claude API з додатковим блоком подій обладнання датацентру.
+     *
+     * @param allIncidents  всі інциденти зміни
+     * @param from          початок звітного періоду
+     * @param to            кінець звітного періоду
+     * @param trapPlainText plain-text блок подій Emerson (з маркерами ізоляції); порожній рядок
+     *                      якщо трап-секція відсутня
+     * @return HTML-фрагмент; порожній рядок при помилці або відсутності даних
+     */
+    public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to,
+                                  String trapPlainText) {
         long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctTo = to.atZone(ZoneId.systemDefault()).toEpochSecond();
 
@@ -125,7 +140,7 @@ public class SummaryClient {
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1024L)
-                    .addUserMessage(buildPrompt(incidents, from, to, previous))
+                    .addUserMessage(buildPrompt(incidents, from, to, previous, trapPlainText))
                     .build();
 
             Message response = client.messages().create(params);
@@ -162,17 +177,17 @@ public class SummaryClient {
 
     /**
      * Assembles the full Claude prompt: period metadata, a numbered incident list, pre-computed
-     * unclosed-incident count, an optional previous-period summary for cross-shift context, and
-     * the system instruction block with domain knowledge and formatting rules.
+     * unclosed-incident count, an optional previous-period summary for cross-shift context, an
+     * optional datacenter equipment event block, and the system instruction block.
      *
-     * @param incidents filtered incidents for the current reporting period
-     * @param from      start of the reporting period
-     * @param to        end of the reporting period
-     * @param previous  summary from the immediately preceding period, or {@code null} when no
-     *                  history is available
+     * @param incidents     filtered incidents for the current reporting period
+     * @param from          start of the reporting period
+     * @param to            end of the reporting period
+     * @param previous      summary from the immediately preceding period, or {@code null}
+     * @param trapPlainText plain-text Emerson trap block (with isolation markers); blank to omit
      */
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
-                               ResumeRecord previous) {
+                               ResumeRecord previous, String trapPlainText) {
         StringBuilder sb = new StringBuilder();
         long startCount = incidents.stream()
                 .filter(i -> i.status() == Incident.Status.START).count();
@@ -208,6 +223,10 @@ public class SummaryClient {
               .append("\n");
         }
 
+        if (trapPlainText != null && !trapPlainText.isBlank()) {
+            sb.append("\n").append(trapPlainText).append("\n");
+        }
+
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
 
@@ -230,6 +249,7 @@ public class SummaryClient {
                 - Якщо на кінець зміни залишилися НЕЗАКРИТІ інциденти: перерахувати їх. За необхідності можна збільшити кількість речень в звіті.
                 - Для періоду з 20:00 до 07:59 замість "на кінець зміни" пишемо "на кінець звітного періоду". Так правильніше, оскільки в цей час спостереження ведеться в автоматизованому режимі, без людини. Людина (NOC-інженер) на роботі з 08:00 до 19:59.
                 - Якщо надано резюме попереднього звітного періоду: порівняй стан, зазнач, які проблеми вирішено, а які перейшли з попередньої зміни. Не переказуй попереднє резюме дослівно.
+                - Якщо надано блок "ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ": можна стисло згадати найважливіші події (знеструмлення, несправності). ЗАБОРОНЕНО переносити ці події в резюме наступної зміни — вони ізольовані в межах поточного звітного періоду.
 
                 КРИТИЧНО ВАЖЛИВО: відповідь — лише звичайний текст.
                 ЗАБОРОНЕНО будь-яке Markdown-форматування: жодних **, __, #, -, *, _ та подібних символів.
