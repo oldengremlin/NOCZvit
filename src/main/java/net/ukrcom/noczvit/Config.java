@@ -41,7 +41,7 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #generalProperties()} → {@link #parseFlagArgs(String[])} →
  * {@link #hostsProperties()} → {@link #ramosProperties()} → {@link #celsiusProperties()} →
  * {@link #emailProperties()} → {@link #mssqlProperties()} → {@link #zabbixProperties()} →
- * {@link #claudeProperties()}.
+ * {@link #claudeProperties()} → {@link #historyResumeProperties()}.
  */
 @Slf4j
 @ToString(includeFieldNames = true)
@@ -111,6 +111,8 @@ public class Config {
     private String claudeApiKey;
     @NonNull
     private String claudeModel;
+    @NonNull
+    private String historyResumeUrl;
     @Getter(AccessLevel.NONE)
     private Boolean claudeExplicit; // null = not explicitly set via property or CLI
 
@@ -150,6 +152,7 @@ public class Config {
         mssqlProperties();
         zabbixProperties();
         claudeProperties();
+        historyResumeProperties();
     }
 
     /** Sets safe defaults for all fields before any properties or CLI arguments are applied. */
@@ -163,6 +166,7 @@ public class Config {
         dictionarySdhPath = null;
         claudeApiKey = "";
         claudeModel = "claude-haiku-4-5";
+        historyResumeUrl = "";
         claudeExplicit = null;
     }
 
@@ -421,6 +425,17 @@ public class Config {
         if (claudeEnabled && claudeApiKey.isBlank()) {
             log.warn("Claude summary enabled but claude.apikey is not set — disabling");
             claudeEnabled = false;
+        }
+    }
+
+    /**
+     * Reads the optional {@code history.resume} JDBC URL for the SQLite cross-shift summary store.
+     * Leaves {@link #historyResumeUrl} as an empty string when the property is absent or blank.
+     */
+    private void historyResumeProperties() {
+        String url = stripInlineComment(properties.getProperty("history.resume", ""));
+        if (!url.isBlank()) {
+            historyResumeUrl = url;
         }
     }
 
