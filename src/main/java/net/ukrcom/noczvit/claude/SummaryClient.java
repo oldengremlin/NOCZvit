@@ -202,11 +202,6 @@ public class SummaryClient {
                 .append(" (рядків у таблиці: ").append(incidents.size())
                 .append(" — кожна подія має START і може мати END)\n");
 
-        // Trap block placed BEFORE the incident list — avoids "lost in the middle" effect
-        if (trapPlainText != null && !trapPlainText.isBlank()) {
-            sb.append("\n").append(trapPlainText).append("\n");
-        }
-
         sb.append("\nІнциденти:\n");
         int n = 0;
         for (Incident inc : incidents) {
@@ -229,6 +224,10 @@ public class SummaryClient {
             sb.append("\nРезюме попереднього звітного періоду (для порівняння та відстеження незакритих):\n")
               .append(previous.summaryText())
               .append("\n");
+        }
+
+        if (trapPlainText != null && !trapPlainText.isBlank()) {
+            sb.append("\n").append(trapPlainText).append("\n");
         }
 
         // Closing reminder when DC events are present — placed last so Claude reads it
