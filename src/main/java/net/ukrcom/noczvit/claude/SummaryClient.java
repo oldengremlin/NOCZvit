@@ -137,10 +137,13 @@ public class SummaryClient {
         try {
             log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів)", model, incidents.size());
 
+            String prompt = buildPrompt(incidents, from, to, previous, trapPlainText);
+            log.debug("Claude prompt:\n{}", prompt);
+
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1500L)
-                    .addUserMessage(buildPrompt(incidents, from, to, previous, trapPlainText))
+                    .addUserMessage(prompt)
                     .build();
 
             Message response = client.messages().create(params);
@@ -197,9 +200,9 @@ public class SummaryClient {
                 .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
                 .append("\n\nУнікальних подій: ").append(startCount)
                 .append(" (рядків у таблиці: ").append(incidents.size())
-                .append(" — кожна подія має START і може мати END)\n")
-                .append("Інциденти:\n");
+                .append(" — кожна подія має START і може мати END)\n");
 
+        sb.append("\nІнциденти:\n");
         int n = 0;
         for (Incident inc : incidents) {
             sb.append(++n).append(". ");
@@ -226,6 +229,12 @@ public class SummaryClient {
         if (trapPlainText != null && !trapPlainText.isBlank()) {
             sb.append("\n").append(trapPlainText).append("\n");
         }
+
+        // Closing reminder when DC events are present — placed last so Claude reads it
+        // immediately before generating the response
+        String trapReminder = (trapPlainText != null && !trapPlainText.isBlank())
+                ? "\nНАГАДУВАННЯ: у даних вище є блок ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ — обов'язково включи ці події у резюме.\n"
+                : "";
 
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
@@ -255,7 +264,7 @@ public class SummaryClient {
                 ЗАБОРОНЕНО будь-яке Markdown-форматування: жодних **, __, #, -, *, _ та подібних символів.
                 НЕ перелічуй всі інциденти по одному. Дай загальну картину зміни.
 
-                %s""".formatted(sb.toString());
+                %s%s""".formatted(sb.toString(), trapReminder);
     }
 
     /**
