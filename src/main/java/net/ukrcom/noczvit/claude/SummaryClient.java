@@ -143,6 +143,9 @@ public class SummaryClient {
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1500L)
+                    .system("Ти відповідаєш ВИКЛЮЧНО українською мовою. "
+                            + "Будь-яке слово, що не є українським, є помилкою. "
+                            + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ.")
                     .addUserMessage(prompt)
                     .build();
 
@@ -157,7 +160,7 @@ public class SummaryClient {
                 return "";
             }
 
-            summary = sanitizeRussianisms(summary);
+            warnIfRussian(summary);
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
 
             if (resumeHistory != null) {
@@ -309,22 +312,14 @@ public class SummaryClient {
     }
 
     /**
-     * Replaces Russian declension forms of "событие" with the correct Ukrainian "подія".
-     * Applied as a safety net after the Claude API response, in case the model ignores the
-     * prompt instruction about Russianisms.
+     * Logs a warning if the summary contains Cyrillic letters that exist in Russian but not in
+     * Ukrainian (ы ъ э ё). This catches Russianisms without maintaining a word list.
      */
-    private static String sanitizeRussianisms(String text) {
-        // All declension forms of Russian "событие" → Ukrainian "подія"
-        text = text.replaceAll("(?i)\\bподий\\b",     "подій");      // catch typos
-        text = text.replaceAll("(?i)\\bсобытий\\b",   "подій");
-        text = text.replaceAll("(?i)\\bсобытиях\\b",  "подіях");
-        text = text.replaceAll("(?i)\\bсобытиям\\b",  "подіям");
-        text = text.replaceAll("(?i)\\bсобытиями\\b", "подіями");
-        text = text.replaceAll("(?i)\\bсобытием\\b",  "подією");
-        text = text.replaceAll("(?i)\\bсобытии\\b",   "події");
-        text = text.replaceAll("(?i)\\bсобытия\\b",   "події");
-        text = text.replaceAll("(?i)\\bсобытие\\b",   "подія");
-        return text;
+    private static void warnIfRussian(String text) {
+        if (text.chars().anyMatch(c -> "ыъэёЫЪЭЁ".indexOf(c) >= 0)) {
+            log.warn("Claude summary contains Russian-specific characters (ы/ъ/э/ё) — "
+                    + "check prompt language instructions");
+        }
     }
 
     /**
