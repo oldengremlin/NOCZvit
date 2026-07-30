@@ -19,6 +19,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -30,6 +31,8 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 import net.ukrcom.noczvit.NOCZvit;
+import net.ukrcom.noczvit.history.ResumeHistory;
+import net.ukrcom.noczvit.history.ResumeRecord;
 import net.ukrcom.noczvit.model.Incident;
 
 /**
@@ -45,12 +48,34 @@ public class SummaryClient {
 
     private final AnthropicClient client;
     private final String model;
+    private final ResumeHistory resumeHistory;
 
     public SummaryClient(Config config) {
         this.client = AnthropicOkHttpClient.builder()
                 .apiKey(config.getClaudeApiKey())
                 .build();
         this.model = config.getClaudeModel();
+        this.resumeHistory = initResumeHistory(config.getHistoryResumeUrl());
+    }
+
+    /**
+     * Opens the SQLite history store at the given JDBC URL.
+     *
+     * @param url JDBC URL such as {@code jdbc:sqlite:/var/lib/noczvit/history.db};
+     *            blank or null disables cross-shift memory
+     * @return initialised {@link ResumeHistory}, or {@code null} when the URL is blank or the DB
+     *         cannot be opened
+     */
+    private ResumeHistory initResumeHistory(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        try {
+            return new ResumeHistory(url);
+        } catch (SQLException e) {
+            log.warn("ResumeHistory: не вдалося відкрити БД '{}': {}", url, e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -82,13 +107,25 @@ public class SummaryClient {
             return "";
         }
 
+        ResumeRecord previous = null;
+        if (resumeHistory != null) {
+            try {
+                previous = resumeHistory.findPrevious(ctFrom);
+                if (previous != null) {
+                    log.debug("ResumeHistory: знайдено попереднє резюме (periodTo={})", previous.periodTo());
+                }
+            } catch (SQLException e) {
+                log.warn("ResumeHistory: помилка читання попереднього резюме: {}", e.getMessage());
+            }
+        }
+
         try {
             log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів)", model, incidents.size());
 
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
                     .maxTokens(1024L)
-                    .addUserMessage(buildPrompt(incidents, from, to))
+                    .addUserMessage(buildPrompt(incidents, from, to, previous))
                     .build();
 
             Message response = client.messages().create(params);
@@ -103,6 +140,15 @@ public class SummaryClient {
             }
 
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
+
+            if (resumeHistory != null) {
+                try {
+                    resumeHistory.save(ctFrom, ctTo, summary);
+                } catch (SQLException e) {
+                    log.warn("ResumeHistory: помилка збереження резюме: {}", e.getMessage());
+                }
+            }
+
             return buildHtml(summary, from);
 
         } catch (AnthropicServiceException e) {
@@ -116,10 +162,17 @@ public class SummaryClient {
 
     /**
      * Assembles the full Claude prompt: period metadata, a numbered incident list, pre-computed
-     * unclosed-incident count, and the system instruction block with domain knowledge and
-     * formatting rules.
+     * unclosed-incident count, an optional previous-period summary for cross-shift context, and
+     * the system instruction block with domain knowledge and formatting rules.
+     *
+     * @param incidents filtered incidents for the current reporting period
+     * @param from      start of the reporting period
+     * @param to        end of the reporting period
+     * @param previous  summary from the immediately preceding period, or {@code null} when no
+     *                  history is available
      */
-    private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to) {
+    private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
+                               ResumeRecord previous) {
         StringBuilder sb = new StringBuilder();
         long startCount = incidents.stream()
                 .filter(i -> i.status() == Incident.Status.START).count();
@@ -149,6 +202,12 @@ public class SummaryClient {
                 .append(computeUnclosed(incidents))
                 .append("\n");
 
+        if (previous != null) {
+            sb.append("\nРезюме попереднього звітного періоду (для порівняння та відстеження незакритих):\n")
+              .append(previous.summaryText())
+              .append("\n");
+        }
+
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
 
@@ -170,6 +229,7 @@ public class SummaryClient {
                 - УНИКАЙ в українській русизмів.
                 - Якщо на кінець зміни залишилися НЕЗАКРИТІ інциденти: перерахувати їх. За необхідності можна збільшити кількість речень в звіті.
                 - Для періоду з 20:00 до 07:59 замість "на кінець зміни" пишемо "на кінець звітного періоду". Так правильніше, оскільки в цей час спостереження ведеться в автоматизованому режимі, без людини. Людина (NOC-інженер) на роботі з 08:00 до 19:59.
+                - Якщо надано резюме попереднього звітного періоду: порівняй стан, зазнач, які проблеми вирішено, а які перейшли з попередньої зміни. Не переказуй попереднє резюме дослівно.
 
                 КРИТИЧНО ВАЖЛИВО: відповідь — лише звичайний текст.
                 ЗАБОРОНЕНО будь-яке Markdown-форматування: жодних **, __, #, -, *, _ та подібних символів.
