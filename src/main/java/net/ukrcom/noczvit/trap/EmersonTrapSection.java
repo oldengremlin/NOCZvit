@@ -111,11 +111,6 @@ public class EmersonTrapSection {
             int n = 0;
             for (TrapIncident inc : devIncidents) {
                 n++;
-                String rowClass = switch (inc.severity()) {
-                    case ALARM, WARNING -> " class=\"row-start\"";
-                    case INFO -> "";
-                };
-
                 String startStr = HTML_FMT.format(inc.activatedAt());
                 String endStr = inc.clearedAt() != null ? HTML_FMT.format(inc.clearedAt()) : "—";
                 String durStr = inc.clearedAt() != null
@@ -131,7 +126,7 @@ public class EmersonTrapSection {
                             .collect(Collectors.joining("; ")) + "</small>";
                 }
 
-                html.append("<tr").append(rowClass).append(">")
+                html.append("<tr>")
                         .append("<td>").append(n).append(".</td>")
                         .append("<td>").append(startStr).append("</td>")
                         .append("<td>").append(endStr).append("</td>")
