@@ -272,6 +272,12 @@ public class TrapCorrelator {
 
             // Standalone active trap
             if (ACTIVE_TO_CLEARED.containsKey(trap)) {
+                // MMS On Battery is the second step of the same battery-switch process as
+                // Battery Discharging. If BD is already open, absorb MMS into that incident.
+                if ("Active:Alarm:MMS On Battery".equals(trap)
+                        && openStandalones.containsKey("Active:Alarm:Battery Discharging")) {
+                    continue;
+                }
                 if (openStandalones.containsKey(trap)) {
                     log.debug("TrapCorrelator PDC {}: duplicate Active «{}» while already open", hostname, trap);
                 }
@@ -281,6 +287,12 @@ public class TrapCorrelator {
 
             // Standalone cleared trap
             if (CLEARED_TO_ACTIVE.containsKey(trap)) {
+                // MMS On Battery Cleared while Battery Discharging is still open — ignore;
+                // the combined incident will close when Battery Discharging Cleared arrives.
+                if ("Cleared:Alarm:MMS On Battery".equals(trap)
+                        && openStandalones.containsKey("Active:Alarm:Battery Discharging")) {
+                    continue;
+                }
                 String activeType = CLEARED_TO_ACTIVE.get(trap);
                 TrapEvent startEv = openStandalones.remove(activeType);
                 if (startEv != null) {
