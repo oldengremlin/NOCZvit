@@ -44,8 +44,9 @@ import net.ukrcom.noczvit.Config;
 @Slf4j
 public class ImapReader {
 
+    // RFC 2822 allows single-digit day (e.g. "Thu, 9 Jul 2026") — use 'd' not 'dd'
     private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER
-            = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+            = DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
 
