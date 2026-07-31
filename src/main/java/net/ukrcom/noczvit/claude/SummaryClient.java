@@ -48,6 +48,7 @@ public class SummaryClient {
 
     private final AnthropicClient client;
     private final String model;
+    private final long maxTokens;
     private final ResumeHistory resumeHistory;
     private final boolean debug;
 
@@ -56,6 +57,7 @@ public class SummaryClient {
                 .apiKey(config.getClaudeApiKey())
                 .build();
         this.model = config.getClaudeModel();
+        this.maxTokens = config.getClaudeMaxTokens();
         this.debug = config.isDebug();
         this.resumeHistory = initResumeHistory(config.getHistoryResumeUrl());
     }
@@ -144,7 +146,7 @@ public class SummaryClient {
 
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
-                    .maxTokens(2000L)
+                    .maxTokens(maxTokens)
                     .system("Ти відповідаєш ВИКЛЮЧНО українською мовою. "
                             + "Будь-яке слово, що не є українським, є помилкою. "
                             + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ.")

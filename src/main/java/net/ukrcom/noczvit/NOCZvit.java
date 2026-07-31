@@ -21,6 +21,9 @@ import net.ukrcom.noczvit.smtp.EmailSender;
 import net.ukrcom.noczvit.trap.EmersonTrapParser;
 import net.ukrcom.noczvit.trap.EmersonTrapSection;
 import net.ukrcom.noczvit.trap.ImapTrapReader;
+import net.ukrcom.noczvit.trap.RamosTrapEvent;
+import net.ukrcom.noczvit.trap.RamosTrapParser;
+import net.ukrcom.noczvit.trap.RamosTrapSection;
 import net.ukrcom.noczvit.trap.TrapCorrelator;
 import net.ukrcom.noczvit.trap.TrapDeduplicator;
 import net.ukrcom.noczvit.trap.TrapEvent;
@@ -110,6 +113,7 @@ public class NOCZvit {
             String debtorsHtml = "";
             List<ZabbixProblem> zabbixProblems = Collections.emptyList();
             EmersonTrapSection.SectionResult trapResult = new EmersonTrapSection.SectionResult("", "", "");
+            RamosTrapSection.SectionResult ramosTrapResult = new RamosTrapSection.SectionResult("", "");
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
@@ -162,12 +166,13 @@ public class NOCZvit {
                     debtorsFuture = CompletableFuture.completedFuture("");
                 }
 
+                final long fromEpoch = reportFrom.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+                final long toEpoch = reportTo.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+                final java.time.Instant trapFrom = java.time.Instant.ofEpochSecond(fromEpoch);
+                final java.time.Instant trapTo   = java.time.Instant.ofEpochSecond(toEpoch);
+
                 CompletableFuture<EmersonTrapSection.SectionResult> trapFuture;
                 if (config.isTrapEnabled()) {
-                    final long fromEpoch = reportFrom.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
-                    final long toEpoch = reportTo.atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
-                    final java.time.Instant trapFrom = java.time.Instant.ofEpochSecond(fromEpoch);
-                    final java.time.Instant trapTo   = java.time.Instant.ofEpochSecond(toEpoch);
                     trapFuture = CompletableFuture.supplyAsync(() -> {
                         try {
                             ImapTrapReader reader = new ImapTrapReader(config);
@@ -192,8 +197,31 @@ public class NOCZvit {
                     trapFuture = CompletableFuture.completedFuture(new EmersonTrapSection.SectionResult("", "", ""));
                 }
 
+                CompletableFuture<RamosTrapSection.SectionResult> ramosTrapFuture;
+                if (config.isRamosTrapEnabled()) {
+                    ramosTrapFuture = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            ImapTrapReader reader = new ImapTrapReader(config);
+                            List<RamosTrapEvent> events = RamosTrapParser.parse(
+                                    reader.readTrapsFromFolder(isInteractive, fromEpoch, toEpoch,
+                                            config.getRamosTrapFolder()));
+                            events = events.stream()
+                                    .filter(e -> !e.timestamp().isBefore(trapFrom)
+                                              && !e.timestamp().isAfter(trapTo))
+                                    .toList();
+                            return new RamosTrapSection().build(events);
+                        } catch (MessagingException e) {
+                            log.warn("RamosTrapParser: IMAP error: {}", e.getMessage());
+                            return new RamosTrapSection.SectionResult("", "");
+                        }
+                    }, ioExecutor);
+                } else {
+                    ramosTrapFuture = CompletableFuture.completedFuture(new RamosTrapSection.SectionResult("", ""));
+                }
+
                 try {
-                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture, trapFuture).join();
+                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture,
+                            trapFuture, ramosTrapFuture).join();
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause();
                     if (cause instanceof RuntimeException re && re.getCause() instanceof MessagingException me) {
@@ -213,6 +241,7 @@ public class NOCZvit {
                 zabbixProblems = zabbixProblemsFuture.join();
                 debtorsHtml = debtorsFuture.join();
                 trapResult = trapFuture.join();
+                ramosTrapResult = ramosTrapFuture.join();
             }
 
             // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP-інцидентами.
@@ -241,6 +270,12 @@ public class NOCZvit {
                     + "h3.trap-ps-device{font-size:11px;color:#37474f;background:#e8eaf0;border-left:4px solid #546e7a;margin:8px 0 2px;padding:4px 8px}"
                     + ".trap-ps-list{font-size:11px;color:#455a64;background:#fffde7;padding:4px 8px 4px 28px;margin:0 0 4px;list-style:disc}"
                     + ".trap-ps-list li{padding:1px 0}"
+                    + "h2.ramos-title{font-size:16px;color:#e65100;background:#e8eaf0;border-left:4px solid #f38120;margin:16px 0 6px;padding:5px 10px}"
+                    + "h3.ramos-room{font-size:13px;color:#bf360c;background:#e8eaf0;border-left:4px solid #f38120;margin:12px 0 4px;padding:5px 10px}"
+                    + "tr.ramos-crit td{background:#fff0f0}"
+                    + "tr.ramos-warn td{background:#fff8e1}"
+                    + "tr.ramos-crit:nth-child(even) td{background:#f5e2e2}"
+                    + "tr.ramos-warn:nth-child(even) td{background:#fff3cd}"
                     + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
                     + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
                     + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
@@ -259,12 +294,15 @@ public class NOCZvit {
             IncidentSectionBuilder incidentBuilder = new IncidentSectionBuilder();
             SummaryClient summaryClient = config.isClaudeEnabled() ? new SummaryClient(config) : null;
 
+            String allTrapPlainText = trapResult.plainText()
+                    + (ramosTrapResult.plainText().isBlank() ? "" : "\n" + ramosTrapResult.plainText());
+
             if (nightShift) {
                 subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
                                          ? summaryClient.generateSummary(incidentsForTable, prevDutyBegin, prevDutyEnd,
-                                                                          trapResult.plainText()) : null;
+                                                                          allTrapPlainText) : null;
                     message.append(incidentBuilder.build(incidentsForTable, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
                 }
             } else {
@@ -272,13 +310,17 @@ public class NOCZvit {
                 if (config.isIncidentsEnabled() && incidents != null) {
                     String summaryHtml = summaryClient != null
                                          ? summaryClient.generateSummary(incidentsForTable, currDutyBegin, currDutyEnd,
-                                                                          trapResult.plainText()) : null;
+                                                                          allTrapPlainText) : null;
                     message.append(incidentBuilder.build(incidentsForTable, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
                 }
             }
 
             if (!trapResult.isEmpty()) {
                 message.append(trapResult.html());
+            }
+
+            if (!ramosTrapResult.isEmpty()) {
+                message.append(ramosTrapResult.html());
             }
 
             if (!nightShift) {

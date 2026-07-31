@@ -10,6 +10,7 @@ debug=false
 # claude=true
 # claude.apikey=sk-ant-...
 # claude.model=claude-haiku-4-5
+# claude.tokens=2000
 # Cross-shift memory: saves each Claude summary to SQLite so the next report can reference it.
 # history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 
@@ -20,6 +21,11 @@ debug=false
 # snmp.trap.dedup.seconds=30
 # snmp.trap.correlation.minutes=10
 # snmp.trap.coldstart.link.minutes=5
+
+# RAMOS environmental sensor trap emails (CONTEG RAMOS Ultra/Optima)
+# Enables the RAMOS events section (Warning/Critical). Leave blank to disable.
+# Supports wildcard pattern (e.g. INBOX/Internal/SNMP Traps/RAMOS*)
+# ramos.trap.folder=INBOX.Internal.SNMP Traps.RAMOS
 
 # IMAP Configuration
 mail.hostname=smtp.example.com

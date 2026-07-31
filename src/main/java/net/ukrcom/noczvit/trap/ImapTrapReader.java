@@ -62,7 +62,7 @@ public class ImapTrapReader {
     }
 
     /**
-     * Reads trap emails from all folders matching the configured pattern.
+     * Reads trap emails from all folders matching the configured {@code snmp.trap.folder} pattern.
      *
      * @param fetchAll  when true, retrieves all messages regardless of date
      * @param fromEpoch unix epoch lower bound (inclusive) for date filtering
@@ -72,6 +72,24 @@ public class ImapTrapReader {
      */
     public List<RawMessage> readTraps(boolean fetchAll, long fromEpoch, long toEpoch)
             throws MessagingException {
+        return readTrapsFromFolder(fetchAll, fromEpoch, toEpoch, config.getSnmpTrapFolder());
+    }
+
+    /**
+     * Reads trap emails from all folders matching the given {@code folderPattern}.
+     *
+     * <p>The pattern may be a literal folder path or may end with {@code *} to match multiple
+     * sibling folders (e.g. {@code INBOX/Internal/SNMP Traps/DC-Room*}).
+     *
+     * @param fetchAll      when true, retrieves all messages regardless of date
+     * @param fromEpoch     unix epoch lower bound (inclusive) for date filtering
+     * @param toEpoch       unix epoch upper bound (inclusive) for date filtering
+     * @param folderPattern IMAP folder path or wildcard pattern to read from
+     * @return list of raw messages; never null
+     * @throws MessagingException on IMAP errors
+     */
+    public List<RawMessage> readTrapsFromFolder(boolean fetchAll, long fromEpoch, long toEpoch,
+                                                String folderPattern) throws MessagingException {
         Properties props = new Properties();
         props.put("mail.imap.ssl.enable", config.isMailSsl());
         props.put("mail.imap.host", config.getMailHostname());
@@ -86,9 +104,9 @@ public class ImapTrapReader {
                     config.isMailSsl() ? "993" : "143");
             store.connect(config.getMailHostname(), config.getMailUsername(), config.getMailPassword());
 
-            List<Folder> folders = resolveFolders(store, config.getSnmpTrapFolder());
+            List<Folder> folders = resolveFolders(store, folderPattern);
             log.info("ImapTrapReader: found {} trap folder(s) matching «{}»",
-                    folders.size(), config.getSnmpTrapFolder());
+                    folders.size(), folderPattern);
 
             for (Folder folder : folders) {
                 try (IMAPFolder imapFolder = (IMAPFolder) folder) {
