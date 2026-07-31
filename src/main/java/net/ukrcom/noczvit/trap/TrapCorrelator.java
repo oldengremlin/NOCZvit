@@ -205,7 +205,7 @@ public class TrapCorrelator {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Shutdown",          "Аварійне вимкнення кондиціонера.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Low Suction Pressure", "Низький тиск всмоктування компресора.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor High Head Pressure",   "Підвищений тиск нагнітання компресора.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Short Cycle",          "Захист компресора: короткий цикл (часті пуски/зупинки).");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Short Cycle",          "Короткий цикл компресора: надто часті вмикання/вимикання за встановлений період.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Overload",             "Перевантаження компресора.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Air Filter Clogged",              "Забруднений фільтр повітря.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Water Under Floor",               "Протікання: вода під підлогою.");
