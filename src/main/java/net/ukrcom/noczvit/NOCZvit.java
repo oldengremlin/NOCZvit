@@ -236,7 +236,7 @@ public class NOCZvit {
                     + "h2{font-size:13px;color:#16213e;margin:24px 0 6px;background:#e8eaf0;padding:5px 10px;border-left:4px solid #37474f}"
                     + "h2.trap-title{font-size:16px;color:#1b5e20;background:#e8eaf0;border-left:4px solid #2e7d32;margin:8px 0 4px;padding:5px 10px}"
                     + "h3.trap-device{font-size:13px;color:#1b5e20;background:#e8eaf0;border-left:4px solid #2e7d32;margin:12px 0 4px;padding:5px 10px}"
-                    + "h2.temp-title{font-size:13px;color:#1976d2;background:#e8eaf0;border-left:4px solid #1976d2;margin:16px 0 6px;padding:5px 10px}"
+                    + "h2.temp-title{font-size:16px;color:#1976d2;background:#e8eaf0;border-left:4px solid #1976d2;margin:16px 0 6px;padding:5px 10px}"
                     + "h2.trap-ps-title{font-size:14px;color:#37474f;background:#e8eaf0;border-left:4px solid #546e7a;margin:16px 0 4px;padding:5px 10px}"
                     + "h3.trap-ps-device{font-size:11px;color:#37474f;background:#e8eaf0;border-left:4px solid #546e7a;margin:8px 0 2px;padding:4px 8px}"
                     + ".trap-ps-list{font-size:11px;color:#455a64;background:#fffde7;padding:4px 8px 4px 28px;margin:0 0 4px;list-style:disc}"
