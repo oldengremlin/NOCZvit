@@ -112,6 +112,8 @@ public class Config {
     @NonNull
     private String claudeModel;
     private int claudeMaxTokens;
+    private int claudeMinSentences;
+    private int claudeMaxSentences;
     @NonNull
     private String historyResumeUrl;
     @Getter(AccessLevel.NONE)
@@ -177,6 +179,8 @@ public class Config {
         claudeApiKey = "";
         claudeModel = "claude-haiku-4-5";
         claudeMaxTokens = 4096;
+        claudeMinSentences = 5;
+        claudeMaxSentences = 20;
         historyResumeUrl = "";
         claudeExplicit = null;
         snmpTrapFolder = "";
@@ -444,6 +448,28 @@ public class Config {
                 }
             } catch (NumberFormatException e) {
                 log.warn("claude.tokens: некоректне значення «{}» — використовується {}", tokens, claudeMaxTokens);
+            }
+        }
+        String minSentences = stripInlineComment(properties.getProperty("claude.minsentences", ""));
+        if (!minSentences.isBlank()) {
+            try {
+                int s = Integer.parseInt(minSentences);
+                if (s > 0) {
+                    claudeMinSentences = s;
+                }
+            } catch (NumberFormatException e) {
+                log.warn("claude.minsentences: некоректне значення «{}» — використовується {}", minSentences, claudeMinSentences);
+            }
+        }
+        String maxSentences = stripInlineComment(properties.getProperty("claude.maxsentences", ""));
+        if (!maxSentences.isBlank()) {
+            try {
+                int s = Integer.parseInt(maxSentences);
+                if (s > 0) {
+                    claudeMaxSentences = s;
+                }
+            } catch (NumberFormatException e) {
+                log.warn("claude.maxsentences: некоректне значення «{}» — використовується {}", maxSentences, claudeMaxSentences);
             }
         }
         // Default: enabled in normal mode, disabled in debug mode.

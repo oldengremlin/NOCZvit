@@ -49,6 +49,8 @@ public class SummaryClient {
     private final AnthropicClient client;
     private final String model;
     private final long maxTokens;
+    private final int minSentences;
+    private final int maxSentences;
     private final ResumeHistory resumeHistory;
     private final boolean debug;
 
@@ -58,6 +60,8 @@ public class SummaryClient {
                 .build();
         this.model = config.getClaudeModel();
         this.maxTokens = config.getClaudeMaxTokens();
+        this.minSentences = config.getClaudeMinSentences();
+        this.maxSentences = config.getClaudeMaxSentences();
         this.debug = config.isDebug();
         this.resumeHistory = initResumeHistory(config.getHistoryResumeUrl());
     }
@@ -260,7 +264,7 @@ public class SummaryClient {
         return """
                 Ти — досвідчений інженер NOC (Network Operations Center). Нижче наведено технічний список інцидентів мережі за зміну.
 
-                Твоє завдання: написати КОРОТКЕ (до 20 речень) резюме зміни звичайним текстом українською мовою, призначене для керівництва або чергової зміни, що приходить. Резюме має:
+                Твоє завдання: написати резюме зміни звичайним текстом українською мовою (від %d до %d речень), призначене для керівництва або чергової зміни, що приходить. Резюме має:
                 - Вказати загальну кількість УНІКАЛЬНИХ подій (поле "Унікальних подій") та їх характер (пінг-падіння, обриви оптики, OSPF, живлення тощо)
                 - Виділити найбільш значущі або повторювані проблеми по локаціях та конкретних пристроях
                 - Використати готовий факт "Незакриті інциденти на кінець зміни" — не аналізуй пари START/END самостійно
@@ -286,7 +290,7 @@ public class SummaryClient {
                 НЕ перелічуй всі інциденти по одному. Дай загальну картину зміни.
                 Розбий текст на логічні абзаци, не звалюючи все в одну строку.
 
-                %s%s""".formatted(sb.toString(), trapReminder);
+                %s%s""".formatted(minSentences, maxSentences, sb.toString(), trapReminder);
     }
 
     /**
