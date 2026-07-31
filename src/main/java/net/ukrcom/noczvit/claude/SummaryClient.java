@@ -149,7 +149,9 @@ public class SummaryClient {
                     .maxTokens(maxTokens)
                     .system("Ти відповідаєш ВИКЛЮЧНО українською мовою. "
                             + "Будь-яке слово, що не є українським, є помилкою. "
-                            + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ.")
+                            + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ. "
+                            + "ЗАБОРОНЕНІ слова-русизми: 'события', 'событий', 'событиях', 'собитія', 'собитій', 'собитіях' — "
+                            + "замінюй ВИКЛЮЧНО на 'події', 'подій', 'подіях'.")
                     .addUserMessage(prompt)
                     .build();
 
@@ -164,6 +166,7 @@ public class SummaryClient {
                 return "";
             }
 
+            summary = fixRussianisms(summary);
             warnIfRussian(summary);
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
 
@@ -319,6 +322,24 @@ public class SummaryClient {
         });
 
         return open.isEmpty() ? "немає" : String.join("; ", open);
+    }
+
+    /**
+     * Replaces known Russian-language words that slip through the prompt filter.
+     * Handles "события/собитія" in nominative, genitive, and prepositional forms,
+     * both lowercase and uppercase first letter.
+     */
+    private static String fixRussianisms(String text) {
+        // Nominative plural: "события" / "собитія" → "події"
+        text = text.replaceAll("(?i)со[бб]ити[яьa]", "події");
+        text = text.replaceAll("(?i)событи[яьa]", "події");
+        // Genitive plural: "событий" / "собитій" → "подій"
+        text = text.replaceAll("(?i)со[бб]ити[йi]", "подій");
+        text = text.replaceAll("(?i)событи[йi]", "подій");
+        // Prepositional plural: "событиях" / "собитіях" → "подіях"
+        text = text.replaceAll("(?i)со[бб]ити[аa]х", "подіях");
+        text = text.replaceAll("(?i)событи[аa]х", "подіях");
+        return text;
     }
 
     /**
