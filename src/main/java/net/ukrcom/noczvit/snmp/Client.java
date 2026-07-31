@@ -77,9 +77,9 @@ public class Client {
      */
     public String getCelsius(LocalDateTime from, LocalDateTime to, net.ukrcom.noczvit.zabbix.Client zabbix) {
         StringBuilder html = new StringBuilder();
-        html.append("<p>\n<h1>Температура обладнання на виносах, станом на ")
+        html.append("<h2 class=\"temp-title\">Температура обладнання на виносах, станом на ")
                 .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
-                .append("</h1>\n")
+                .append("</h2>\n")
                 .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
                 .append("<th style=\"width:30px\">№</th>")
