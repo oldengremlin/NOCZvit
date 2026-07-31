@@ -25,12 +25,14 @@ flowchart TD
     PAR --> IMAP[imap.Client\nчитання IMAP]
     PAR --> ZAB[zabbix.Client\nlogin]
     PAR --> DB[(Debtors\nMSSQL)]
-    PAR --> TRAP[ImapTrapReader\nSNMP trap emails]
+    PAR --> TRAP[ImapTrapReader\nEmerson trap emails]
+    PAR --> RTRAP[ImapTrapReader\nRAMOS trap emails]
 
     IMAP --> INC[/IMAP incidents/]
     ZAB  --> ZS[/Zabbix session/]
     DB   --> DH[/HTML боржників/]
     TRAP --> TRAW[/RawMessage трапів/]
+    RTRAP --> RRAW[/RawMessage RAMOS/]
 
     ZS --> ZEVT["event.get history\n→ ProblemFilter\n→ ZabbixIncidentConverter"]
     INC  --> MERGE[/incidentsForTable\nIMAP + Zabbix/]
@@ -41,11 +43,15 @@ flowchart TD
     TDEDUP --> TCORR[TrapCorrelator\nstate machine → CorrelationResult]
     TCORR --> TSECT["EmersonTrapSection\nHTML + plain text + PS"]
 
+    RRAW --> RPARS["RamosTrapParser\nдекодування hex-назв\nфільтр стану"]
+    RPARS --> RSECT["RamosTrapSection\nHTML + plain text\n(#f38120, групування по кімнатах)"]
+
     MERGE --> CLAUDE["claude.SummaryClient\nAI-резюме зміни\n(опціонально)"]
     TSECT -. plain text .-> CLAUDE
+    RSECT -. critical plain text .-> CLAUDE
     MERGE --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
     ZS    --> ISB
-    INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
+    INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos SNMP]
 
     HIST[(history.ResumeHistory\nSQLite)]
     HIST -. попереднє резюме .-> CLAUDE
@@ -54,6 +60,7 @@ flowchart TD
     CLAUDE --> HTML[HTML-звіт]
     ISB  --> HTML
     TSECT --> HTML
+    RSECT --> HTML
     SNMP --> HTML
     DH   --> HTML
 
@@ -119,6 +126,9 @@ classDiagram
         +getClaudeModel() String
         +getClaudeMaxTokens() int
         +getHistoryResumeUrl() String
+        +isTrapEnabled() bool
+        +isRamosTrapEnabled() bool
+        +getRamosTrapFolder() String
     }
     class Dictionary {
         +lookupPD(key) String
@@ -279,6 +289,7 @@ classDiagram
 
     class ImapTrapReader["trap.ImapTrapReader"] {
         +readTraps(fetchAll, from, to) List~RawMessage~
+        +readTrapsFromFolder(fetchAll, from, to, folder) List~RawMessage~
     }
     class EmersonTrapParser["trap.EmersonTrapParser"] {
         +parse(messages) List~TrapEvent~
@@ -333,8 +344,31 @@ classDiagram
         INFO
     }
 
+    class RamosTrapEvent["trap.RamosTrapEvent"] {
+        <<record>>
+        +timestamp() Instant
+        +ip() String
+        +state() String
+        +sensorName() String
+        +sensorType() String
+        +room() String
+    }
+    class RamosTrapParser["trap.RamosTrapParser"] {
+        +parse(messages) List~RamosTrapEvent~
+    }
+    class RamosTrapSection["trap.RamosTrapSection"] {
+        +build(events) RamosSectionResult
+    }
+    class RamosSectionResult["RamosTrapSection.SectionResult"] {
+        <<record>>
+        +html() String
+        +plainText() String
+        +isEmpty() bool
+    }
+
     NOCZvit --> ImapTrapReader
     NOCZvit --> EmersonTrapSection
+    NOCZvit --> RamosTrapSection
     ImapTrapReader ..> RawMessage : creates
     EmersonTrapParser ..> RawMessage : reads
     EmersonTrapParser ..> TrapEvent : creates
@@ -346,6 +380,11 @@ classDiagram
     EmersonTrapSection ..> SectionResult : creates
     TrapIncident --> TrapSeverity
     SummaryClient ..> EmersonTrapSection : plain text
+    RamosTrapParser ..> RawMessage : reads
+    RamosTrapParser ..> RamosTrapEvent : creates
+    RamosTrapSection ..> RamosTrapEvent : renders
+    RamosTrapSection ..> RamosSectionResult : creates
+    SummaryClient ..> RamosTrapSection : critical plain text
 ```
 
 ## Вимоги
@@ -466,6 +505,10 @@ accequipment-mssql-password=secret
 # snmp.trap.dedup.seconds=30
 # snmp.trap.correlation.minutes=10
 # snmp.trap.coldstart.link.minutes=5
+
+# RAMOS трапи (датчики навколишнього середовища CONTEG RAMOS Ultra/Optima — опціонально)
+# Підтримує wildcard-патерн аналогічно до snmp.trap.folder
+# ramos.trap.folder=INBOX.Internal.SNMP Traps.RAMOS
 ```
 
 ### Claude AI (резюме зміни)
@@ -656,6 +699,61 @@ ADC Cold Start, що з'являється протягом `snmp.trap.coldstart
 ```
 Claude отримує інструкцію: ці події належать **виключно поточній зміні** і не мають переноситися в резюме наступного звітного періоду.
 
+### RAMOS трапи — події датчиків навколишнього середовища
+
+Опціональна секція звіту для пристроїв **CONTEG RAMOS Ultra/Optima** (OID enterprise 3854). Читає листи із IMAP-папки, де тема містить `Got trap from ramos`, та відображає HTML-таблицю, згруповану по кімнатах, з бренд-кольором `#f38120`.
+
+Вмикається через `ramos.trap.folder` — підтримує wildcard-патерн аналогічно до `snmp.trap.folder`.
+
+#### Формат листа від RAMOS
+
+```
+Subject: Got trap from ramos
+
+At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
+	"STATE" / "SENSOR_NAME" / "SENSOR_TYPE"
+```
+
+Відомий баг Perl-скрипта RAMOS: назви датчиків із символами Кирилиці надсилаються як дамп байт у hex-форматі, можуть займати кілька рядків:
+```
+	"High Critical" / "52 6F 6F 6D 34 20 D0 90 D0 9D D0 A2 D0 98 D0 9F D0
+ 9E D0 A2 D0 9E D0 9F 20 D0 92 D0 AB D0 A5 D0 9E D0 94 20 53 30 36" / "Dry Contact N.M"
+```
+`RamosTrapParser` автоматично декодує такі рядки через `HexFormat.of().parseHex()` → `new String(bytes, UTF-8)`, наприклад: `Room4 АНТИПОТОП ВЫХОД S06`.
+
+#### Стани датчиків
+
+| Стан | Рівень | Виводиться в HTML | Передається Claude |
+|---|---|---|---|
+| `Critical` | Критичний | ✓ (червоний рядок) | ✓ |
+| `High Critical` | Критичний | ✓ (червоний рядок) | ✓ |
+| `Low Critical` | Критичний | ✓ (червоний рядок) | ✓ |
+| `High Warning` | Попередження | ✓ (жовтий рядок) | — |
+| `Low Warning` | Попередження | ✓ (жовтий рядок) | — |
+| `Warning` | Попередження | ✓ (жовтий рядок) | — |
+| `Normal` | Норма | — | — |
+| `Sensor Error` | — | — | — |
+| `Connect` / `Disconnect` | — | — | — |
+
+#### Групування по кімнатах
+
+Назва датчика аналізується regex `(?i)room\s*(\d)`:
+- `Room 3 Антипотоп 2 S17` → **Room3**
+- `Room4 АНТИПОТОП ВЫХОД S06` → **Room4**
+- Назва без `Room` → **Інші**
+
+Розділи виводяться в алфавітному порядку: Room1, Room2, Room3, Room4, Інші (завжди останній).
+
+#### Порядок у HTML-звіті
+
+```
+[ Emerson trap секція ]
+[ RAMOS trap секція   ]  ← після Emerson, перед боржниками
+[ Боржники            ]
+[ Температура SNMP    ]
+[ PS-секція           ]
+```
+
 ### Словники
 
 - `dictionary_pd.txt` — фрази для розпізнавання PD-інцидентів
@@ -689,13 +787,16 @@ NOCZvit/
 │   │   ├── ResumeHistory.java     — SQLite-сховище міжзмінних резюме (DDL, findPrevious, save/upsert)
 │   │   └── ResumeRecord.java      — record: DTO одного збереженого резюме
 │   ├── trap/
-│   │   ├── ImapTrapReader.java    — читання SNMP-трап листів з IMAP-папок (wildcard-підтримка)
+│   │   ├── ImapTrapReader.java    — читання SNMP/RAMOS трап листів з IMAP-папок (wildcard-підтримка)
 │   │   ├── EmersonTrapParser.java — парсинг subject+body листа → TrapEvent (нормалізація типу трапу)
 │   │   ├── TrapDeduplicator.java  — дедуплікація Cold Start трапів у часовому вікні
 │   │   ├── TrapCorrelator.java    — state machine: ланцюжки PDC + самостійні ADC + Cold Start linking
 │   │   ├── EmersonTrapSection.java — формування HTML-секції та plain-text для Claude
 │   │   ├── TrapEvent.java         — record: один сирий нормалізований трап
-│   │   └── TrapIncident.java      — record: логічна скорельована подія (Severity, activatedAt, clearedAt)
+│   │   ├── TrapIncident.java      — record: логічна скорельована подія (Severity, activatedAt, clearedAt)
+│   │   ├── RamosTrapEvent.java    — record: одна point-in-time подія датчика RAMOS
+│   │   ├── RamosTrapParser.java   — парсинг RAMOS-листів, декодування hex Cyrillic, фільтр стану
+│   │   └── RamosTrapSection.java  — HTML групування по кімнатах (#f38120), plain-text для Claude
 │   ├── snmp/
 │   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
 │   └── zabbix/
