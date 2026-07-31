@@ -166,6 +166,10 @@ public class SummaryClient {
                 return "";
             }
 
+            long totalTokens = response.usage().inputTokens() + response.usage().outputTokens();
+            log.debug("Claude usage: input={}, output={}, total={}",
+                    response.usage().inputTokens(), response.usage().outputTokens(), totalTokens);
+
             summary = fixRussianisms(summary);
             warnIfRussian(summary);
             log.debug("Резюме Claude сформовано ({} символів)", summary.length());
@@ -180,7 +184,7 @@ public class SummaryClient {
                 log.debug("ResumeHistory: збереження пропущено (--debug режим)");
             }
 
-            return buildHtml(summary, from);
+            return buildHtml(summary, from, model, totalTokens);
 
         } catch (AnthropicServiceException e) {
             log.warn("Claude API помилка (HTTP {}): {}", e.statusCode(), e.getMessage());
@@ -360,11 +364,13 @@ public class SummaryClient {
      * період" for night periods (20:00–07:59) where monitoring runs unattended.
      * Light Markdown remnants (headings, bold) are converted to safe HTML before injection.
      */
-    private String buildHtml(String summary, LocalDateTime from) {
+    private String buildHtml(String summary, LocalDateTime from, String model, long totalTokens) {
         // День: 08:00–19:59; ніч: 20:00–07:59
         String title = (from.getHour() >= 8 && from.getHour() < 20)
                        ? "Резюме зміни" : "Резюме за звітний період";
-        title = title.concat(" (<i>згенеровано за допомогою <b>Claude Anthropic API</b></i>)");
+        title = title.concat(" (<i>згенеровано за допомогою <b>Claude Anthropic API</b>"
+                + ", модель <b>" + model + "</b>"
+                + ", використано <b>" + totalTokens + "</b> токенів</i>)");
         // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
 
