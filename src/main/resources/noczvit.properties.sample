@@ -11,7 +11,8 @@ debug=false
 # claude.apikey=sk-ant-...
 # claude.model=claude-haiku-4-5
 # claude.tokens=4096
-# claude.sentences=20
+# claude.minsentences=5
+# claude.maxsentences=20
 # Cross-shift memory: saves each Claude summary to SQLite so the next report can reference it.
 # history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 
