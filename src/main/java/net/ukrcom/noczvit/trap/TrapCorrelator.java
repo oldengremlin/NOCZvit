@@ -63,6 +63,13 @@ public class TrapCorrelator {
             "Active:Alarm:Compressor Short Cycle"
     );
 
+    // Point-in-time detection events: Active fires once to signal a detected condition,
+    // there is no meaningful "end". Treated like Cold Start — clearedAt = activatedAt.
+    // Any subsequent Cleared for these is silently ignored.
+    private static final Set<String> SELF_CLOSING_ACTIVE = Set.of(
+            "Active:Alarm:Compressor Short Cycle"
+    );
+
     // Alternative descriptions for when an incident IS closed (completed action, past tense).
     // Used instead of TRAP_DESCRIPTIONS when clearedAt != null.
     private static final Map<String, String> TRAP_DESCRIPTIONS_CLOSED = Map.of(
@@ -392,6 +399,12 @@ public class TrapCorrelator {
                 continue;
             }
 
+            // Self-closing point-in-time events: no meaningful end, clearedAt = activatedAt
+            if (SELF_CLOSING_ACTIVE.contains(trap)) {
+                incidents.add(buildStandaloneIncident(hostname, ip, trap, ev, ev.timestamp()));
+                continue;
+            }
+
             // Standalone active trap
             if (ACTIVE_TO_CLEARED.containsKey(trap)) {
                 // MMS On Battery is the second step of the same battery-switch process as
@@ -497,6 +510,12 @@ public class TrapCorrelator {
                 }
                 incidents.add(new TrapIncident(TrapEvent.CLASS_ADC, hostname, ip,
                         Severity.INFO, ev.timestamp(), ev.timestamp(), desc, List.of()));
+                continue;
+            }
+
+            // Self-closing point-in-time events: no meaningful end, clearedAt = activatedAt
+            if (SELF_CLOSING_ACTIVE.contains(trap)) {
+                incidents.add(buildStandaloneIncident(hostname, ip, trap, ev, ev.timestamp()));
                 continue;
             }
 
