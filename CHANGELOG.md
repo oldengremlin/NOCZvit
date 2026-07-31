@@ -6,6 +6,31 @@
 
 ---
 
+## [1.14.0] — 2026-07-31
+
+### Додано
+- **Секція PS для нерозпізнаних типів трапів**: `Active:Alarm:*`-трапи, що не мають відповідника в таблиці описів і не є ігнорованими, збираються в `unknownTraps` та відображаються після блоку температури окремою PS-секцією (кремовий фон #fffde7, стиль 11px) — список типів подій з часом, згрупований за пристроєм
+- **`SELF_CLOSING_ACTIVE` механізм**: трапи-детектори без тривалості (наразі `Active:Alarm:Compressor Short Cycle`) автоматично самозакриваються — `clearedAt = activatedAt`; суфікс «До кінця зміни не відновлено.» не додається; подальший `Cleared` мовчки ігнорується
+- **`TrapCorrelator.CorrelationResult`** — новий вкладений record, що повертає `correlate()`: `incidents()` (скорельовані події) та `unknownTraps()` (нерозпізнані сирі трапи)
+- **`EmersonTrapSection.build(incidents, unknownTraps)`** — новий overload; `SectionResult` розширено третім полем `unknownHtml()`
+- **`claude.tokens`** — нова властивість конфігурації для налаштування `max_tokens` у запитах до Claude API (за замовчуванням 2000); `SummaryClient` читає значення через `Config.getClaudeMaxTokens()`
+- Нові CSS-класи: `h2.temp-title` (заголовок блоку температури: синя гамма #1976d2, 16px, фон #e8eaf0), `h2.trap-ps-title`, `h3.trap-ps-device`, `.trap-ps-list` (PS-секція)
+- Розширена таблиця `TRAP_DESCRIPTIONS` до 30+ типів із MIB-канонічними перекладами (джерело — `LIEBERT_GP_COND-MIB`): нові типи `Compressor Low Suction Pressure`, `Compressor High Head Pressure`, `Compressor Short Cycle`, `Compressor Overload`, `Air Filter Clogged`, `Water Under Floor`, `Condensation Detected`, `Fire Alarm`, `Smoke Detected`, `Heaters Overheated`, `Humidifier Failure`, `Humidifier Problem`, `Chilled Water Low Water Flow`, `Condensate Pump High Water`, `Unit Shutdown`, `Battery Charging Inhibited`
+- `IGNORE_TRAPS` доповнено прошивкою Room4: `Active:Alarm:Unit Standby` та `Cleared:Alarm:Unit Standby`
+- Підтримка `Active:Alarm:System Input Power Problem` як другого кореня ланцюжка відключення PDC (прошивка r3/r4) у `CHAIN_ROOT_ACTIVE`/`CHAIN_ROOT_CLEARED`
+
+### Змінено
+- `TrapCorrelator.correlate()` тепер повертає `CorrelationResult` замість `List<TrapIncident>`
+- Описи в `TRAP_DESCRIPTIONS` приведено до MIB-канонічних перекладів; правило: переклад MIB завжди пріоритетний над довільним формулюванням
+- `Compressor Short Cycle`: видалено суфікс «До кінця зміни не відновлено.» — виключено з `NO_UNRESOLVED_SUFFIX`; тепер у `SELF_CLOSING_ACTIVE`
+- Заголовок блоку температури переведено з `<p><h1>` на `<h2 class="temp-title">` (16px, колір #1976d2, лівий бордер) — відповідає стилю заголовків трап-секцій
+- `normalizeCategory()` в `EmersonTrapParser`: категорії прошивки Room4 `Message:` та `Warning:` → канонічне `Alarm:`
+- Prompt Claude: системне повідомлення тепер явно вимагає відповіді **українською**; `warnIfRussian()` виявляє символи ы/ъ/э/ё у відповіді та виводить попередження в лог
+- `--debug` + `--claude` явно: результат більше не записується до `history.db` (міжзмінна пам'ять не оновлюється)
+- `noczvit.properties.sample`: додано закоментований рядок `# claude.tokens=2000`
+
+---
+
 ## [1.13.0] — 2026-07-30
 
 ### Додано
@@ -324,6 +349,10 @@
 
 ---
 
+[1.14.0]: https://github.com/oldengremlin/noczvit/compare/v1.13.0...v1.14.0
+[1.13.0]: https://github.com/oldengremlin/noczvit/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/oldengremlin/noczvit/compare/v1.11.5...v1.12.0
+[1.11.5]: https://github.com/oldengremlin/noczvit/compare/v1.11.4...v1.11.5
 [1.11.4]: https://github.com/oldengremlin/noczvit/compare/v1.11.3...v1.11.4
 [1.11.3]: https://github.com/oldengremlin/noczvit/compare/v1.11.2...v1.11.3
 [1.11.2]: https://github.com/oldengremlin/noczvit/compare/v1.11.1...v1.11.2
