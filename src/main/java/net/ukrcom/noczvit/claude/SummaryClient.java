@@ -202,15 +202,19 @@ public class SummaryClient {
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
                                ResumeRecord previous, String trapPlainText) {
         StringBuilder sb = new StringBuilder();
-        long startCount = incidents.stream()
-                .filter(i -> i.status() == Incident.Status.START).count();
+        // Count unique incident threads — same logic as IncidentSectionBuilder pairing:
+        // each distinct inReplyTo key = 1 thread; incidents without a key each count as 1.
+        long uniqueCount = incidents.stream()
+                .filter(i -> i.inReplyTo() != null && !i.inReplyTo().isBlank())
+                .map(Incident::inReplyTo).distinct().count()
+                + incidents.stream()
+                .filter(i -> i.inReplyTo() == null || i.inReplyTo().isBlank())
+                .count();
         sb.append("Звітний період: з ")
                 .append(from.format(NOCZvit.DATE_TIME_FORMATTER))
                 .append(" по ")
                 .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
-                .append("\n\nУнікальних подій: ").append(startCount)
-                .append(" (рядків у таблиці: ").append(incidents.size())
-                .append(" — кожна подія має START і може мати END)\n");
+                .append("\n\nУнікальних подій: ").append(uniqueCount).append("\n");
 
         sb.append("\nІнциденти:\n");
         int n = 0;
@@ -255,7 +259,7 @@ public class SummaryClient {
                 - Використати готовий факт "Незакриті інциденти на кінець зміни" — не аналізуй пари START/END самостійно
                 - Бути написане стисло, в офіційному стилі, без технічного жаргону
 
-                ВАЖЛИВО щодо підрахунку: у списку нижче кожна подія має запис START і, якщо вирішена, запис END. "Унікальних подій" — попередньо обчислене число START-записів. Використовуй ТІЛЬКИ цю цифру. НЕ рахуй рядки самостійно.
+                ВАЖЛИВО щодо підрахунку: у списку нижче кожна подія може мати запис START, END або обидва. "Унікальних подій" — попередньо обчислена кількість унікальних тредів (рядків таблиці після об'єднання START/END пар). Використовуй ТІЛЬКИ цю цифру. НЕ рахуй рядки самостійно.
                 Наразі не згадуй про зміну станів BGP.
 
                 Доменні знання — ОБОВ'ЯЗКОВО враховуй при написанні резюме:
