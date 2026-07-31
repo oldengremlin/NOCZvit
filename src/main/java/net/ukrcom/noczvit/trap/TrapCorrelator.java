@@ -233,6 +233,9 @@ public class TrapCorrelator {
         this.coldstartLinkSeconds = coldstartLinkMinutes * 60;
     }
 
+    /** Holds the output of {@link #correlate}: correlated incidents plus raw events that hit the catch-all. */
+    public record CorrelationResult(List<TrapIncident> incidents, List<TrapEvent> unknownTraps) {}
+
     /**
      * Correlates trap events into logical incidents.
      *
@@ -240,9 +243,9 @@ public class TrapCorrelator {
      * Cold Start linking on ADC devices), then ADC devices.
      *
      * @param events input trap events (any order)
-     * @return list of logical incidents sorted by {@code activatedAt} ascending
+     * @return {@link CorrelationResult} with incidents sorted by {@code activatedAt} and raw unknown events
      */
-    public List<TrapIncident> correlate(List<TrapEvent> events) {
+    public CorrelationResult correlate(List<TrapEvent> events) {
         // Group events by (deviceClass, hostname, ip)
         Map<String, List<TrapEvent>> byHostname = events.stream()
                 .sorted(Comparator.comparing(TrapEvent::timestamp))
@@ -255,6 +258,7 @@ public class TrapCorrelator {
         Map<String, List<Instant>> pdcRestorations = new HashMap<>();
 
         List<TrapIncident> result = new ArrayList<>();
+        List<TrapEvent> unknownTraps = new ArrayList<>();
 
         // Pass 1: PDC
         byHostname.forEach((key, devEvents) -> {
@@ -263,7 +267,7 @@ public class TrapCorrelator {
                 return;
             }
             String room = extractRoom(first.hostname());
-            result.addAll(correlatePdc(first.hostname(), first.ip(), devEvents, pdcRestorations, room));
+            result.addAll(correlatePdc(first.hostname(), first.ip(), devEvents, pdcRestorations, room, unknownTraps));
         });
 
         // Pass 2: ADC
@@ -274,17 +278,18 @@ public class TrapCorrelator {
             }
             String room = extractRoom(first.hostname());
             List<Instant> roomRestorations = pdcRestorations.getOrDefault(room, List.of());
-            result.addAll(correlateAdc(first.hostname(), first.ip(), devEvents, roomRestorations));
+            result.addAll(correlateAdc(first.hostname(), first.ip(), devEvents, roomRestorations, unknownTraps));
         });
 
         result.sort(Comparator.comparing(TrapIncident::activatedAt));
-        return result;
+        return new CorrelationResult(result, unknownTraps);
     }
 
     private List<TrapIncident> correlatePdc(String hostname, String ip,
                                              List<TrapEvent> events,
                                              Map<String, List<Instant>> pdcRestorations,
-                                             String room) {
+                                             String room,
+                                             List<TrapEvent> unknownTraps) {
         List<TrapIncident> incidents = new ArrayList<>();
 
         // State for power outage chain
@@ -392,6 +397,7 @@ public class TrapCorrelator {
             if (trap.startsWith("Active:Alarm:")) {
                 log.debug("TrapCorrelator PDC {}: unknown type «{}» — queued as generic standalone", hostname, ev.trapType());
                 openStandalones.put(trap, ev);
+                unknownTraps.add(ev);
                 continue;
             }
             // Catch-all: Cleared:Alarm:X closes the matching generic Active
@@ -422,7 +428,8 @@ public class TrapCorrelator {
 
     private List<TrapIncident> correlateAdc(String hostname, String ip,
                                              List<TrapEvent> events,
-                                             List<Instant> pdcRestorationTimes) {
+                                             List<Instant> pdcRestorationTimes,
+                                             List<TrapEvent> unknownTraps) {
         List<TrapIncident> incidents = new ArrayList<>();
         Map<String, TrapEvent> openStandalones = new LinkedHashMap<>();
 
@@ -482,6 +489,7 @@ public class TrapCorrelator {
             if (trap.startsWith("Active:Alarm:")) {
                 log.debug("TrapCorrelator ADC {}: unknown type «{}» — queued as generic standalone", hostname, ev.trapType());
                 openStandalones.put(trap, ev);
+                unknownTraps.add(ev);
                 continue;
             }
             // Catch-all: Cleared:Alarm:X closes the matching generic Active

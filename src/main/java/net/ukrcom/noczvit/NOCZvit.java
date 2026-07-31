@@ -109,7 +109,7 @@ public class NOCZvit {
             net.ukrcom.noczvit.zabbix.Client zabbix = null;
             String debtorsHtml = "";
             List<ZabbixProblem> zabbixProblems = Collections.emptyList();
-            EmersonTrapSection.SectionResult trapResult = new EmersonTrapSection.SectionResult("", "");
+            EmersonTrapSection.SectionResult trapResult = new EmersonTrapSection.SectionResult("", "", "");
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
@@ -179,17 +179,17 @@ public class NOCZvit {
                                               && !e.timestamp().isAfter(trapTo))
                                     .toList();
                             events = TrapDeduplicator.deduplicate(events, config.getSnmpTrapDedupSeconds());
-                            List<TrapIncident> trapIncidents = new TrapCorrelator(
+                            TrapCorrelator.CorrelationResult corr = new TrapCorrelator(
                                     config.getSnmpTrapCorrelationMinutes(),
                                     config.getSnmpTrapColdstartLinkMinutes()).correlate(events);
-                            return new EmersonTrapSection().build(trapIncidents);
+                            return new EmersonTrapSection().build(corr.incidents(), corr.unknownTraps());
                         } catch (MessagingException e) {
                             log.warn("ImapTrapReader: IMAP error: {}", e.getMessage());
-                            return new EmersonTrapSection.SectionResult("", "");
+                            return new EmersonTrapSection.SectionResult("", "", "");
                         }
                     }, ioExecutor);
                 } else {
-                    trapFuture = CompletableFuture.completedFuture(new EmersonTrapSection.SectionResult("", ""));
+                    trapFuture = CompletableFuture.completedFuture(new EmersonTrapSection.SectionResult("", "", ""));
                 }
 
                 try {
@@ -236,6 +236,10 @@ public class NOCZvit {
                     + "h2{font-size:13px;color:#16213e;margin:24px 0 6px;background:#e8eaf0;padding:5px 10px;border-left:4px solid #37474f}"
                     + "h2.trap-title{font-size:16px;color:#1b5e20;background:#e8eaf0;border-left:4px solid #2e7d32;margin:8px 0 4px;padding:5px 10px}"
                     + "h3.trap-device{font-size:13px;color:#1b5e20;background:#e8eaf0;border-left:4px solid #2e7d32;margin:12px 0 4px;padding:5px 10px}"
+                    + "h2.trap-ps-title{font-size:14px;color:#37474f;background:#e8eaf0;border-left:4px solid #546e7a;margin:16px 0 4px;padding:5px 10px}"
+                    + "h3.trap-ps-device{font-size:11px;color:#37474f;background:#e8eaf0;border-left:4px solid #546e7a;margin:8px 0 2px;padding:4px 8px}"
+                    + ".trap-ps-list{font-size:11px;color:#455a64;background:#fffde7;padding:4px 8px 4px 28px;margin:0 0 4px;list-style:disc}"
+                    + ".trap-ps-list li{padding:1px 0}"
                     + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
                     + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
                     + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
@@ -288,6 +292,10 @@ public class NOCZvit {
                 if (config.isRamosEnabled()) {
                     message.append(snmpClient.getRamos());
                 }
+            }
+
+            if (!trapResult.unknownHtml().isBlank()) {
+                message.append(trapResult.unknownHtml());
             }
 
             message.append("</body></html>");
