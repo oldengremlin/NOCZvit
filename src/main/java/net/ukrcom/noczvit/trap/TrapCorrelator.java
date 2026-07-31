@@ -59,7 +59,8 @@ public class TrapCorrelator {
     // they describe an ongoing process, not a fault condition requiring resolution.
     private static final Set<String> NO_UNRESOLVED_SUFFIX = Set.of(
             "Active:Alarm:Battery Discharging",
-            "Active:Alarm:MMS On Battery"
+            "Active:Alarm:MMS On Battery",
+            "Active:Alarm:Compressor Short Cycle"
     );
 
     // Alternative descriptions for when an incident IS closed (completed action, past tense).
@@ -185,37 +186,67 @@ public class TrapCorrelator {
     // Ukrainian descriptions for active trap types
     private static final Map<String, String> TRAP_DESCRIPTIONS = new HashMap<>();
     static {
+        // «Немібні» трапи (назви з email-тіла, прямих відповідників у MIB немає — переклад довільний):
         TRAP_DESCRIPTIONS.put("Active:Alarm:Loss of Mains",          "Зникнення мережевого живлення.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "ДБЖ переходить на живлення від батарей.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:MMS On Battery",         "MMS переключено на живлення від батарей.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Bypass Not Available",   "Байпас недоступний.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Low Battery",            "Низький заряд батарей ДБЖ.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Off",               "Пристрій вимкнено.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Loss of Air Flow",       "Відсутність потоку повітря.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:System Input Power Problem",  "Проблема з вхідним живленням.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Fault",       "Несправність компресора.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Master Unit Communication Lost", "Втрата зв'язку з основним блоком.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:High Temperature",       "Висока температура.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Low Temperature",        "Низька температура.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:High Humidity",          "Висока вологість.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Low Humidity",           "Низька вологість.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Fan Fault",              "Несправність вентилятора.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Charging Inhibited", "Заборонено заряджання батарей.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:System Input Power Problem",  "Проблема з мережевим живленням.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Shutdown",          "Аварійне вимкнення кондиціонера.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Low Suction Pressure", "Низький тиск всмоктування компресора.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor High Head Pressure",   "Підвищений тиск нагнітання компресора.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Short Cycle",          "Захист компресора: короткий цикл (часті пуски/зупинки).");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Overload",             "Перевантаження компресора.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Air Filter Clogged",              "Забруднений фільтр повітря.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Water Under Floor",               "Протікання: вода під підлогою.");
+
+        // Описи нижче — точний переклад DESCRIPTION з LIEBERT_GP_COND-MIB:
+        // lgpCondId4168BatteryDischarging: "The battery is discharging."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Discharging",    "Батарея розряджається.");
+        // lgpCondId4834MMSOnBattery: "The multi-module system is on battery."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:MMS On Battery",         "Система з кількох модулів (MMS) перейшла на живлення від батарей.");
+        // lgpConditionBypassUnavailable: "This summary event is asserted when the bypass is not available."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Bypass Not Available",   "Байпас недоступний.");
+        // lgpConditionLowBatteryWarning: "The battery's remaining charge is less than or equal to the configured low threshold."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Low Battery",            "Залишковий заряд батареї досяг або нижче налаштованого порогу.");
+        // lgpCondId5110UnitOff: "Unit was turned off."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Off",               "Пристрій вимкнено.");
+        // lgpConditionLossOfAirflow: "The system has detected a loss of air flow."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Loss of Air Flow",       "Виявлено відсутність потоку повітря.");
+        // lgpCondId5120MasterUnitCommunicationLost: "Communication with master unit has been lost."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Master Unit Communication Lost", "Зв'язок з головним блоком втрачено.");
+        // lgpConditionHighTemperature: "The temperature has exceeded the high temperature threshold."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:High Temperature",       "Температура перевищила верхній поріг.");
+        // lgpConditionLowTemperature: "The temperature is below the low temperature threshold."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Low Temperature",        "Температура нижче нижнього порогу.");
+        // lgpConditionHighHumidity: "The humidity has exceeded the high humidity threshold."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:High Humidity",          "Вологість перевищила верхній поріг.");
+        // lgpConditionLowHumidity: "The humidity is below the low humidity threshold."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Low Humidity",           "Вологість нижче нижнього порогу.");
+        // lgpCondId4200BatteryChargingInhibited: "Battery charging is inhibited due to an external inhibit signal."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Battery Charging Inhibited", "Заряджання батарей заблоковано зовнішнім сигналом.");
+        // lgpCondId5113UnitShutdown: "An event has occurred requiring the unit to be shutdown and disabled to prevent damage to the system."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Shutdown",          "Пристрій вимкнено та заблоковано для запобігання пошкодженню.");
+        // lgpCondId5271CompressorLowSuctionPressure: "Compressor is shut down due to low suction pressure."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Low Suction Pressure", "Компресор зупинено через низький тиск всмоктування.");
+        // lgpCondId5270CompressorHighHeadPressure: "Compressor is shut down due to high head pressure."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor High Head Pressure",   "Компресор зупинено через підвищений тиск нагнітання.");
+        // lgpConditionCompressorShortCycle: "A compressor has exceeded the maximum number of starts in a minimum time period."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Short Cycle",          "Компресор перевищив максимальну кількість запусків за мінімальний проміжок часу.");
+        // lgpConditionCompressorOverload: "This system has detected a compressor overload condition."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Overload",             "Виявлено перевантаження компресора.");
+        // lgpCondId5118CloggedAirFilter: "Air filter is dirty and needs to be (cleaned or) replaced."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Air Filter Clogged",              "Повітряний фільтр забруднений та потребує чистки або заміни.");
+        // lgpConditionWaterUnderFloor: "Moisture has been detected under the floor."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Water Under Floor",               "Виявлено вологу під підлогою.");
+        // lgpConditionCondensationDetected / lgpCondId4711: "The system has detected condensation."
         TRAP_DESCRIPTIONS.put("Active:Alarm:Condensation Detected",           "Виявлено конденсацію.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Fire Alarm",                      "ПОЖЕЖНА ТРИВОГА.");
+        // lgpConditionFireAlarm: "Fire Alarm."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Fire Alarm",                      "Пожежна тривога.");
+        // lgpConditionSmokeDetected: "The system has detected smoke."
         TRAP_DESCRIPTIONS.put("Active:Alarm:Smoke Detected",                  "Виявлено дим.");
+        // lgpConditionHeatersOverheated: "Heaters Overheated."
         TRAP_DESCRIPTIONS.put("Active:Alarm:Heaters Overheated",              "Перегрів нагрівачів.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Humidifier Failure",              "Несправність зволожувача.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Humidifier Problem",              "Проблема зволожувача.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Chilled Water Low Water Flow",    "Недостатній потік охолодженої води.");
-        TRAP_DESCRIPTIONS.put("Active:Alarm:Condensate Pump High Water",      "Високий рівень конденсату в насосі.");
+        // lgpConditionHumidifierFailure: "The system has detected a humidifier failure condition."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Humidifier Failure",              "Виявлено несправність зволожувача.");
+        // lgpConditionHumidifierProblem: "The system has detected a humidifier problem."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Humidifier Problem",              "Виявлено проблему з зволожувачем.");
+        // lgpConditionChilledWaterLowWaterFlow: "The system has detected a chilled water low water flow condition."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Chilled Water Low Water Flow",    "Виявлено низький потік охолодженої води.");
+        // lgpConditionCondensatePumpHighWater: "The system has detected high water in the condensate pump."
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Condensate Pump High Water",      "Виявлено підвищений рівень рідини в конденсатному насосі.");
         TRAP_DESCRIPTIONS.put("Monitoring Card Reboot",              "Перезапуск картки моніторингу.");
         TRAP_DESCRIPTIONS.put("Cold Start",                           "Перезапуск картки моніторингу.");
     }
