@@ -368,9 +368,11 @@ public class SummaryClient {
         // День: 08:00–19:59; ніч: 20:00–07:59
         String title = (from.getHour() >= 8 && from.getHour() < 20)
                        ? "Резюме зміни" : "Резюме за звітний період";
-        title = title.concat(" (<i>згенеровано за допомогою <b>Claude Anthropic API</b>"
-                + ", модель <b>" + model + "</b>"
-                + ", використано <b>" + totalTokens + "</b> токенів</i>)");
+        String footer = "<p style=\"margin:8px 0 0;font-size:0.8em;color:#888;text-align:right\">"
+                + "<i>згенеровано за допомогою Claude Anthropic API"
+                + ", модель " + model
+                + ", використано " + totalTokens + " токенів</i></p>";
+
         // 1. Прибрати Markdown-заголовки (# Заголовок → Заголовок) — страховка
         String clean = MD_HEADING.matcher(summary).replaceAll("");
 
@@ -388,6 +390,6 @@ public class SummaryClient {
 
         return """
                <div class="section" style="background:#fff;padding:12px 16px;border-left:4px solid #1976d2;margin-bottom:20px;box-shadow:2px 2px 6px rgba(0,0,0,.1)">
-               <h2 style="color:#1976d2;margin-top:0">""" + title + "</h2><p>" + escaped + "</p></div>\n";
+               <h2 style="color:#1976d2;margin-top:0">""" + title + "</h2><p>" + escaped + "</p>" + footer + "</div>\n";
     }
 }
