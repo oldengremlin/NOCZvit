@@ -367,7 +367,7 @@ public class Client {
 
             int w = config.getZabbixGraphWidth();
             int h = config.getZabbixGraphHeight();
-            return "<tr><td></td><td colspan=\"3\">"
+            return "<tr><td></td><td colspan=\"5\">"
                     + "<img src=\"data:image/png;base64," + Base64.getEncoder().encodeToString(img) + "\""
                     + " width=\"" + w + "\" height=\"" + h + "\" style=\"display:block;max-width:100%\">"
                     + "</td></tr>\n";
