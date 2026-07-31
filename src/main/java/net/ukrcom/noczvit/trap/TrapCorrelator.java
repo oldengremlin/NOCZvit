@@ -127,6 +127,18 @@ public class TrapCorrelator {
         ACTIVE_TO_CLEARED.put("Active:Alarm:Unit Shutdown",            "Cleared:Alarm:Unit Shutdown");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor Low Suction Pressure",  "Cleared:Alarm:Compressor Low Suction Pressure");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor High Head Pressure",    "Cleared:Alarm:Compressor High Head Pressure");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor Short Cycle",           "Cleared:Alarm:Compressor Short Cycle");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor Overload",              "Cleared:Alarm:Compressor Overload");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Air Filter Clogged",               "Cleared:Alarm:Air Filter Clogged");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Water Under Floor",                "Cleared:Alarm:Water Under Floor");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Condensation Detected",            "Cleared:Alarm:Condensation Detected");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Fire Alarm",                       "Cleared:Alarm:Fire Alarm");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Smoke Detected",                   "Cleared:Alarm:Smoke Detected");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Heaters Overheated",               "Cleared:Alarm:Heaters Overheated");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Humidifier Failure",               "Cleared:Alarm:Humidifier Failure");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Humidifier Problem",               "Cleared:Alarm:Humidifier Problem");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Chilled Water Low Water Flow",     "Cleared:Alarm:Chilled Water Low Water Flow");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Condensate Pump High Water",       "Cleared:Alarm:Condensate Pump High Water");
     }
 
     // Maps Cleared trap type → its Active counterpart (reverse of ACTIVE_TO_CLEARED)
@@ -156,6 +168,18 @@ public class TrapCorrelator {
         TRAP_SEVERITY.put("Active:Alarm:Unit Shutdown",               Severity.ALARM);
         TRAP_SEVERITY.put("Active:Alarm:Compressor Low Suction Pressure",  Severity.ALARM);
         TRAP_SEVERITY.put("Active:Alarm:Compressor High Head Pressure",    Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Compressor Short Cycle",           Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Compressor Overload",              Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Air Filter Clogged",               Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Water Under Floor",                Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Condensation Detected",            Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Fire Alarm",                       Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Smoke Detected",                   Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Heaters Overheated",               Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Humidifier Failure",               Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Humidifier Problem",               Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Chilled Water Low Water Flow",     Severity.WARNING);
+        TRAP_SEVERITY.put("Active:Alarm:Condensate Pump High Water",       Severity.WARNING);
     }
 
     // Ukrainian descriptions for active trap types
@@ -180,6 +204,18 @@ public class TrapCorrelator {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Shutdown",          "Аварійне вимкнення кондиціонера.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Low Suction Pressure", "Низький тиск всмоктування компресора.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor High Head Pressure",   "Підвищений тиск нагнітання компресора.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Short Cycle",          "Захист компресора: короткий цикл (часті пуски/зупинки).");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Overload",             "Перевантаження компресора.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Air Filter Clogged",              "Забруднений фільтр повітря.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Water Under Floor",               "Протікання: вода під підлогою.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Condensation Detected",           "Виявлено конденсацію.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Fire Alarm",                      "ПОЖЕЖНА ТРИВОГА.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Smoke Detected",                  "Виявлено дим.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Heaters Overheated",              "Перегрів нагрівачів.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Humidifier Failure",              "Несправність зволожувача.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Humidifier Problem",              "Проблема зволожувача.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Chilled Water Low Water Flow",    "Недостатній потік охолодженої води.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Condensate Pump High Water",      "Високий рівень конденсату в насосі.");
         TRAP_DESCRIPTIONS.put("Monitoring Card Reboot",              "Перезапуск картки моніторингу.");
         TRAP_DESCRIPTIONS.put("Cold Start",                           "Перезапуск картки моніторингу.");
     }
@@ -197,6 +233,9 @@ public class TrapCorrelator {
         this.coldstartLinkSeconds = coldstartLinkMinutes * 60;
     }
 
+    /** Holds the output of {@link #correlate}: correlated incidents plus raw events that hit the catch-all. */
+    public record CorrelationResult(List<TrapIncident> incidents, List<TrapEvent> unknownTraps) {}
+
     /**
      * Correlates trap events into logical incidents.
      *
@@ -204,9 +243,9 @@ public class TrapCorrelator {
      * Cold Start linking on ADC devices), then ADC devices.
      *
      * @param events input trap events (any order)
-     * @return list of logical incidents sorted by {@code activatedAt} ascending
+     * @return {@link CorrelationResult} with incidents sorted by {@code activatedAt} and raw unknown events
      */
-    public List<TrapIncident> correlate(List<TrapEvent> events) {
+    public CorrelationResult correlate(List<TrapEvent> events) {
         // Group events by (deviceClass, hostname, ip)
         Map<String, List<TrapEvent>> byHostname = events.stream()
                 .sorted(Comparator.comparing(TrapEvent::timestamp))
@@ -219,6 +258,7 @@ public class TrapCorrelator {
         Map<String, List<Instant>> pdcRestorations = new HashMap<>();
 
         List<TrapIncident> result = new ArrayList<>();
+        List<TrapEvent> unknownTraps = new ArrayList<>();
 
         // Pass 1: PDC
         byHostname.forEach((key, devEvents) -> {
@@ -227,7 +267,7 @@ public class TrapCorrelator {
                 return;
             }
             String room = extractRoom(first.hostname());
-            result.addAll(correlatePdc(first.hostname(), first.ip(), devEvents, pdcRestorations, room));
+            result.addAll(correlatePdc(first.hostname(), first.ip(), devEvents, pdcRestorations, room, unknownTraps));
         });
 
         // Pass 2: ADC
@@ -238,17 +278,18 @@ public class TrapCorrelator {
             }
             String room = extractRoom(first.hostname());
             List<Instant> roomRestorations = pdcRestorations.getOrDefault(room, List.of());
-            result.addAll(correlateAdc(first.hostname(), first.ip(), devEvents, roomRestorations));
+            result.addAll(correlateAdc(first.hostname(), first.ip(), devEvents, roomRestorations, unknownTraps));
         });
 
         result.sort(Comparator.comparing(TrapIncident::activatedAt));
-        return result;
+        return new CorrelationResult(result, unknownTraps);
     }
 
     private List<TrapIncident> correlatePdc(String hostname, String ip,
                                              List<TrapEvent> events,
                                              Map<String, List<Instant>> pdcRestorations,
-                                             String room) {
+                                             String room,
+                                             List<TrapEvent> unknownTraps) {
         List<TrapIncident> incidents = new ArrayList<>();
 
         // State for power outage chain
@@ -352,7 +393,25 @@ public class TrapCorrelator {
                 continue;
             }
 
-            log.debug("TrapCorrelator PDC {}: unhandled trap «{}»", hostname, trap);
+            // Catch-all: any Active:Alarm:X not in known maps → generic standalone
+            if (trap.startsWith("Active:Alarm:")) {
+                log.debug("TrapCorrelator PDC {}: unknown type «{}» — queued as generic standalone", hostname, ev.trapType());
+                openStandalones.put(trap, ev);
+                unknownTraps.add(ev);
+                continue;
+            }
+            // Catch-all: Cleared:Alarm:X closes the matching generic Active
+            if (trap.startsWith("Cleared:Alarm:")) {
+                String activeType = "Active:Alarm:" + trap.substring("Cleared:Alarm:".length());
+                TrapEvent startEv = openStandalones.remove(activeType);
+                if (startEv != null) {
+                    incidents.add(buildStandaloneIncident(hostname, ip, activeType, startEv, ev.timestamp()));
+                } else {
+                    log.debug("TrapCorrelator PDC {}: generic Cleared «{}» without matching Active", hostname, trap);
+                }
+                continue;
+            }
+            log.debug("TrapCorrelator PDC {}: truly unhandled trap «{}»", hostname, trap);
         }
 
         // Unclosed power outage chain
@@ -369,7 +428,8 @@ public class TrapCorrelator {
 
     private List<TrapIncident> correlateAdc(String hostname, String ip,
                                              List<TrapEvent> events,
-                                             List<Instant> pdcRestorationTimes) {
+                                             List<Instant> pdcRestorationTimes,
+                                             List<TrapEvent> unknownTraps) {
         List<TrapIncident> incidents = new ArrayList<>();
         Map<String, TrapEvent> openStandalones = new LinkedHashMap<>();
 
@@ -425,7 +485,25 @@ public class TrapCorrelator {
                 continue;
             }
 
-            log.debug("TrapCorrelator ADC {}: unhandled trap «{}»", hostname, trap);
+            // Catch-all: any Active:Alarm:X not in known maps → generic standalone
+            if (trap.startsWith("Active:Alarm:")) {
+                log.debug("TrapCorrelator ADC {}: unknown type «{}» — queued as generic standalone", hostname, ev.trapType());
+                openStandalones.put(trap, ev);
+                unknownTraps.add(ev);
+                continue;
+            }
+            // Catch-all: Cleared:Alarm:X closes the matching generic Active
+            if (trap.startsWith("Cleared:Alarm:")) {
+                String activeType = "Active:Alarm:" + trap.substring("Cleared:Alarm:".length());
+                TrapEvent startEv = openStandalones.remove(activeType);
+                if (startEv != null) {
+                    incidents.add(buildStandaloneIncident(hostname, ip, activeType, startEv, ev.timestamp()));
+                } else {
+                    log.debug("TrapCorrelator ADC {}: generic Cleared «{}» without matching Active", hostname, trap);
+                }
+                continue;
+            }
+            log.debug("TrapCorrelator ADC {}: truly unhandled trap «{}»", hostname, trap);
         }
 
         // Unclosed standalone alarms
@@ -480,7 +558,11 @@ public class TrapCorrelator {
         if (clearedAt != null && TRAP_DESCRIPTIONS_CLOSED.containsKey(activeTrapType)) {
             desc = TRAP_DESCRIPTIONS_CLOSED.get(activeTrapType);
         } else {
-            desc = TRAP_DESCRIPTIONS.getOrDefault(activeTrapType, activeTrapType);
+            // For unknown types, strip "Active:Alarm:" prefix for a cleaner display
+            String fallback = activeTrapType.startsWith("Active:Alarm:")
+                    ? activeTrapType.substring("Active:Alarm:".length())
+                    : activeTrapType;
+            desc = TRAP_DESCRIPTIONS.getOrDefault(activeTrapType, fallback);
             if (clearedAt == null && !NO_UNRESOLVED_SUFFIX.contains(activeTrapType)) {
                 desc = desc + " До кінця зміни не відновлено.";
             }

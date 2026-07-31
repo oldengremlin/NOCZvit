@@ -41,12 +41,14 @@ public class EmersonTrapSection {
             .withZone(ZoneId.systemDefault());
 
     /**
-     * Result of {@link #build(List)}: an HTML fragment and a plain-text block for the AI prompt.
+     * Result of {@link #build(List, List)}: an HTML fragment, a plain-text block for the AI prompt,
+     * and an optional PS section HTML listing unrecognized trap types.
      *
-     * @param html      HTML section fragment; empty string when there are no incidents
-     * @param plainText plain text for the Claude prompt; empty string when there are no incidents
+     * @param html        HTML section fragment; empty string when there are no incidents
+     * @param plainText   plain text for the Claude prompt; empty string when there are no incidents
+     * @param unknownHtml PS section HTML for unrecognized trap types; empty string when there are none
      */
-    public record SectionResult(String html, String plainText) {
+    public record SectionResult(String html, String plainText, String unknownHtml) {
 
         public boolean isEmpty() {
             return html.isBlank();
@@ -58,6 +60,20 @@ public class EmersonTrapSection {
     }
 
     /**
+     * Builds the section HTML, plain-text, and PS (unknown traps) HTML.
+     *
+     * @param incidents    correlated trap incidents
+     * @param unknownTraps raw trap events that hit the catch-all and have no known description
+     * @return {@link SectionResult}; never null
+     */
+    public SectionResult build(List<TrapIncident> incidents, List<TrapEvent> unknownTraps) {
+        SectionResult base = build(incidents);
+        String unknownHtml = (unknownTraps != null && !unknownTraps.isEmpty())
+                ? buildUnknownHtml(unknownTraps) : "";
+        return new SectionResult(base.html(), base.plainText(), unknownHtml);
+    }
+
+    /**
      * Builds the section HTML and plain-text from the given incidents.
      * Returns an empty result if the list is empty.
      *
@@ -66,7 +82,7 @@ public class EmersonTrapSection {
      */
     public SectionResult build(List<TrapIncident> incidents) {
         if (incidents == null || incidents.isEmpty()) {
-            return new SectionResult("", "");
+            return new SectionResult("", "", "");
         }
 
         // Sort: ADC alphabetically first, then PDC alphabetically
@@ -152,7 +168,33 @@ public class EmersonTrapSection {
         html.append("</div>\n");
         text.append("=== КІНЕЦЬ ПОДІЙ ОБЛАДНАННЯ ДАТАЦЕНТРУ ===\n");
 
-        return new SectionResult(html.toString(), text.toString());
+        return new SectionResult(html.toString(), text.toString(), "");
+    }
+
+    private String buildUnknownHtml(List<TrapEvent> unknownTraps) {
+        Map<String, List<TrapEvent>> byHost = unknownTraps.stream()
+                .collect(Collectors.groupingBy(TrapEvent::hostname, LinkedHashMap::new, Collectors.toList()));
+
+        StringBuilder html = new StringBuilder();
+        html.append("<div class=\"section\">\n")
+                .append("<h2 class=\"trap-ps-title\">ps: нерозпізнані типи подій по ДБЖ та кондиціонерах Emerson:</h2>\n");
+
+        byHost.forEach((hostname, evs) -> {
+            TrapEvent first = evs.get(0);
+            html.append("<h3 class=\"trap-ps-device\">")
+                    .append(StringEscapeUtils.escapeHtml4(hostname))
+                    .append(" (").append(StringEscapeUtils.escapeHtml4(first.ip())).append(")")
+                    .append("</h3>\n")
+                    .append("<ul class=\"trap-ps-list\">\n");
+            evs.forEach(ev ->
+                    html.append("<li>").append(StringEscapeUtils.escapeHtml4(ev.trapType()))
+                            .append(" <small>(").append(HTML_FMT.format(ev.timestamp())).append(")</small>")
+                            .append("</li>\n"));
+            html.append("</ul>\n");
+        });
+
+        html.append("</div>\n");
+        return html.toString();
     }
 
     private static String formatDuration(Instant from, Instant to) {
