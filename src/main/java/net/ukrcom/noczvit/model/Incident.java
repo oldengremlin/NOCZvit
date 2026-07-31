@@ -34,6 +34,9 @@ import java.util.List;
  * @param description plain-text event description (no HTML)
  * @param reviewNames device/location names not found in dictionary; empty when
  * all resolved
+ * @param inReplyTo   pairing key: {@code In-Reply-To:} header for IMAP incidents,
+ * synthetic {@code "zabbix:host:clock"} for Zabbix API incidents,
+ * empty string for unpaired events (OSM, etc.)
  */
 public record Incident(
         String location,
@@ -45,7 +48,8 @@ public record Incident(
         Source source,
         Status status,
         String description,
-        List<String> reviewNames
+        List<String> reviewNames,
+        String inReplyTo
         ) {
 
     /**

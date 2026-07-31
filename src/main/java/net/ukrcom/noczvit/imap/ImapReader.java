@@ -154,7 +154,10 @@ public class ImapReader {
                 log.debug("Failed to get message body: {}", e.getMessage());
                 body = "";
             }
-            return Optional.of(new RawMessage(dateStr, unixDate, subject, body));
+            String[] replyToHeaders = msg.getHeader("In-Reply-To");
+            String inReplyTo = (replyToHeaders != null && replyToHeaders.length > 0)
+                    ? replyToHeaders[0].trim() : "";
+            return Optional.of(new RawMessage(dateStr, unixDate, subject, body, inReplyTo));
         } catch (MessagingException e) {
             log.warn("Failed to parse IMAP message header: {}", e.getMessage());
             return Optional.empty();

@@ -154,6 +154,7 @@ classDiagram
         +body() String
         +unixDate() long
         +dateStr() String
+        +inReplyTo() String
     }
     class PdIncidentParser {
         +parse(msg) Optional~Incident~
@@ -178,6 +179,7 @@ classDiagram
         +status() Status
         +description() String
         +reviewNames() List~String~
+        +inReplyTo() String
     }
     class Source {
         <<enumeration>>
@@ -210,6 +212,17 @@ classDiagram
     class IncidentSectionBuilder {
         +build(incidents, zabbix, from, to) String
         +build(incidents, zabbix, from, to, summaryHtml) String
+        -pairIncidents(incidents) List~IncidentRow~
+        -formatDuration(seconds) String
+    }
+    class IncidentRow {
+        <<record>>
+        +start() Incident
+        +end() Incident
+        +location() String
+        +sortKey() long
+        +device() String
+        +mergedReviewNames() List~String~
     }
     class SummaryClient["claude.SummaryClient"] {
         +generateSummary(incidents, from, to) String
@@ -567,6 +580,32 @@ history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 - Зберігається по одному запису на `(period_from, period_to)` — повторні запуски для того ж періоду оновлюють запис без дублювання
 - Якщо файл БД недоступний — програма продовжує роботу без міжзмінної пам'яті (попередження в лозі)
 
+### Таблиця інцидентів — пейринг [-]/[+] за `In-Reply-To:`
+
+Zabbix надсилає два листи на кожен тікет проблеми: `[-]` (початок) і `[+]` (закінчення). Обидва листи мають однакове значення `In-Reply-To:` заголовка (Message-ID першого листа). `IncidentSectionBuilder` використовує цей заголовок для об'єднання пари в **один рядок** таблиці.
+
+**Колонки таблиці** (до v1.15.0 — «Дата та час», тепер):
+
+| № | Початок | Закінчення | Тривалість | Інцидент | Обладнання |
+|---|---|---|---|---|---|
+| 1 | 09:33 | 09:48 | 15 хв | Zabbix зареєстровано інцидент, зникнення зв'язку... | r234-1 |
+
+**Три сценарії відображення:**
+
+| Ситуація | Початок | Закінчення | Тривалість |
+|---|---|---|---|
+| Обидва в межах звіту | час `[-]` | час `[+]` | різниця |
+| Тільки `[+]` (початок — поза звітом) | — | час `[+]` | — |
+| Тільки `[-]` (кінець — поза звітом) | час `[-]` | — | — |
+
+**Формат тривалості:** `< 1 хв` якщо менше 60 с; далі `X хв` або `X год Y хв`.
+
+**Дедуплікація:** якщо у вікні звіту трапилось декілька `[-]` або `[+]` з однаковим `In-Reply-To:` — береться перший `[-]` і останній `[+]` (за `messageTs`).
+
+**Zabbix API-інциденти** (коли `zabbix=true`) отримують синтетичний ключ пейрингу `"zabbix:host:clock"` і також відображаються об'єднано.
+
+**Неспарені рядки** (OSM, адміністративні події) зберігають колір фону: `row-start` (червоний) або `row-end` (зелений); опис залишається з «початок/кінець інциденту».
+
 ### SNMP-трапи Emerson (ДБЖ та кондиціонери Датацентру)
 
 Опціональна секція звіту — «Зареєстровані події по ДБЖ та кондиціонерах Emerson на Датацентрі». Читає листи з SNMP-трапами від пристроїв Emerson/Liebert (ДБЖ та прецизійні кондиціонери) із папок IMAP, корелює сирі трапи в логічні події та вбудовує HTML-таблицю між розділом інцидентів і температурою.
@@ -771,7 +810,7 @@ NOCZvit/
 │   ├── imap/
 │   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
 │   │   ├── ImapReader.java        — I/O: читання сирих повідомлень з IMAP-папки
-│   │   ├── RawMessage.java        — record: незмінний DTO (subject, body, unixDate, dateStr)
+│   │   ├── RawMessage.java        — record: незмінний DTO (subject, body, unixDate, dateStr, inReplyTo)
 │   │   ├── PdIncidentParser.java  — Zabbix ICMP ping / restarted
 │   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події
 │   │   ├── OspfIncidentParser.java — Zabbix ospfNbrStateChange
@@ -780,7 +819,7 @@ NOCZvit/
 │   ├── model/
 │   │   └── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
 │   ├── report/
-│   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (групування, Ping-графіки)
+│   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (пейринг [-]/[+] за In-Reply-To:, Ping-графіки)
 │   ├── claude/
 │   │   └── SummaryClient.java     — Claude API: генерація короткого резюме зміни (опціонально)
 │   ├── history/
