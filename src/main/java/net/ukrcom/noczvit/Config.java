@@ -111,6 +111,7 @@ public class Config {
     private String claudeApiKey;
     @NonNull
     private String claudeModel;
+    private int claudeMaxTokens;
     @NonNull
     private String historyResumeUrl;
     @Getter(AccessLevel.NONE)
@@ -173,6 +174,7 @@ public class Config {
         dictionarySdhPath = null;
         claudeApiKey = "";
         claudeModel = "claude-haiku-4-5";
+        claudeMaxTokens = 2000;
         historyResumeUrl = "";
         claudeExplicit = null;
         snmpTrapFolder = "";
@@ -429,6 +431,17 @@ public class Config {
         String model = stripInlineComment(properties.getProperty("claude.model", ""));
         if (!model.isBlank()) {
             claudeModel = model;
+        }
+        String tokens = stripInlineComment(properties.getProperty("claude.tokens", ""));
+        if (!tokens.isBlank()) {
+            try {
+                int t = Integer.parseInt(tokens);
+                if (t > 0) {
+                    claudeMaxTokens = t;
+                }
+            } catch (NumberFormatException e) {
+                log.warn("claude.tokens: некоректне значення «{}» — використовується {}", tokens, claudeMaxTokens);
+            }
         }
         // Default: enabled in normal mode, disabled in debug mode.
         // Explicit claude=.../--claude/--no-claude overrides the default.
