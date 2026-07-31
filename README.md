@@ -93,7 +93,7 @@ flowchart LR
     TR --> RAW[/RawMessage/]
     RAW --> PARSE["EmersonTrapParser\nsubject+body → TrapEvent\nnormalizeCategory()"]
     PARSE --> DEDUP2[TrapDeduplicator\nCold Start ±window]
-    DEDUP2 --> CORR{TrapCorrelator\ncorrelate()}
+    DEDUP2 --> CORR{TrapCorrelator\ncorrelate}
 
     CORR -- PDC --> PDC_SM["PDC state machine\npower outage chain\nstandalone alarms"]
     CORR -- ADC --> ADC_SM["ADC state machine\nstandalone alarms\nCold Start → INFO"]
@@ -106,7 +106,7 @@ flowchart LR
     INC2 --> SECT["EmersonTrapSection\nbuild(incidents, unknownTraps)"]
     UNK --> SECT
     SECT --> HTML2[HTML-секція\nінциденти]
-    SECT --> PS[PS-секція\nнерозпізнані]
+    SECT --> PSSECT[PS-секція\nнерозпізнані]
     SECT -. plain text .-> CLAUDE2[SummaryClient\nAI-промпт]
 ```
 
