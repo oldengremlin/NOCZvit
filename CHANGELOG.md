@@ -9,6 +9,12 @@
 ## [1.14.0] — 2026-07-31
 
 ### Додано
+- **Секція RAMOS трапів** (`RamosTrapEvent`, `RamosTrapParser`, `RamosTrapSection`): нова секція звіту для подій датчиків навколишнього середовища CONTEG RAMOS Ultra/Optima — читає IMAP-папку `ramos.trap.folder` (підтримує wildcard), фільтрує стани Warning/Critical, відображає HTML-таблицю з бренд-кольором `#f38120` (RAMOS/CONTEG помаранчевий), згруповану по кімнатах (Room1–Room4, Інші); до Claude передаються тільки Critical-стани
+- **Декодування hex-назв датчиків**: `RamosTrapParser` автоматично виявляє Perl hex byte dumps у назвах датчиків (баг RAMOS Perl-скрипта) та декодує їх через `HexFormat.of().parseHex()` → UTF-8; підтримує multiline hex через DOTALL regex і нормалізацію пробілів
+- **`ImapTrapReader.readTrapsFromFolder()`**: новий public метод із явним параметром `folderPattern`; оригінальний `readTraps()` делегує до нього (зворотна сумісність); використовується RAMOS future в `NOCZvit`
+- **`Config.isRamosTrapEnabled()`** і **`Config.getRamosTrapFolder()`**: нові методи, парсинг `ramos.trap.folder`
+- **`ramos.trap.folder`** — нова властивість конфігурації у `noczvit.properties.sample` (закоментована)
+- **Об'єднаний `allTrapPlainText`** для Claude: `trapResult.plainText()` + `ramosTrapResult.plainText()` передаються разом як єдиний блок
 - **Секція PS для нерозпізнаних типів трапів**: `Active:Alarm:*`-трапи, що не мають відповідника в таблиці описів і не є ігнорованими, збираються в `unknownTraps` та відображаються після блоку температури окремою PS-секцією (кремовий фон #fffde7, стиль 11px) — список типів подій з часом, згрупований за пристроєм
 - **`SELF_CLOSING_ACTIVE` механізм**: трапи-детектори без тривалості (наразі `Active:Alarm:Compressor Short Cycle`) автоматично самозакриваються — `clearedAt = activatedAt`; суфікс «До кінця зміни не відновлено.» не додається; подальший `Cleared` мовчки ігнорується
 - **`TrapCorrelator.CorrelationResult`** — новий вкладений record, що повертає `correlate()`: `incidents()` (скорельовані події) та `unknownTraps()` (нерозпізнані сирі трапи)
@@ -20,6 +26,8 @@
 - Підтримка `Active:Alarm:System Input Power Problem` як другого кореня ланцюжка відключення PDC (прошивка r3/r4) у `CHAIN_ROOT_ACTIVE`/`CHAIN_ROOT_CLEARED`
 
 ### Змінено
+- `NOCZvit`: `ramosTrapFuture` запускається паралельно з `trapFuture` та іншими future; epoch-змінні (`fromEpoch`, `toEpoch`, `trapFrom`, `trapTo`) винесені з тіла `if (config.isTrapEnabled())` до спільної видимості; порядок виводу у звіті: Emerson → RAMOS → боржники → температура SNMP → PS
+- CSS в `NOCZvit`: додано `h2.ramos-title`, `h3.ramos-room`, `tr.ramos-crit`, `tr.ramos-warn` (та їх `nth-child(even)` варіанти)
 - `TrapCorrelator.correlate()` тепер повертає `CorrelationResult` замість `List<TrapIncident>`
 - Описи в `TRAP_DESCRIPTIONS` приведено до MIB-канонічних перекладів; правило: переклад MIB завжди пріоритетний над довільним формулюванням
 - `Compressor Short Cycle`: видалено суфікс «До кінця зміни не відновлено.» — виключено з `NO_UNRESOLVED_SUFFIX`; тепер у `SELF_CLOSING_ACTIVE`
