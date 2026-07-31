@@ -16,6 +16,7 @@ package net.ukrcom.noczvit.report;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,12 +29,18 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.NOCZvit;
 import net.ukrcom.noczvit.model.Incident;
+import net.ukrcom.noczvit.model.Incident.Status;
 import net.ukrcom.noczvit.zabbix.Client;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
  * Presentation: converts a list of {@link Incident} objects into the HTML
  * incidents section.
+ *
+ * <p>Incidents with a non-empty {@code inReplyTo} key are paired: the earliest
+ * START and the latest END sharing the same key are displayed as a single row
+ * with Початок / Закінчення / Тривалість columns. Unpaired incidents (empty
+ * key, or only one side present) are displayed with "—" in the missing columns.
  */
 @Slf4j
 public class IncidentSectionBuilder {
@@ -83,7 +90,6 @@ public class IncidentSectionBuilder {
 
         List<Incident> incidents = allIncidents.stream()
                 .filter(i -> i.messageTs() >= ctDutyBegin && i.messageTs() <= ctDutyEnd)
-                .sorted(Comparator.comparingLong(Incident::messageTs).thenComparingLong(Incident::eventTs))
                 .toList();
 
         if (incidents.isEmpty()) {
@@ -91,8 +97,10 @@ public class IncidentSectionBuilder {
             return html.toString();
         }
 
-        Map<String, List<Incident>> byLocation = incidents.stream()
-                .collect(Collectors.groupingBy(Incident::location, LinkedHashMap::new, Collectors.toList()));
+        List<IncidentRow> rows = pairIncidents(incidents);
+
+        Map<String, List<IncidentRow>> byLocation = rows.stream()
+                .collect(Collectors.groupingBy(IncidentRow::location, LinkedHashMap::new, Collectors.toList()));
 
         AtomicInteger n = new AtomicInteger(0);
         byLocation.forEach((location, group) -> {
@@ -101,12 +109,14 @@ public class IncidentSectionBuilder {
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
                     .append("<th style=\"width:30px\">№</th>")
-                    .append("<th>Дата та час</th>")
+                    .append("<th>Початок</th>")
+                    .append("<th>Закінчення</th>")
+                    .append("<th>Тривалість</th>")
                     .append("<th>Інцидент</th>")
                     .append("<th>Обладнання</th>")
                     .append("</tr></thead><tbody>\n");
 
-            group.forEach(inc -> html.append(buildRow(inc, n)));
+            group.forEach(row -> html.append(buildRow(row, n)));
 
             if (zabbix != null) {
                 appendPingGraphs(html, group, zabbix, dutyBegin, dutyEnd);
@@ -120,44 +130,117 @@ public class IncidentSectionBuilder {
     }
 
     /**
-     * Renders a single table row ({@code <tr>}) for the given incident.
-     * Appends a "needs review" note when the incident contains unresolved device/location names.
+     * Groups incidents by {@code inReplyTo} key into paired rows, then sorts by start time.
+     * Incidents with an empty key are each placed in their own row.
      */
-    private String buildRow(Incident inc, AtomicInteger n) {
-        String rowClass = switch (inc.status()) {
-            case START ->
-                " class=\"row-start\"";
-            case END ->
-                " class=\"row-end\"";
-            case NONE ->
-                "";
+    private List<IncidentRow> pairIncidents(List<Incident> incidents) {
+        Map<String, List<Incident>> byKey = new LinkedHashMap<>();
+        List<Incident> unkeyed = new ArrayList<>();
+
+        for (Incident i : incidents) {
+            if (i.inReplyTo() != null && !i.inReplyTo().isBlank()) {
+                byKey.computeIfAbsent(i.inReplyTo(), k -> new ArrayList<>()).add(i);
+            } else {
+                unkeyed.add(i);
+            }
+        }
+
+        List<IncidentRow> rows = new ArrayList<>();
+
+        for (List<Incident> group : byKey.values()) {
+            Incident start = group.stream()
+                    .filter(i -> i.status() == Status.START)
+                    .min(Comparator.comparingLong(Incident::messageTs))
+                    .orElse(null);
+            Incident end = group.stream()
+                    .filter(i -> i.status() == Status.END)
+                    .max(Comparator.comparingLong(Incident::messageTs))
+                    .orElse(null);
+            rows.add(new IncidentRow(start, end));
+        }
+
+        for (Incident i : unkeyed) {
+            if (i.status() == Status.END) {
+                rows.add(new IncidentRow(null, i));
+            } else {
+                rows.add(new IncidentRow(i, null));
+            }
+        }
+
+        rows.sort(Comparator.comparingLong(IncidentRow::sortKey));
+        return rows;
+    }
+
+    /**
+     * Renders a single table row ({@code <tr>}) for the given incident pair.
+     * Paired rows (both start and end present) show the combined description with
+     * "інцидент" wording and the computed duration. Unpaired rows keep their
+     * original description and show "—" in the missing columns.
+     */
+    private String buildRow(IncidentRow row, AtomicInteger n) {
+        boolean paired = row.start() != null && row.end() != null;
+        Incident primary = row.start() != null ? row.start() : row.end();
+
+        String rowClass = paired ? "" : switch (primary.status()) {
+            case START -> " class=\"row-start\"";
+            case END -> " class=\"row-end\"";
+            case NONE -> "";
         };
 
-        String descHtml = StringEscapeUtils.escapeHtml4(inc.description());
-        if (!inc.reviewNames().isEmpty()) {
-            String names = inc.reviewNames().stream()
+        String startCell = row.start() != null ? row.start().messageDateStr() : "—";
+        String endCell = row.end() != null ? row.end().messageDateStr() : "—";
+        String durationCell = paired
+                ? formatDuration(row.end().messageTs() - row.start().messageTs())
+                : "—";
+
+        String rawDesc = paired
+                ? primary.description()
+                        .replace("початок інциденту, ", "інцидент, ")
+                        .replace("кінець інциденту, ", "інцидент, ")
+                : primary.description();
+        String descHtml = StringEscapeUtils.escapeHtml4(rawDesc);
+
+        List<String> reviewNames = row.mergedReviewNames();
+        if (!reviewNames.isEmpty()) {
+            String names = reviewNames.stream()
                     .map(StringEscapeUtils::escapeHtml4)
                     .collect(Collectors.joining("</b>' та '<b>"));
             descHtml += " (<i>потребує коригування назви</i> '<b>" + names + "</b>')";
         }
 
-        String device = inc.device().isEmpty() ? "" : inc.device();
+        String device = row.device().isEmpty() ? "" : row.device();
         return "<tr" + rowClass + ">"
                 + "<td>" + n.incrementAndGet() + ".</td>"
-                + "<td>" + inc.messageDateStr() + "</td>"
+                + "<td>" + startCell + "</td>"
+                + "<td>" + endCell + "</td>"
+                + "<td>" + durationCell + "</td>"
                 + "<td>" + descHtml + "</td>"
                 + "<td>" + device + "</td>"
                 + "</tr>\n";
     }
 
     /**
-     * Appends inline PNG Ping graphs for all distinct devices in {@code group}.
+     * Formats a duration in seconds to a human-readable Ukrainian string.
+     * Durations under 60 s are shown as {@code "< 1 хв"}.
+     */
+    private String formatDuration(long seconds) {
+        if (seconds < 0) seconds = 0;
+        if (seconds < 60) return "< 1 хв";
+        long minutes = seconds / 60;
+        if (minutes < 60) return minutes + " хв";
+        long hours = minutes / 60;
+        long mins = minutes % 60;
+        return mins > 0 ? hours + " год " + mins + " хв" : hours + " год";
+    }
+
+    /**
+     * Appends inline PNG Ping graphs for all distinct devices in {@code rows}.
      * Each graph is fetched concurrently via virtual threads and embedded as a base64 data URI.
      */
-    private void appendPingGraphs(StringBuilder html, List<Incident> group,
+    private void appendPingGraphs(StringBuilder html, List<IncidentRow> rows,
                                   Client zabbix, LocalDateTime from, LocalDateTime to) {
-        List<String> pingDevices = group.stream()
-                .map(Incident::device)
+        List<String> pingDevices = rows.stream()
+                .map(IncidentRow::device)
                 .filter(d -> !d.isEmpty())
                 .distinct()
                 .toList();
@@ -178,6 +261,33 @@ public class IncidentSectionBuilder {
                 } catch (ExecutionException ignored) {
                 }
             });
+        }
+    }
+
+    /** Holds a paired or half-present incident for display as a single table row. */
+    private record IncidentRow(Incident start, Incident end) {
+
+        String location() {
+            return (start != null ? start : end).location();
+        }
+
+        long sortKey() {
+            return (start != null ? start : end).messageTs();
+        }
+
+        String device() {
+            return (start != null ? start : end).device();
+        }
+
+        List<String> mergedReviewNames() {
+            List<String> names = new ArrayList<>();
+            if (start != null) names.addAll(start.reviewNames());
+            if (end != null) {
+                for (String name : end.reviewNames()) {
+                    if (!names.contains(name)) names.add(name);
+                }
+            }
+            return names;
         }
     }
 }
