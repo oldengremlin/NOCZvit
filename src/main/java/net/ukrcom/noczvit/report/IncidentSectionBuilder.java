@@ -156,7 +156,12 @@ public class IncidentSectionBuilder {
                     .filter(i -> i.status() == Status.END)
                     .max(Comparator.comparingLong(Incident::messageTs))
                     .orElse(null);
-            rows.add(new IncidentRow(start, end));
+            if (start == null && end == null) {
+                // Group contains only NONE-status incidents (e.g. device restarts) — each as its own row
+                group.forEach(i -> rows.add(new IncidentRow(i, null)));
+            } else {
+                rows.add(new IncidentRow(start, end));
+            }
         }
 
         for (Incident i : unkeyed) {
@@ -272,7 +277,8 @@ public class IncidentSectionBuilder {
         }
 
         long sortKey() {
-            return (start != null ? start : end).messageTs();
+            Incident primary = start != null ? start : end;
+            return primary != null ? primary.messageTs() : 0L;
         }
 
         String device() {
