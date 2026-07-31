@@ -186,11 +186,7 @@ public class IncidentSectionBuilder {
         boolean paired = row.start() != null && row.end() != null;
         Incident primary = row.start() != null ? row.start() : row.end();
 
-        String rowClass = paired ? "" : switch (primary.status()) {
-            case START -> " class=\"row-start\"";
-            case END -> " class=\"row-end\"";
-            case NONE -> "";
-        };
+        String rowClass = "";
 
         String startCell = row.start() != null ? row.start().messageDateStr() : "—";
         String endCell = row.end() != null ? row.end().messageDateStr() : "—";
