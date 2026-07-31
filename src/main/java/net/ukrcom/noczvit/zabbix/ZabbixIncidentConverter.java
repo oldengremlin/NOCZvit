@@ -67,17 +67,18 @@ public class ZabbixIncidentConverter {
 
         String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
         String descSuffix = p.name() + " на " + deviceWord + location;
+        String pairKey = "zabbix:" + host + ":" + p.clock();
 
         List<Incident> result = new ArrayList<>(2);
 
         result.add(buildIncident(p.clock(), location, host,
                 "Zabbix зареєстровано початок інциденту, " + descSuffix,
-                Status.START, reviewNames));
+                Status.START, reviewNames, pairKey));
 
         if (!p.isActive()) {
             result.add(buildIncident(p.rClock(), location, host,
                     "Zabbix зареєстровано кінець інциденту, " + descSuffix,
-                    Status.END, reviewNames));
+                    Status.END, reviewNames, pairKey));
         }
 
         log.debug("ZabbixIncidentConverter: {} → location='{}', needsReview={}, active={}",
@@ -89,12 +90,13 @@ public class ZabbixIncidentConverter {
      * Constructs a single {@link Incident} from a Zabbix event timestamp and pre-resolved fields.
      */
     private Incident buildIncident(long epochSec, String location, String host,
-                                   String description, Status status, List<String> reviewNames) {
+                                   String description, Status status, List<String> reviewNames,
+                                   String pairKey) {
         LocalDateTime dt = Instant.ofEpochSecond(epochSec)
                 .atZone(ZoneId.systemDefault()).toLocalDateTime();
         String dateStr = formatUa(dt);
         return new Incident(location, host, epochSec, epochSec,
-                dateStr, dateStr, Source.ZABBIX, status, description, reviewNames);
+                dateStr, dateStr, Source.ZABBIX, status, description, reviewNames, pairKey);
     }
 
     /**

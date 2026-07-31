@@ -87,7 +87,8 @@ public class PdIncidentParser {
                     msg.unixDate(), msg.unixDate(),
                     dateLoc, dateLoc,
                     Source.PD, status,
-                    description, reviewNames
+                    description, reviewNames,
+                    msg.inReplyTo()
             ));
         }
 
@@ -102,7 +103,8 @@ public class PdIncidentParser {
                 msg.unixDate(), msg.unixDate(),
                 dateLoc, dateLoc,
                 Source.PD, status,
-                description, List.of()
+                description, List.of(),
+                msg.inReplyTo()
         ));
     }
 

@@ -147,7 +147,8 @@ public class OsmIncidentParser {
                 msg.unixDate(), eventTs,
                 messageDateLoc, eventDateLoc,
                 Source.OSM, status,
-                description, List.copyOf(reviewNames)
+                description, List.copyOf(reviewNames),
+                ""
         ));
     }
 

@@ -228,7 +228,7 @@ public class ImapTrapReader {
                 log.debug("ImapTrapReader: failed to get message body: {}", e.getMessage());
                 body = "";
             }
-            return Optional.of(new RawMessage(dateStr, unixDate, subject, body));
+            return Optional.of(new RawMessage(dateStr, unixDate, subject, body, ""));
         } catch (MessagingException e) {
             log.warn("ImapTrapReader: failed to parse message header: {}", e.getMessage());
             return Optional.empty();

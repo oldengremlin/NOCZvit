@@ -104,7 +104,8 @@ public class AdlinkIncidentParser {
                 msg.unixDate(), msg.unixDate(),
                 dateLoc, dateLoc,
                 Source.PD, status,
-                description, List.copyOf(reviewNames)
+                description, List.copyOf(reviewNames),
+                msg.inReplyTo()
         ));
     }
 
