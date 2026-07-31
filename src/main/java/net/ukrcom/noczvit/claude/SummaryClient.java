@@ -144,7 +144,7 @@ public class SummaryClient {
 
             MessageCreateParams params = MessageCreateParams.builder()
                     .model(model)
-                    .maxTokens(1500L)
+                    .maxTokens(2000L)
                     .system("Ти відповідаєш ВИКЛЮЧНО українською мовою. "
                             + "Будь-яке слово, що не є українським, є помилкою. "
                             + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ.")
