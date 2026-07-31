@@ -25,12 +25,14 @@ flowchart TD
     PAR --> IMAP[imap.Client\nчитання IMAP]
     PAR --> ZAB[zabbix.Client\nlogin]
     PAR --> DB[(Debtors\nMSSQL)]
-    PAR --> TRAP[ImapTrapReader\nSNMP trap emails]
+    PAR --> TRAP[ImapTrapReader\nEmerson trap emails]
+    PAR --> RTRAP[ImapTrapReader\nRAMOS trap emails]
 
     IMAP --> INC[/IMAP incidents/]
     ZAB  --> ZS[/Zabbix session/]
     DB   --> DH[/HTML боржників/]
     TRAP --> TRAW[/RawMessage трапів/]
+    RTRAP --> RRAW[/RawMessage RAMOS/]
 
     ZS --> ZEVT["event.get history\n→ ProblemFilter\n→ ZabbixIncidentConverter"]
     INC  --> MERGE[/incidentsForTable\nIMAP + Zabbix/]
@@ -38,14 +40,18 @@ flowchart TD
 
     TRAW --> TPARS[EmersonTrapParser]
     TPARS --> TDEDUP[TrapDeduplicator\nCold Start dedup]
-    TDEDUP --> TCORR[TrapCorrelator\nstate machine]
-    TCORR --> TSECT[EmersonTrapSection\nHTML + plain text]
+    TDEDUP --> TCORR[TrapCorrelator\nstate machine → CorrelationResult]
+    TCORR --> TSECT["EmersonTrapSection\nHTML + plain text + PS"]
+
+    RRAW --> RPARS["RamosTrapParser\nдекодування hex-назв\nфільтр стану"]
+    RPARS --> RSECT["RamosTrapSection\nHTML + plain text\n(#f38120, групування по кімнатах)"]
 
     MERGE --> CLAUDE["claude.SummaryClient\nAI-резюме зміни\n(опціонально)"]
     TSECT -. plain text .-> CLAUDE
+    RSECT -. critical plain text .-> CLAUDE
     MERGE --> ISB[IncidentSectionBuilder\nінциденти + Ping-графіки]
     ZS    --> ISB
-    INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos]
+    INC & ZS --> SNMP[snmp.Client\nCelsius + Ramos SNMP]
 
     HIST[(history.ResumeHistory\nSQLite)]
     HIST -. попереднє резюме .-> CLAUDE
@@ -54,6 +60,7 @@ flowchart TD
     CLAUDE --> HTML[HTML-звіт]
     ISB  --> HTML
     TSECT --> HTML
+    RSECT --> HTML
     SNMP --> HTML
     DH   --> HTML
 
@@ -84,19 +91,22 @@ flowchart LR
 flowchart LR
     FOLDERS["DC-Room* folders\n(IMAP wildcard)"] --> TR[ImapTrapReader]
     TR --> RAW[/RawMessage/]
-    RAW --> PARSE[EmersonTrapParser\nsubject+body → TrapEvent]
+    RAW --> PARSE["EmersonTrapParser\nsubject+body → TrapEvent\nnormalizeCategory()"]
     PARSE --> DEDUP2[TrapDeduplicator\nCold Start ±window]
-    DEDUP2 --> CORR{TrapCorrelator}
+    DEDUP2 --> CORR{TrapCorrelator\ncorrelate()}
 
     CORR -- PDC --> PDC_SM["PDC state machine\npower outage chain\nstandalone alarms"]
     CORR -- ADC --> ADC_SM["ADC state machine\nstandalone alarms\nCold Start → INFO"]
+    CORR -- невідомі --> UNK[/unknownTraps/]
 
     PDC_SM -. pdc restorations .-> ADC_SM
     PDC_SM --> INC2[/TrapIncident/]
     ADC_SM --> INC2
 
-    INC2 --> SECT[EmersonTrapSection\nHTML + plain text]
-    SECT --> HTML2[HTML-секція]
+    INC2 --> SECT["EmersonTrapSection\nbuild(incidents, unknownTraps)"]
+    UNK --> SECT
+    SECT --> HTML2[HTML-секція\nінциденти]
+    SECT --> PS[PS-секція\nнерозпізнані]
     SECT -. plain text .-> CLAUDE2[SummaryClient\nAI-промпт]
 ```
 
@@ -114,7 +124,11 @@ classDiagram
         +isDebug() bool
         +getClaudeApiKey() String
         +getClaudeModel() String
+        +getClaudeMaxTokens() int
         +getHistoryResumeUrl() String
+        +isTrapEnabled() bool
+        +isRamosTrapEnabled() bool
+        +getRamosTrapFolder() String
     }
     class Dictionary {
         +lookupPD(key) String
@@ -267,7 +281,7 @@ classDiagram
     IncidentSectionBuilder ..> ZabbixClient : Ping-графіки
 
     SummaryClient ..> Incident : reads
-    SummaryClient ..> Config : apiKey + model
+    SummaryClient ..> Config : apiKey + model + maxTokens
     SummaryClient --> ResumeHistory
     ResumeHistory ..> ResumeRecord : creates
 
@@ -275,6 +289,7 @@ classDiagram
 
     class ImapTrapReader["trap.ImapTrapReader"] {
         +readTraps(fetchAll, from, to) List~RawMessage~
+        +readTrapsFromFolder(fetchAll, from, to, folder) List~RawMessage~
     }
     class EmersonTrapParser["trap.EmersonTrapParser"] {
         +parse(messages) List~TrapEvent~
@@ -283,10 +298,23 @@ classDiagram
         +deduplicate(events, windowSec) List~TrapEvent~
     }
     class TrapCorrelator["trap.TrapCorrelator"] {
-        +correlate(events) List~TrapIncident~
+        +correlate(events) CorrelationResult
+    }
+    class CorrelationResult["TrapCorrelator.CorrelationResult"] {
+        <<record>>
+        +incidents() List~TrapIncident~
+        +unknownTraps() List~TrapEvent~
     }
     class EmersonTrapSection["trap.EmersonTrapSection"] {
         +build(incidents) SectionResult
+        +build(incidents, unknownTraps) SectionResult
+    }
+    class SectionResult["EmersonTrapSection.SectionResult"] {
+        <<record>>
+        +html() String
+        +plainText() String
+        +unknownHtml() String
+        +isEmpty() bool
     }
     class TrapEvent["trap.TrapEvent"] {
         <<record>>
@@ -316,17 +344,47 @@ classDiagram
         INFO
     }
 
+    class RamosTrapEvent["trap.RamosTrapEvent"] {
+        <<record>>
+        +timestamp() Instant
+        +ip() String
+        +state() String
+        +sensorName() String
+        +sensorType() String
+        +room() String
+    }
+    class RamosTrapParser["trap.RamosTrapParser"] {
+        +parse(messages) List~RamosTrapEvent~
+    }
+    class RamosTrapSection["trap.RamosTrapSection"] {
+        +build(events) RamosSectionResult
+    }
+    class RamosSectionResult["RamosTrapSection.SectionResult"] {
+        <<record>>
+        +html() String
+        +plainText() String
+        +isEmpty() bool
+    }
+
     NOCZvit --> ImapTrapReader
     NOCZvit --> EmersonTrapSection
+    NOCZvit --> RamosTrapSection
     ImapTrapReader ..> RawMessage : creates
     EmersonTrapParser ..> RawMessage : reads
     EmersonTrapParser ..> TrapEvent : creates
     TrapDeduplicator ..> TrapEvent : filters
     TrapCorrelator ..> TrapEvent : reads
-    TrapCorrelator ..> TrapIncident : creates
+    TrapCorrelator ..> CorrelationResult : creates
     EmersonTrapSection ..> TrapIncident : renders
+    EmersonTrapSection ..> TrapEvent : reads unknownTraps
+    EmersonTrapSection ..> SectionResult : creates
     TrapIncident --> TrapSeverity
     SummaryClient ..> EmersonTrapSection : plain text
+    RamosTrapParser ..> RawMessage : reads
+    RamosTrapParser ..> RamosTrapEvent : creates
+    RamosTrapSection ..> RamosTrapEvent : renders
+    RamosTrapSection ..> RamosSectionResult : creates
+    SummaryClient ..> RamosTrapSection : critical plain text
 ```
 
 ## Вимоги
@@ -350,12 +408,12 @@ classDiagram
 mvn clean package
 ```
 
-Результат — `target/NOCZvit-1.13.0.jar` (uber-JAR з усіма залежностями).
+Результат — `target/NOCZvit-1.14.0.jar` (uber-JAR з усіма залежностями).
 
 ## Запуск
 
 ```bash
-java -jar target/NOCZvit-1.13.0.jar [OPTIONS]
+java -jar target/NOCZvit-1.14.0.jar [OPTIONS]
 ```
 
 ### Параметри командного рядка
@@ -377,7 +435,7 @@ java -jar target/NOCZvit-1.13.0.jar [OPTIONS]
 ### Приклад запуску в дебаг-режимі
 
 ```bash
-java -jar target/NOCZvit-1.13.0.jar --debug --no-incidents
+java -jar target/NOCZvit-1.14.0.jar --debug --no-incidents
 ```
 
 ## Налаштування
@@ -436,6 +494,7 @@ accequipment-mssql-password=secret
 # API-ключ генерується на https://console.anthropic.com (окремий від підписки claude.ai)
 # claude.apikey=sk-ant-...
 # claude.model=claude-haiku-4-5
+# claude.tokens=2000      ← максимальна кількість вихідних токенів (за замовчуванням 2000)
 # claude=false  ← явно вимкнути завжди; claude=true ← вмикати навіть в --debug
 # Міжзмінна пам'ять: зберігає резюме попередньої зміни у SQLite для контексту
 # history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
@@ -446,6 +505,10 @@ accequipment-mssql-password=secret
 # snmp.trap.dedup.seconds=30
 # snmp.trap.correlation.minutes=10
 # snmp.trap.coldstart.link.minutes=5
+
+# RAMOS трапи (датчики навколишнього середовища CONTEG RAMOS Ultra/Optima — опціонально)
+# Підтримує wildcard-патерн аналогічно до snmp.trap.folder
+# ramos.trap.folder=INBOX.Internal.SNMP Traps.RAMOS
 ```
 
 ### Claude AI (резюме зміни)
@@ -468,7 +531,13 @@ accequipment-mssql-password=secret
 **Вбудовані доменні знання в промпті:**
 - `Routing Engine: High CPU utilization` на Juniper — інформаційна подія, не впливає на трафік (TFEB/PFE окремо від RE); описується нейтрально
 - При згадуванні BGP обов'язково вказується ім'я сусіда (neighbor)
-- Мова резюме: українська без русизмів, офіційний стиль
+- Мова резюме: **системне повідомлення** вимагає відповіді виключно **українською** (без русизмів, офіційний стиль); `warnIfRussian()` виявляє у відповіді символи ы/ъ/э/ё і виводить попередження у лог
+
+**Обмеження токенів:**
+Параметр `claude.tokens` (за замовчуванням 2000) задає `max_tokens` при запиті до API. Більше значення дає розгорнутіше резюме при складних змінах.
+
+**Примітка щодо `--debug`:**
+У режимі `--debug` Claude вимкнений за замовчуванням, а якщо він все ж увімкнений явно (`--claude`) — результат не записується до `history.db` (міжзмінна пам'ять не оновлюється).
 
 **Отримання API-ключа:**
 1. Зареєструватися на [console.anthropic.com](https://console.anthropic.com) *(окремий акаунт від claude.ai)*
@@ -513,29 +582,81 @@ history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 
 #### Таблиця типів трапів
 
-| Trap type (нормалізований) | Опис українською | Клас | Severity | Примітка |
-|---|---|---|---|---|
-| `Active:Alarm:Loss of Mains` | Зникнення мережевого живлення | PDC | ALARM | Корінь ланцюжка відключення |
-| `Cleared:Alarm:Loss of Mains` | Відновлення мережевого живлення | PDC | — | Закриває ланцюжок |
-| `Active:Alarm:Battery Discharging` | Розряд батарей ДБЖ | PDC | ALARM | Вторинна в ланцюжку |
-| `Active:Alarm:MMS On Battery` | MMS переключено на живлення від батарей | PDC | ALARM | Вторинна в ланцюжку (прошивка r3/r4) |
-| `Active:Alarm:Bypass Not Available` | Байпас недоступний | PDC | WARNING | Вторинна в ланцюжку |
-| `Active:Alarm:Low Battery` | Низький заряд батарей ДБЖ | PDC | ALARM | Вторинна або самостійна |
-| `Active:Alarm:Unit Off` | Пристрій вимкнено | PDC/ADC | WARNING | Самостійна подія |
-| `Active:Alarm:Loss of Air Flow` | Відсутність потоку повітря | ADC | ALARM | Самостійна подія |
-| `Active:Alarm:Compressor Fault` | Несправність компресора | ADC | ALARM | Самостійна подія |
-| `Active:Alarm:Master Unit Communication Lost` | Втрата зв'язку з основним блоком | ADC | WARNING | Самостійна подія |
-| `Active:Alarm:High Temperature` | Висока температура | ADC | WARNING | Самостійна подія |
-| `Active:Alarm:Low Temperature` | Низька температура | ADC | WARNING | Самостійна подія |
-| `Active:Alarm:High Humidity` | Висока вологість | ADC | WARNING | Самостійна подія |
-| `Active:Alarm:Low Humidity` | Низька вологість | ADC | WARNING | Самостійна подія |
-| `Active:Alarm:Fan Fault` | Несправність вентилятора | ADC | WARNING | Самостійна подія |
-| `Active:Alarm:Unit On Standby` | — | PDC/ADC | — | **Ігнорується** (нормальний стан) |
-| `Active:Alarm:Unit On` | — | PDC/ADC | — | **Ігнорується** (нормальний стан) |
-| `Cold Start` | Перезапуск картки моніторингу | PDC/ADC | INFO | Дедуплікується (±30 с) |
-| `System Return to Normal` | — | PDC/ADC | — | Закриває всі відкриті події на пристрої |
+Описи — точні переклади з `LIEBERT_GP_COND-MIB` (правило: переклад MIB завжди пріоритетний). Трапи без відповідника в MIB позначено *(немібний)*.
 
-> **Важливо:** Liebert-специфічні трапи передаються в лапках (`"Active:Alarm:..."`) з нерівномірними пробілами після двокрапки (`": "`). `EmersonTrapParser` автоматично нормалізує їх: знімає лапки і стискає `": "` → `":"`.
+**Ланцюжок відключення PDC — корінь:**
+
+| Trap type | Опис (MIB-канонічний) | Severity | Примітка |
+|---|---|---|---|
+| `Active:Alarm:Loss of Mains` | Зникнення мережевого живлення *(немібний)* | ALARM | Корінь ланцюжка; прошивка r1/r2 |
+| `Active:Alarm:System Input Power Problem` | Проблема з вхідним живленням *(немібний)* | ALARM | Корінь ланцюжка; прошивка r3/r4 |
+
+**Ланцюжок відключення PDC — вторинні (прикріплюються до кореня):**
+
+| Trap type | Опис (MIB-канонічний) | Severity | Примітка |
+|---|---|---|---|
+| `Active:Alarm:Battery Discharging` | Батарея розряджається | ALARM | Якщо присутній — додається «ДБЖ живив навантаження від батарей.» |
+| `Active:Alarm:MMS On Battery` | Система з кількох модулів (MMS) перейшла на живлення від батарей | ALARM | Прошивка r3/r4 |
+| `Active:Alarm:Battery Charging Inhibited` | Заряджання батарей заблоковано зовнішнім сигналом | WARNING | |
+| `Active:Alarm:Bypass Not Available` | Байпас недоступний | WARNING | |
+| `Active:Alarm:Low Battery` | Залишковий заряд батареї досяг або нижче налаштованого порогу | ALARM | Може бути і самостійною подією |
+
+**Самостійні події PDC/ADC:**
+
+| Trap type | Опис (MIB-канонічний) | Клас | Severity |
+|---|---|---|---|
+| `Active:Alarm:Unit Off` | Пристрій вимкнено | PDC/ADC | WARNING |
+| `Active:Alarm:Unit Shutdown` | Пристрій вимкнено та заблоковано для запобігання пошкодженню | PDC/ADC | ALARM |
+
+**Самостійні події ADC — повітряний тракт та компресор:**
+
+| Trap type | Опис (MIB-канонічний) | Severity |
+|---|---|---|
+| `Active:Alarm:Loss of Air Flow` | Виявлено відсутність потоку повітря | ALARM |
+| `Active:Alarm:Compressor Fault` | Несправність компресора *(немібний)* | ALARM |
+| `Active:Alarm:Compressor Low Suction Pressure` | Компресор зупинено через низький тиск всмоктування | ALARM |
+| `Active:Alarm:Compressor High Head Pressure` | Компресор зупинено через підвищений тиск нагнітання | ALARM |
+| `Active:Alarm:Compressor Short Cycle` | Компресор перевищив максимальну кількість запусків за мінімальний проміжок часу | WARNING |
+| `Active:Alarm:Compressor Overload` | Виявлено перевантаження компресора | ALARM |
+| `Active:Alarm:Air Filter Clogged` | Повітряний фільтр забруднений та потребує чистки або заміни | WARNING |
+| `Active:Alarm:Fan Fault` | Несправність вентилятора *(немібний)* | WARNING |
+
+**Самостійні події ADC — температура, вологість, умови середовища:**
+
+| Trap type | Опис (MIB-канонічний) | Severity |
+|---|---|---|
+| `Active:Alarm:High Temperature` | Температура перевищила верхній поріг | WARNING |
+| `Active:Alarm:Low Temperature` | Температура нижче нижнього порогу | WARNING |
+| `Active:Alarm:High Humidity` | Вологість перевищила верхній поріг | WARNING |
+| `Active:Alarm:Low Humidity` | Вологість нижче нижнього порогу | WARNING |
+| `Active:Alarm:Water Under Floor` | Виявлено вологу під підлогою | ALARM |
+| `Active:Alarm:Condensation Detected` | Виявлено конденсацію | WARNING |
+| `Active:Alarm:Heaters Overheated` | Перегрів нагрівачів | ALARM |
+| `Active:Alarm:Humidifier Failure` | Виявлено несправність зволожувача | WARNING |
+| `Active:Alarm:Humidifier Problem` | Виявлено проблему з зволожувачем | WARNING |
+| `Active:Alarm:Chilled Water Low Water Flow` | Виявлено низький потік охолодженої води | WARNING |
+| `Active:Alarm:Condensate Pump High Water` | Виявлено підвищений рівень рідини в конденсатному насосі | WARNING |
+| `Active:Alarm:Fire Alarm` | Пожежна тривога | ALARM |
+| `Active:Alarm:Smoke Detected` | Виявлено дим | ALARM |
+| `Active:Alarm:Master Unit Communication Lost` | Зв'язок з головним блоком втрачено | WARNING |
+
+**Ігноровані (нормальні операційні переходи, не виводяться у звіт):**
+
+| Trap type | Примітка |
+|---|---|
+| `Active/Cleared:Alarm:Unit On Standby` | Штатний режим очікування |
+| `Active/Cleared:Alarm:Unit Standby` | Аліас для прошивки Room4 |
+| `Active/Cleared:Alarm:Unit On` | Штатне увімкнення |
+
+**Спеціальні:**
+
+| Trap type | Опис | Severity | Примітка |
+|---|---|---|---|
+| `Cold Start` | Перезапуск картки моніторингу | INFO | Дедуплікується (±30 с); зв'язується з відновленням живлення PDC у тій самій кімнаті |
+| `Monitoring Card Reboot` | Перезапуск картки моніторингу | INFO | Аналог Cold Start |
+| `System Return to Normal` | — | — | Закриває всі відкриті події на пристрої |
+
+> **Нормалізація трапів:** Liebert-специфічні трапи передаються в лапках (`"Active:Alarm:..."`) з нерівномірними пробілами після двокрапки (`": "`). `EmersonTrapParser` автоматично нормалізує їх: знімає лапки і стискає `": "` → `":"`. Прошивка Room4 надсилає категорії `Message:` та `Warning:` замість `Alarm:` — `normalizeCategory()` приводить їх до канонічного вигляду `Alarm:`.
 
 #### Ланцюжки подій (TrapCorrelator)
 
@@ -554,6 +675,16 @@ history.resume=jdbc:sqlite:/var/lib/noczvit/history.db
 
 ADC Cold Start, що з'являється протягом `snmp.trap.coldstart.link.minutes` (за замовчуванням 5 хв) після відновлення живлення на PDC **в тій же кімнаті** — автоматично анотується як «Пов'язано з відновленням мережевого живлення.» Кімната визначається з hostname: `adc-r1-1` → `r1`.
 
+**SELF_CLOSING_ACTIVE — події без тривалості:**
+
+Деякі трапи є детекторами одноразової події (не мають логічного «кінця»). Для них `clearedAt` автоматично встановлюється рівним `activatedAt` — тривалість 0, суфікс «До кінця зміни не відновлено.» не додається. Будь-який подальший `Cleared`-трап для цих типів мовчки ігнорується.
+
+Наразі до `SELF_CLOSING_ACTIVE` відноситься: `Active:Alarm:Compressor Short Cycle`.
+
+**PS-секція — нерозпізнані типи подій:**
+
+Трапи типу `Active:Alarm:*`, для яких немає запису в таблиці описів (тобто не в `ACTIVE_TO_CLEARED`) і які не є ігнорованими, — потрапляють до `unknownTraps`. Наприкінці звіту (після блоку температури) вони відображаються в окремій PS-секції з кремовим фоном (#fffde7): список типів подій, згрупованих за пристроєм, з часом отримання. Це дозволяє помітити нові типи трапів без втрати інформації.
+
 #### Порядок виводу пристроїв у звіті
 
 Спочатку всі ADC-пристрої (кондиціонери) у алфавітному порядку, потім PDC (ДБЖ) у алфавітному порядку.
@@ -567,6 +698,61 @@ ADC Cold Start, що з'являється протягом `snmp.trap.coldstart
 === КІНЕЦЬ ПОДІЙ ОБЛАДНАННЯ ДАТАЦЕНТРУ ===
 ```
 Claude отримує інструкцію: ці події належать **виключно поточній зміні** і не мають переноситися в резюме наступного звітного періоду.
+
+### RAMOS трапи — події датчиків навколишнього середовища
+
+Опціональна секція звіту для пристроїв **CONTEG RAMOS Ultra/Optima** (OID enterprise 3854). Читає листи із IMAP-папки, де тема містить `Got trap from ramos`, та відображає HTML-таблицю, згруповану по кімнатах, з бренд-кольором `#f38120`.
+
+Вмикається через `ramos.trap.folder` — підтримує wildcard-патерн аналогічно до `snmp.trap.folder`.
+
+#### Формат листа від RAMOS
+
+```
+Subject: Got trap from ramos
+
+At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
+	"STATE" / "SENSOR_NAME" / "SENSOR_TYPE"
+```
+
+Відомий баг Perl-скрипта RAMOS: назви датчиків із символами Кирилиці надсилаються як дамп байт у hex-форматі, можуть займати кілька рядків:
+```
+	"High Critical" / "52 6F 6F 6D 34 20 D0 90 D0 9D D0 A2 D0 98 D0 9F D0
+ 9E D0 A2 D0 9E D0 9F 20 D0 92 D0 AB D0 A5 D0 9E D0 94 20 53 30 36" / "Dry Contact N.M"
+```
+`RamosTrapParser` автоматично декодує такі рядки через `HexFormat.of().parseHex()` → `new String(bytes, UTF-8)`, наприклад: `Room4 АНТИПОТОП ВЫХОД S06`.
+
+#### Стани датчиків
+
+| Стан | Рівень | Виводиться в HTML | Передається Claude |
+|---|---|---|---|
+| `Critical` | Критичний | ✓ (червоний рядок) | ✓ |
+| `High Critical` | Критичний | ✓ (червоний рядок) | ✓ |
+| `Low Critical` | Критичний | ✓ (червоний рядок) | ✓ |
+| `High Warning` | Попередження | ✓ (жовтий рядок) | — |
+| `Low Warning` | Попередження | ✓ (жовтий рядок) | — |
+| `Warning` | Попередження | ✓ (жовтий рядок) | — |
+| `Normal` | Норма | — | — |
+| `Sensor Error` | — | — | — |
+| `Connect` / `Disconnect` | — | — | — |
+
+#### Групування по кімнатах
+
+Назва датчика аналізується regex `(?i)room\s*(\d)`:
+- `Room 3 Антипотоп 2 S17` → **Room3**
+- `Room4 АНТИПОТОП ВЫХОД S06` → **Room4**
+- Назва без `Room` → **Інші**
+
+Розділи виводяться в алфавітному порядку: Room1, Room2, Room3, Room4, Інші (завжди останній).
+
+#### Порядок у HTML-звіті
+
+```
+[ Emerson trap секція ]
+[ RAMOS trap секція   ]  ← після Emerson, перед боржниками
+[ Боржники            ]
+[ Температура SNMP    ]
+[ PS-секція           ]
+```
 
 ### Словники
 
@@ -601,13 +787,16 @@ NOCZvit/
 │   │   ├── ResumeHistory.java     — SQLite-сховище міжзмінних резюме (DDL, findPrevious, save/upsert)
 │   │   └── ResumeRecord.java      — record: DTO одного збереженого резюме
 │   ├── trap/
-│   │   ├── ImapTrapReader.java    — читання SNMP-трап листів з IMAP-папок (wildcard-підтримка)
+│   │   ├── ImapTrapReader.java    — читання SNMP/RAMOS трап листів з IMAP-папок (wildcard-підтримка)
 │   │   ├── EmersonTrapParser.java — парсинг subject+body листа → TrapEvent (нормалізація типу трапу)
 │   │   ├── TrapDeduplicator.java  — дедуплікація Cold Start трапів у часовому вікні
 │   │   ├── TrapCorrelator.java    — state machine: ланцюжки PDC + самостійні ADC + Cold Start linking
 │   │   ├── EmersonTrapSection.java — формування HTML-секції та plain-text для Claude
 │   │   ├── TrapEvent.java         — record: один сирий нормалізований трап
-│   │   └── TrapIncident.java      — record: логічна скорельована подія (Severity, activatedAt, clearedAt)
+│   │   ├── TrapIncident.java      — record: логічна скорельована подія (Severity, activatedAt, clearedAt)
+│   │   ├── RamosTrapEvent.java    — record: одна point-in-time подія датчика RAMOS
+│   │   ├── RamosTrapParser.java   — парсинг RAMOS-листів, декодування hex Cyrillic, фільтр стану
+│   │   └── RamosTrapSection.java  — HTML групування по кімнатах (#f38120), plain-text для Claude
 │   ├── snmp/
 │   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
 │   └── zabbix/
