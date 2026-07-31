@@ -176,7 +176,7 @@ public class Config {
         dictionarySdhPath = null;
         claudeApiKey = "";
         claudeModel = "claude-haiku-4-5";
-        claudeMaxTokens = 2000;
+        claudeMaxTokens = 4096;
         historyResumeUrl = "";
         claudeExplicit = null;
         snmpTrapFolder = "";
