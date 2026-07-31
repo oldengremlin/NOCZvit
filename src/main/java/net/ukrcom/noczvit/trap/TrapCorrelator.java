@@ -127,6 +127,7 @@ public class TrapCorrelator {
         ACTIVE_TO_CLEARED.put("Active:Alarm:Unit Shutdown",            "Cleared:Alarm:Unit Shutdown");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor Low Suction Pressure",  "Cleared:Alarm:Compressor Low Suction Pressure");
         ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor High Head Pressure",    "Cleared:Alarm:Compressor High Head Pressure");
+        ACTIVE_TO_CLEARED.put("Active:Alarm:Compressor Short Cycle",           "Cleared:Alarm:Compressor Short Cycle");
     }
 
     // Maps Cleared trap type → its Active counterpart (reverse of ACTIVE_TO_CLEARED)
@@ -156,6 +157,7 @@ public class TrapCorrelator {
         TRAP_SEVERITY.put("Active:Alarm:Unit Shutdown",               Severity.ALARM);
         TRAP_SEVERITY.put("Active:Alarm:Compressor Low Suction Pressure",  Severity.ALARM);
         TRAP_SEVERITY.put("Active:Alarm:Compressor High Head Pressure",    Severity.ALARM);
+        TRAP_SEVERITY.put("Active:Alarm:Compressor Short Cycle",           Severity.WARNING);
     }
 
     // Ukrainian descriptions for active trap types
@@ -180,6 +182,7 @@ public class TrapCorrelator {
         TRAP_DESCRIPTIONS.put("Active:Alarm:Unit Shutdown",          "Аварійне вимкнення кондиціонера.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Low Suction Pressure", "Низький тиск всмоктування компресора.");
         TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor High Head Pressure",   "Підвищений тиск нагнітання компресора.");
+        TRAP_DESCRIPTIONS.put("Active:Alarm:Compressor Short Cycle",          "Захист компресора: короткий цикл (часті пуски/зупинки).");
         TRAP_DESCRIPTIONS.put("Monitoring Card Reboot",              "Перезапуск картки моніторингу.");
         TRAP_DESCRIPTIONS.put("Cold Start",                           "Перезапуск картки моніторингу.");
     }
