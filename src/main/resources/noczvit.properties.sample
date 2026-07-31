@@ -22,6 +22,11 @@ debug=false
 # snmp.trap.correlation.minutes=10
 # snmp.trap.coldstart.link.minutes=5
 
+# RAMOS environmental sensor trap emails (CONTEG RAMOS Ultra/Optima)
+# Enables the RAMOS events section (Warning/Critical). Leave blank to disable.
+# Supports wildcard pattern (e.g. INBOX/Internal/SNMP Traps/RAMOS*)
+# ramos.trap.folder=INBOX.Internal.SNMP Traps.RAMOS
+
 # IMAP Configuration
 mail.hostname=smtp.example.com
 mail.username=user

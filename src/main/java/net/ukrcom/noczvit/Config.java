@@ -122,6 +122,8 @@ public class Config {
     private int snmpTrapDedupSeconds;
     private int snmpTrapCorrelationMinutes;
     private int snmpTrapColdstartLinkMinutes;
+    @NonNull
+    private String ramosTrapFolder;
 
     @NonNull
     private String accountMssqlUser;
@@ -181,6 +183,7 @@ public class Config {
         snmpTrapDedupSeconds = 30;
         snmpTrapCorrelationMinutes = 10;
         snmpTrapColdstartLinkMinutes = 5;
+        ramosTrapFolder = "";
     }
 
     /**
@@ -496,6 +499,10 @@ public class Config {
         } catch (NumberFormatException e) {
             log.warn("snmp.trap.coldstart.link.minutes: invalid value, using default {}", snmpTrapColdstartLinkMinutes);
         }
+        String ramosFolder = stripInlineComment(properties.getProperty("ramos.trap.folder", ""));
+        if (!ramosFolder.isBlank()) {
+            ramosTrapFolder = ramosFolder;
+        }
     }
 
     /**
@@ -503,6 +510,13 @@ public class Config {
      */
     public boolean isTrapEnabled() {
         return !snmpTrapFolder.isBlank();
+    }
+
+    /**
+     * Returns {@code true} when the RAMOS trap email folder is configured (feature is enabled).
+     */
+    public boolean isRamosTrapEnabled() {
+        return !ramosTrapFolder.isBlank();
     }
 
     /**
