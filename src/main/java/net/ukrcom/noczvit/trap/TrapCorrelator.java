@@ -59,7 +59,8 @@ public class TrapCorrelator {
     // they describe an ongoing process, not a fault condition requiring resolution.
     private static final Set<String> NO_UNRESOLVED_SUFFIX = Set.of(
             "Active:Alarm:Battery Discharging",
-            "Active:Alarm:MMS On Battery"
+            "Active:Alarm:MMS On Battery",
+            "Active:Alarm:Compressor Short Cycle"
     );
 
     // Alternative descriptions for when an incident IS closed (completed action, past tense).
