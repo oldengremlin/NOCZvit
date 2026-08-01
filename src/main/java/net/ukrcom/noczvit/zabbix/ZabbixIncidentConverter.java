@@ -45,7 +45,7 @@ import net.ukrcom.noczvit.model.Incident.Status;
 public class ZabbixIncidentConverter {
 
     private static final Pattern TRAP_CARD_PATTERN
-            = Pattern.compile("card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
+            = Pattern.compile("(?i)card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
 
     private static final String[] UA_MONTHS = {
         "", "січ", "лют", "бер", "квіт", "трав", "черв",
