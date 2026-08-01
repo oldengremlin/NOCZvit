@@ -121,7 +121,6 @@ public class RamosTrapSection {
                     plainText.append(TIME_FMT.format(ev.timestamp()))
                              .append(" ").append(ev.state())
                              .append(" / ").append(ev.sensorName())
-                             .append(" / ").append(ev.sensorType())
                              .append("\n");
                 }
             }
