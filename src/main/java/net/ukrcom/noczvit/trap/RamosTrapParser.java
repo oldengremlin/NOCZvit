@@ -70,7 +70,8 @@ public class RamosTrapParser {
 
     private static final Set<String> REPORTABLE_STATES = Set.of(
             "Critical", "High Critical", "Low Critical",
-            "High Warning", "Low Warning", "Warning");
+            "High Warning", "Low Warning", "Warning",
+            "Sensor Error");
 
     private RamosTrapParser() {
     }
