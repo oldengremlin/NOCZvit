@@ -98,7 +98,7 @@ public class ZabbixIncidentConverter {
      * r* → маршрутизатор; s* → комутатор; p* → ДБЖ.
      */
     private static String resolveDeviceWord(String host) {
-        if (host.startsWith("adlink")) return "";
+        if (host.startsWith("adlink")) return "контролері сухих контактів ";
         if (host.startsWith("alca") || host.startsWith("ies")) return "DSLAM ";
         if (host.startsWith("a")) return "кондиціонері ";
         if (host.startsWith("r")) return "маршрутизаторі ";
