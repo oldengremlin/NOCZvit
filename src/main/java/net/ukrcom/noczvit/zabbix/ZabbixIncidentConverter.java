@@ -103,7 +103,7 @@ public class ZabbixIncidentConverter {
         if (host.startsWith("a")) return "кондиціонері ";
         if (host.startsWith("r")) return "маршрутизаторі ";
         if (host.startsWith("s")) return "комутаторі ";
-        if (host.startsWith("p")) return "ДБЖ ";
+        if (host.startsWith("p")) return "устаткуванні безперебійного живлення ";
         return "";
     }
 
