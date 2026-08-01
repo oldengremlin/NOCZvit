@@ -155,7 +155,9 @@ public class SummaryClient {
                             + "Будь-яке слово, що не є українським, є помилкою. "
                             + "Символи ы, ъ, э, ё у відповіді ЗАБОРОНЕНІ. "
                             + "ЗАБОРОНЕНІ слова-русизми: 'события', 'событий', 'событиях', 'собитія', 'собитій', 'собитіях' — "
-                            + "замінюй ВИКЛЮЧНО на 'події', 'подій', 'подіях'.")
+                            + "замінюй ВИКЛЮЧНО на 'події', 'подій', 'подіях'. "
+                            + "ЗАБОРОНЕНО: 'конец', 'конца', 'концу', 'конце', 'концом' — "
+                            + "замінюй ВИКЛЮЧНО на 'кінець', 'кінця', 'кінцю', 'кінці', 'кінцем'.")
                     .addUserMessage(prompt)
                     .build();
 
@@ -334,19 +336,24 @@ public class SummaryClient {
 
     /**
      * Replaces known Russian-language words that slip through the prompt filter.
-     * Handles "события/собитія" in nominative, genitive, and prepositional forms,
-     * both lowercase and uppercase first letter.
+     * Uses negative Cyrillic lookahead/lookbehind as word boundaries since \b
+     * does not match Cyrillic characters in Java.
      */
+    private static final String CYR = "[а-яА-ЯіІїЇєЄёЁ]";
     private static String fixRussianisms(String text) {
-        // Nominative plural: "события" / "собитія" → "події"
+        // "события/собитія" → "події/подій/подіях"
         text = text.replaceAll("(?i)со[бб]ити[яьa]", "події");
         text = text.replaceAll("(?i)событи[яьa]", "події");
-        // Genitive plural: "событий" / "собитій" → "подій"
         text = text.replaceAll("(?i)со[бб]ити[йi]", "подій");
         text = text.replaceAll("(?i)событи[йi]", "подій");
-        // Prepositional plural: "событиях" / "собитіях" → "подіях"
         text = text.replaceAll("(?i)со[бб]ити[аa]х", "подіях");
         text = text.replaceAll("(?i)событи[аa]х", "подіях");
+        // "конец/конца/концу/конце/концом" → "кінець/кінця/кінцю/кінці/кінцем"
+        text = text.replaceAll("(?i)(?<!" + CYR + ")конец(?!" + CYR + ")", "кінець");
+        text = text.replaceAll("(?i)(?<!" + CYR + ")конца(?!" + CYR + ")", "кінця");
+        text = text.replaceAll("(?i)(?<!" + CYR + ")концу(?!" + CYR + ")", "кінцю");
+        text = text.replaceAll("(?i)(?<!" + CYR + ")конце(?!" + CYR + ")", "кінці");
+        text = text.replaceAll("(?i)(?<!" + CYR + ")концом(?!" + CYR + ")", "кінцем");
         return text;
     }
 
