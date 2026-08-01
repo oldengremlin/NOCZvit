@@ -71,7 +71,7 @@ public class ZabbixIncidentConverter {
         List<String> reviewNames = needsReview ? List.of(host) : List.of();
 
         String eventDesc = resolveEventDesc(host, p.name());
-        String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
+        String deviceWord = resolveDeviceWord(host);
         String descSuffix = eventDesc + " на " + deviceWord + location;
         String pairKey = "zabbix:" + host + ":" + p.clock();
 
@@ -90,6 +90,21 @@ public class ZabbixIncidentConverter {
         log.debug("ZabbixIncidentConverter: {} → location='{}', needsReview={}, active={}",
                 host, location, needsReview, p.isActive());
         return result;
+    }
+
+    /**
+     * Maps hostname prefix to a Ukrainian device-type word used in incident descriptions.
+     * adlink → dry-contact device (no word); alca/ies → DSLAM; a* → кондиціонер;
+     * r* → маршрутизатор; s* → комутатор; p* → ДБЖ.
+     */
+    private static String resolveDeviceWord(String host) {
+        if (host.startsWith("adlink")) return "контролері сухих контактів ";
+        if (host.startsWith("alca") || host.startsWith("ies")) return "DSLAM ";
+        if (host.startsWith("a")) return "кондиціонері ";
+        if (host.startsWith("r")) return "маршрутизаторі ";
+        if (host.startsWith("s")) return "комутаторі ";
+        if (host.startsWith("p")) return "устаткуванні безперебійного живлення ";
+        return "";
     }
 
     /**
