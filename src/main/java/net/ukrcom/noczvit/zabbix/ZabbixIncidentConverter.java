@@ -19,6 +19,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
@@ -41,6 +43,9 @@ import net.ukrcom.noczvit.model.Incident.Status;
  */
 @Slf4j
 public class ZabbixIncidentConverter {
+
+    private static final Pattern TRAP_CARD_PATTERN
+            = Pattern.compile("card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
 
     private static final String[] UA_MONTHS = {
         "", "січ", "лют", "бер", "квіт", "трав", "черв",
@@ -65,8 +70,9 @@ public class ZabbixIncidentConverter {
         boolean needsReview = location.equals(host);
         List<String> reviewNames = needsReview ? List.of(host) : List.of();
 
-        String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
-        String descSuffix = p.name() + " на " + deviceWord + location;
+        String eventDesc = resolveEventDesc(host, p.name());
+        String deviceWord = (!host.startsWith("adlink") && host.startsWith("r")) ? "маршрутизаторі " : "";
+        String descSuffix = eventDesc + " на " + deviceWord + location;
         String pairKey = "zabbix:" + host + ":" + p.clock();
 
         List<Incident> result = new ArrayList<>(2);
@@ -84,6 +90,24 @@ public class ZabbixIncidentConverter {
         log.debug("ZabbixIncidentConverter: {} → location='{}', needsReview={}, active={}",
                 host, location, needsReview, p.isActive());
         return result;
+    }
+
+    /**
+     * For adlink hosts resolves "Trap card N, port N, line N" to a human-readable
+     * description via the PD dictionary (key: host:card:port:line).
+     * Falls back to the raw Zabbix problem name when no dictionary entry exists.
+     */
+    private String resolveEventDesc(String host, String name) {
+        if (!host.startsWith("adlink")) {
+            return name;
+        }
+        Matcher m = TRAP_CARD_PATTERN.matcher(name);
+        if (!m.find()) {
+            return name;
+        }
+        String lineKey = host + ":" + m.group(1) + ":" + m.group(2) + ":" + m.group(3);
+        String resolved = dictionary.lookupPD(lineKey);
+        return lineKey.equals(resolved) ? name : resolved;
     }
 
     /**
