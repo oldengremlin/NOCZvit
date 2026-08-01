@@ -27,7 +27,7 @@ debug=false
 # RAMOS environmental sensor trap emails (CONTEG RAMOS Ultra/Optima)
 # Enables the RAMOS events section (Warning/Critical). Leave blank to disable.
 # Supports wildcard pattern (e.g. INBOX/Internal/SNMP Traps/RAMOS*)
-# ramos.trap.folder=INBOX.Internal.SNMP Traps.RAMOS
+# ramos.trap.folder=INBOX.Internal.SNMP Traps
 
 # IMAP Configuration
 mail.hostname=smtp.example.com
