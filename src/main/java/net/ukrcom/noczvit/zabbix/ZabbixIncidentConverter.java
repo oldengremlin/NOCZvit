@@ -71,7 +71,7 @@ public class ZabbixIncidentConverter {
         List<String> reviewNames = needsReview ? List.of(host) : List.of();
 
         String eventDesc = resolveEventDesc(host, p.name());
-        String deviceWord = (!host.startsWith("adlink") && host.startsWith("r")) ? "маршрутизаторі " : "";
+        String deviceWord = host.startsWith("r") ? "маршрутизаторі " : "";
         String descSuffix = eventDesc + " на " + deviceWord + location;
         String pairKey = "zabbix:" + host + ":" + p.clock();
 
