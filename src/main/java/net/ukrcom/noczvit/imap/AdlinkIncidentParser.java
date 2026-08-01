@@ -40,7 +40,7 @@ import net.ukrcom.noczvit.model.Incident.Status;
 public class AdlinkIncidentParser {
 
     private static final Pattern ADLINK_PATTERN
-            = Pattern.compile("(adlink[\\w-]+):\\s*(?:Trap\\s+)?card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
+            = Pattern.compile("(?i)(adlink[\\w-]+):\\s*(?:Trap\\s+)?card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
 
     private final Dictionary dictionary;
 
