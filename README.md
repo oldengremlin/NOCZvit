@@ -823,6 +823,26 @@ At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
 - `dictionary_pd.txt` — фрази для розпізнавання PD-інцидентів
 - `dictionary_sdh.txt` — фрази для розпізнавання SDH-інцидентів
 
+### Екранування даних у звіті
+
+Звіт — це HTML-лист, який формується конкатенацією рядків, тому всі значення з **недовірених джерел** екрануються через `StringEscapeUtils.escapeHtml4` (commons-text):
+
+| Джерело | Де екранується |
+|---|---|
+| Теми та тіла IMAP-листів (`location`, `device`, опис інциденту) | `IncidentSectionBuilder` |
+| Відповіді SNMP-пристроїв (`desc`, `temp`, `value`, `unit`, текст помилки) | `snmp/Client` |
+| Назви датчиків і станів RAMOS | `RamosTrapSection` |
+| Дані трапів Emerson (`ip`, `hostname`, опис, деталі) | `EmersonTrapSection` |
+| Імена боржників з MSSQL | `Debtors` |
+| Відповідь Claude API | `SummaryClient` |
+
+Два місця потребують уваги при редагуванні, бо там **порядок операцій критичний**:
+
+- `snmp/Client` — `desc` екранується **до** вставки маркерів `<font color=…>` для hot/cold zone; інакше самі теги були б заекрановані й потрапили у звіт як текст;
+- `SummaryClient` — відповідь Claude спершу екранується, і лише потім у неї вставляються `<b>`, `<p>`, `<br>`.
+
+`Config` позначено `@ToString(exclude = …)` для всіх паролів, API-ключа та поля `properties` — щоб випадковий `log.debug("config={}", config)` не вивалив секрети в лог.
+
 ## Структура проекту
 
 ```

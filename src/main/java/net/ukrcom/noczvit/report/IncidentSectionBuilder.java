@@ -103,7 +103,8 @@ public class IncidentSectionBuilder {
         AtomicInteger n = new AtomicInteger(0);
         byLocation.forEach((location, group) -> {
             html.append("<div class=\"section\">\n")
-                    .append("<h2>Зареєстровані інциденти на виносі ").append(location).append("</h2>\n")
+                    .append("<h2>Зареєстровані інциденти на виносі ")
+                    .append(StringEscapeUtils.escapeHtml4(location)).append("</h2>\n")
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
                     .append("<th style=\"width:30px\">№</th>")
@@ -207,7 +208,7 @@ public class IncidentSectionBuilder {
             descHtml += " (<i>потребує коригування назви</i> '<b>" + names + "</b>')";
         }
 
-        String device = row.device().isEmpty() ? "" : row.device();
+        String device = StringEscapeUtils.escapeHtml4(row.device());
         return "<tr" + rowClass + ">"
                 + "<td>" + n.incrementAndGet() + ".</td>"
                 + "<td>" + startCell + "</td>"

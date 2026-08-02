@@ -6,6 +6,15 @@
 
 ---
 
+## [1.17.3] — 2026-08-02
+
+### Виправлено
+- **HTML-ін'єкція з SNMP-відповідей** (`snmp/Client.java`): `desc`, `temp`, `value`, `unit`, `error` — це буквальний вміст OCTET STRING від пристрою, вставлявся у звіт без екранування. Усі підстановки обгорнуто в `StringEscapeUtils.escapeHtml4`. У гілці RAMOS екранування виконується **до** вставки маркерів `<font>` для hot/cold zone, інакше самі теги були б заекрановані
+- **HTML-ін'єкція `location` / `device`** (`report/IncidentSectionBuilder.java`): обидва значення походять із теми IMAP-листа (`subject.split("\\s+")[2]`) і виводились без екранування, хоча `description` і `reviewNames` у тому самому методі екранувалися. Додано `escapeHtml4`
+- **`Config.@ToString` розкривав секрети**: згенерований `toString()` включав `mailPassword`, `zabbixPassword`, `claudeApiKey`, обидва MSSQL-паролі та поле `properties` (усі пари ключ-значення, тобто секрети вдруге). Додано `exclude` — перевірено, що у згенерованому байткоді згадок паролів більше немає
+
+---
+
 ## [1.17.2] — 2026-08-02
 
 ### Змінено

@@ -44,7 +44,10 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #claudeProperties()} → {@link #historyResumeProperties()} → {@link #trapProperties()}.
  */
 @Slf4j
-@ToString(includeFieldNames = true)
+// secrets are excluded so that any future log.debug("config={}", config) cannot leak them;
+// `properties` holds every key-value pair, i.e. all secrets a second time
+@ToString(includeFieldNames = true, exclude = {"properties", "zabbixPassword", "mailPassword",
+    "claudeApiKey", "accountMssqlPassword", "accequipmentMssqlPassword"})
 @EqualsAndHashCode
 @Getter
 public class Config {
