@@ -21,7 +21,7 @@ debug=false
 # Supports wildcard pattern (e.g. INBOX/Internal/SNMP Traps/DC-Room*)
 # snmp.trap.folder=INBOX.Internal.SNMP Traps.DC-Room*
 # snmp.trap.dedup.seconds=30
-# snmp.trap.correlation.minutes=10
+# (параметр snmp.trap.correlation.minutes прибрано у 1.17.6 — він ніколи не використовувався)
 # snmp.trap.coldstart.link.minutes=5
 
 # RAMOS environmental sensor trap emails (CONTEG RAMOS Ultra/Optima)

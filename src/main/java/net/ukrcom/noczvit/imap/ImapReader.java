@@ -22,9 +22,13 @@ import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.Session;
+import jakarta.mail.search.AndTerm;
+import jakarta.mail.search.ComparisonTerm;
 import jakarta.mail.search.SearchTerm;
+import jakarta.mail.search.SentDateTerm;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.OffsetDateTime;
@@ -73,7 +77,12 @@ public class ImapReader {
         props.put("mail.imap.ssl.enable", config.isMailSsl());
         props.put("mail.imap.host", config.getMailHostname());
         props.put("mail.imap.port", config.isMailSsl() ? "993" : "143");
-        props.put("mail.imap.timeout", "5000");
+        // getStore("imaps") makes jakarta.mail read the "mail.imaps." prefix, so timeouts
+        // must be registered under the prefix that matches the protocol actually used.
+        String p = config.isMailSsl() ? "mail.imaps." : "mail.imap.";
+        props.put(p + "connectiontimeout", "10000");
+        props.put(p + "timeout", "30000");
+        props.put(p + "writetimeout", "30000");
 
         List<RawMessage> result = new ArrayList<>();
         Session session = Session.getInstance(props);
@@ -102,18 +111,7 @@ public class ImapReader {
                     messages = folder.getMessages();
                 } else {
                     log.info("IMAP filter: sent >= {} && sent <= {}", fromEpoch, toEpoch);
-                    messages = folder.search(new SearchTerm() {
-                        @Override
-                        public boolean match(Message message) {
-                            try {
-                                Date sentDate = message.getSentDate();
-                                long unixDate = sentDate.getTime() / 1000;
-                                return unixDate >= fromEpoch && unixDate <= toEpoch;
-                            } catch (MessagingException e) {
-                                return false;
-                            }
-                        }
-                    });
+                    messages = folder.search(dateRangeTerm(fromEpoch, toEpoch));
                 }
 
                 for (Message msg : messages) {
@@ -123,6 +121,24 @@ public class ImapReader {
             }
         }
         return result;
+    }
+
+    /**
+     * Builds a server-side {@code SEARCH} term for the given epoch range.
+     *
+     * <p>Only standard terms are translated into an IMAP {@code SEARCH} command; an anonymous
+     * {@link jakarta.mail.search.SearchTerm} subclass silently falls back to
+     * {@link jakarta.mail.Folder#search}, which downloads <em>every</em> message in the folder
+     * and calls {@code getSentDate()} on each — the single most expensive operation of a run.
+     *
+     * <p>IMAP {@code SEARCH} compares dates at day granularity, so the range is padded by one day
+     * on each side to stay immune to server/client timezone differences. Exact second-level
+     * trimming already happens downstream (see {@code imap.Client} and {@code NOCZvit}).
+     */
+    public static SearchTerm dateRangeTerm(long fromEpoch, long toEpoch) {
+        return new AndTerm(
+                new SentDateTerm(ComparisonTerm.GE, new Date((fromEpoch - 86400) * 1000)),
+                new SentDateTerm(ComparisonTerm.LE, new Date((toEpoch + 86400) * 1000)));
     }
 
     /**
@@ -144,8 +160,18 @@ public class ImapReader {
             try {
                 unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
             } catch (DateTimeParseException e) {
-                log.debug("Failed to parse date: {}", dateStr);
-                return Optional.empty();
+                // The strict pattern rejects RFC 5322 forms real MTAs emit — a trailing zone
+                // comment ("+0300 (EEST)", added by Postfix), folding whitespace before a
+                // single-digit day, a missing day-of-week or missing seconds. Dropping such
+                // messages was silent (log.debug is off in production), so fall back to
+                // jakarta.mail's lenient MailDateFormat instead.
+                Date sent = msg.getSentDate();
+                if (sent == null) {
+                    log.warn("Unparseable Date header «{}» and no sent date, skipping message", dateStr);
+                    return Optional.empty();
+                }
+                unixDate = sent.getTime() / 1000;
+                log.debug("Date header «{}» not in strict format, used lenient parse", dateStr);
             }
             String body;
             try {
@@ -170,25 +196,46 @@ public class ImapReader {
      */
     private String extractText(Message message) throws MessagingException, IOException {
         if (message.isMimeType("text/plain")) {
-            Object content = message.getContent();
-            return switch (content) {
-                case String s ->
-                    s;
-                case InputStream is ->
-                    new String(is.readAllBytes(), "UTF-8");
-                default ->
-                    "";
-            };
+            return contentAsText(message.getContent());
         }
         if (message.isMimeType("multipart/*")) {
-            Multipart multipart = (Multipart) message.getContent();
-            for (int i = 0; i < multipart.getCount(); i++) {
-                BodyPart part = multipart.getBodyPart(i);
-                if (part.isMimeType("text/plain")) {
-                    return (String) part.getContent();
+            return extractText((Multipart) message.getContent());
+        }
+        return "";
+    }
+
+    /**
+     * Walks a multipart tree depth-first and returns the first {@code text/plain} part found.
+     *
+     * <p>Recursion is required: a message with an attachment is typically
+     * {@code multipart/mixed → multipart/alternative → text/plain}, and a flat scan of the top
+     * level finds no {@code text/plain} part at all, silently yielding an empty body.
+     */
+    private String extractText(Multipart multipart) throws MessagingException, IOException {
+        for (int i = 0; i < multipart.getCount(); i++) {
+            BodyPart part = multipart.getBodyPart(i);
+            if (part.isMimeType("text/plain")) {
+                return contentAsText(part.getContent());
+            }
+            if (part.getContent() instanceof Multipart nested) {
+                String text = extractText(nested);
+                if (!text.isEmpty()) {
+                    return text;
                 }
             }
         }
         return "";
+    }
+
+    /** Normalises a MIME part payload to text; {@code InputStream} parts are read as UTF-8. */
+    private static String contentAsText(Object content) throws IOException {
+        return switch (content) {
+            case String s ->
+                s;
+            case InputStream is ->
+                new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            default ->
+                "";
+        };
     }
 }

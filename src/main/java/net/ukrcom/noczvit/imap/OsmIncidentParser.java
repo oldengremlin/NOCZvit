@@ -114,7 +114,7 @@ public class OsmIncidentParser {
                 if (matcher.find()) {
                     try {
                         LocalDateTime ldt = LocalDateTime.parse(matcher.group(), TRAP_DATE_INPUT_FORMATTER);
-                        eventTs = ldt.atZone(ZoneId.systemDefault()).toEpochSecond();
+                        eventTs = DateUtils.toInstant(ldt, msg.unixDate()).getEpochSecond();
                         eventDateStr = ldt.atZone(ZoneId.systemDefault()).format(TRAP_DATE_OUTPUT_FORMATTER);
                         log.debug("Found Trap value date: {}, updated ts={}", matcher.group(), eventTs);
                     } catch (DateTimeParseException e) {

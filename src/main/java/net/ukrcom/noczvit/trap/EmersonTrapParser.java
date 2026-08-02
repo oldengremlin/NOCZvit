@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
@@ -107,9 +108,8 @@ public class EmersonTrapParser {
 
         Instant timestamp;
         try {
-            timestamp = LocalDateTime.parse(bodyMatcher.group(1).trim(), BODY_DT)
-                    .atZone(ZoneId.systemDefault())
-                    .toInstant();
+            timestamp = DateUtils.toInstant(
+                    LocalDateTime.parse(bodyMatcher.group(1).trim(), BODY_DT), msg.unixDate());
         } catch (DateTimeParseException e) {
             // Fall back to the email Date: header timestamp
             timestamp = Instant.ofEpochSecond(msg.unixDate());

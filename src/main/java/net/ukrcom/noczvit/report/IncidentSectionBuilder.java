@@ -103,7 +103,8 @@ public class IncidentSectionBuilder {
         AtomicInteger n = new AtomicInteger(0);
         byLocation.forEach((location, group) -> {
             html.append("<div class=\"section\">\n")
-                    .append("<h2>Зареєстровані інциденти на виносі ").append(location).append("</h2>\n")
+                    .append("<h2>Зареєстровані інциденти на виносі ")
+                    .append(StringEscapeUtils.escapeHtml4(location)).append("</h2>\n")
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
                     .append("<th style=\"width:30px\">№</th>")
@@ -184,7 +185,6 @@ public class IncidentSectionBuilder {
         boolean paired = row.start() != null && row.end() != null;
         Incident primary = row.start() != null ? row.start() : row.end();
 
-        String rowClass = "";
 
         String startCell = row.start() != null ? row.start().messageDateStr() : "—";
         String endCell = row.end() != null ? row.end().messageDateStr() : "—";
@@ -207,8 +207,8 @@ public class IncidentSectionBuilder {
             descHtml += " (<i>потребує коригування назви</i> '<b>" + names + "</b>')";
         }
 
-        String device = row.device().isEmpty() ? "" : row.device();
-        return "<tr" + rowClass + ">"
+        String device = StringEscapeUtils.escapeHtml4(row.device());
+        return "<tr>"
                 + "<td>" + n.incrementAndGet() + ".</td>"
                 + "<td>" + startCell + "</td>"
                 + "<td>" + endCell + "</td>"

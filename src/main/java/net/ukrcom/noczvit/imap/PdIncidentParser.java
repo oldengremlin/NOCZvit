@@ -115,7 +115,7 @@ public class PdIncidentParser {
     private boolean isIgnored(String subject) {
         return subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
                 || subject.contains("UVPN") || subject.contains("SDH-OSM") || subject.contains("astashov")
-                || subject.contains("console") || subject.contains("ramb-\\d+:")
+                || subject.contains("console")
                 || subject.matches(".*[dm]: NS\\d?.*")
                 || (subject.matches(".*: [ap][^:]+: [ap][^:]+ has.*") && !subject.contains("alca"));
     }

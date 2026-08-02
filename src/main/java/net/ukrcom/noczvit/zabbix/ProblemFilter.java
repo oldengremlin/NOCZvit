@@ -68,9 +68,6 @@ public class ProblemFilter {
      * {@value #DEDUP_TOLERANCE_SEC} seconds of the Zabbix problem's start time.
      */
     private static boolean isDuplicateOfImap(ZabbixProblem problem, List<Incident> imapIncidents) {
-        if (problem.host().isBlank()) {
-            return false;
-        }
         return imapIncidents.stream().anyMatch(inc
                 -> !inc.device().isEmpty()
                 && inc.device().equalsIgnoreCase(problem.host())

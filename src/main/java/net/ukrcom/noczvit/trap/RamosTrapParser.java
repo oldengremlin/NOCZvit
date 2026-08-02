@@ -14,10 +14,12 @@
  */
 package net.ukrcom.noczvit.trap;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -27,6 +29,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
@@ -63,8 +66,10 @@ public class RamosTrapParser {
             Pattern.CASE_INSENSITIVE);
 
     // Sensor name is hex-encoded when it consists entirely of space-separated hex byte pairs.
+    // At least 4 groups are required: shorter names like "AC" (air conditioner) or "DC DC"
+    // are valid hex too and would otherwise be decoded into replacement characters.
     private static final Pattern HEX_SENSOR_RE = Pattern.compile(
-            "^([0-9A-Fa-f]{2}\\s+)*[0-9A-Fa-f]{2}\\s*$");
+            "^(?:[0-9A-Fa-f]{2}\\s+){3,}[0-9A-Fa-f]{2}\\s*$");
 
     private static final Pattern ROOM_RE = Pattern.compile("(?i)room\\s*(\\d)");
 
@@ -88,12 +93,12 @@ public class RamosTrapParser {
             if (!msg.subject().toLowerCase(Locale.ROOT).contains("got trap from ramos")) {
                 continue;
             }
-            parseBody(msg.body(), result);
+            parseBody(msg.body(), msg.unixDate(), result);
         }
         return result;
     }
 
-    private static void parseBody(String body, List<RamosTrapEvent> result) {
+    private static void parseBody(String body, long messageEpochSec, List<RamosTrapEvent> result) {
         if (body == null || body.isBlank()) {
             return;
         }
@@ -117,8 +122,8 @@ public class RamosTrapParser {
 
             Instant timestamp;
             try {
-                LocalDateTime ldt = LocalDateTime.parse(timestampStr.trim(), DATE_FORMATTER);
-                timestamp = ldt.atZone(ZoneId.systemDefault()).toInstant();
+                timestamp = DateUtils.toInstant(
+                        LocalDateTime.parse(timestampStr.trim(), DATE_FORMATTER), messageEpochSec);
             } catch (Exception e) {
                 log.debug("RamosTrapParser: cannot parse timestamp «{}»", timestampStr);
                 continue;
@@ -139,10 +144,15 @@ public class RamosTrapParser {
             return raw;
         }
         try {
-            String hexOnly = raw.replaceAll("\\s+", "");
-            byte[] bytes = HexFormat.of().parseHex(hexOnly);
-            return new String(bytes, StandardCharsets.UTF_8);
-        } catch (Exception e) {
+            byte[] bytes = HexFormat.of().parseHex(raw.replaceAll("\\s+", ""));
+            // Strict decode: new String(bytes, UTF_8) silently yields U+FFFD for a truncated
+            // dump, so a name that is hex-shaped but not valid UTF-8 must stay as-is.
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString();
+        } catch (CharacterCodingException | IllegalArgumentException e) {
             log.debug("RamosTrapParser: hex decode failed for «{}»: {}", raw, e.getMessage());
             return raw;
         }

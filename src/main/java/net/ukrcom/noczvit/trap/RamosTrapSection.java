@@ -30,8 +30,8 @@ import lombok.extern.slf4j.Slf4j;
  * plain-text block.
  *
  * <p>Events are grouped by room (Room1–Room4, then «Інші») and sorted by timestamp within
- * each group. Critical-level events receive a red row class ({@code ramos-crit}); warning-level
- * events receive an amber row class ({@code ramos-warn}). The plain-text output includes only
+ * each group. All rows use the neutral alternating background shared by every report table.
+ * The plain-text output includes only
  * Critical-level events (Critical, High Critical, Low Critical) to avoid flooding the Claude
  * token budget.
  *
@@ -108,9 +108,8 @@ public class RamosTrapSection {
 
             for (RamosTrapEvent ev : roomEvents) {
                 boolean critical = CRITICAL_STATES.contains(ev.state());
-                String rowClass = critical ? " class=\"ramos-crit\"" : " class=\"ramos-warn\"";
 
-                html.append("<tr").append(rowClass).append(">")
+                html.append("<tr>")
                     .append("<td>").append(TIME_FMT.format(ev.timestamp())).append("</td>")
                     .append("<td><b>").append(htmlEscape(ev.state())).append("</b></td>")
                     .append("<td>").append(htmlEscape(ev.sensorName())).append("</td>")

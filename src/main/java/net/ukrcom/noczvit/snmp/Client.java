@@ -34,6 +34,7 @@ import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
+import org.apache.commons.text.StringEscapeUtils;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
@@ -154,8 +155,9 @@ public class Client {
                 String error = response != null ? response.getErrorStatusText() : "Timeout";
                 log.warn("SNMP celsius {}: {}", host + "." + domain, error);
                 return new CelsiusResult(
-                        "<td><b>" + host + "</b></td>"
-                        + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + error + "</i></td>",
+                        "<td><b>" + StringEscapeUtils.escapeHtml4(host) + "</b></td>"
+                        + "<td colspan=\"2\"><i>не вдалося отримати доступ: "
+                        + StringEscapeUtils.escapeHtml4(error) + "</i></td>",
                         ""
                 );
             }
@@ -167,16 +169,17 @@ public class Client {
             log.debug("{} -> {} -> {}", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
 
             return new CelsiusResult(
-                    "<td><b>" + host + "." + domain + "</b></td>"
-                    + "<td>" + desc + "</td>"
-                    + "<td><b>" + temp + "</b>°C</td>",
+                    "<td><b>" + StringEscapeUtils.escapeHtml4(host + "." + domain) + "</b></td>"
+                    + "<td>" + StringEscapeUtils.escapeHtml4(desc) + "</td>"
+                    + "<td><b>" + StringEscapeUtils.escapeHtml4(temp) + "</b>°C</td>",
                     (zabbix != null) ? zabbix.getGraphRow(host, desc, from, to) : ""
             );
         } catch (IOException e) {
             log.warn("SNMP celsius {}: {}", host, e.getMessage());
             return new CelsiusResult(
-                    "<td><b>" + host + "</b></td>"
-                    + "<td colspan=\"2\"><i>не вдалося отримати доступ: " + e.getMessage() + "</i></td>",
+                    "<td><b>" + StringEscapeUtils.escapeHtml4(host) + "</b></td>"
+                    + "<td colspan=\"2\"><i>не вдалося отримати доступ: "
+                    + StringEscapeUtils.escapeHtml4(e.getMessage()) + "</i></td>",
                     ""
             );
         }
@@ -233,7 +236,9 @@ public class Client {
     private String queryHostRamos(String host) {
         StringBuilder fragment = new StringBuilder();
         fragment.append("<div class=\"section\">\n")
-                .append("<h2>Майданчик ").append(config.getRamos().get(host).get("name")).append("</h2>\n")
+                .append("<h2>Майданчик ")
+                .append(StringEscapeUtils.escapeHtml4(config.getRamos().get(host).get("name")))
+                .append("</h2>\n")
                 .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
                 .append("<th style=\"width:30px\">№</th>")
@@ -306,8 +311,10 @@ public class Client {
                 log.debug("{} = {} : desc={}, unit={}, value={}, lw={}, hw={}, lc={}, hc={}",
                         oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
 
+                // escape before injecting <font> markers, otherwise they would be escaped too
                 if (desc != null) {
-                    desc = desc.replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
+                    desc = StringEscapeUtils.escapeHtml4(desc)
+                            .replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
                             .replaceAll("(?i)(cold\\s*zone)", "<font color=darkblue>$1</font>");
                 }
 
@@ -336,7 +343,9 @@ public class Client {
                         .append("<td>").append(n).append(".</td>")
                         .append("<td>").append(desc != null ? desc : "").append("</td>")
                         .append("<td style=\"color:").append(valueColor).append("\">")
-                        .append("<b>").append(value != null ? value : "?").append("</b>°").append(unit != null ? unit : "").append("</td>")
+                        .append("<b>").append(value != null ? StringEscapeUtils.escapeHtml4(value) : "?")
+                        .append("</b>°").append(unit != null ? StringEscapeUtils.escapeHtml4(unit) : "")
+                        .append("</td>")
                         .append("</tr>\n");
 
                 pdu.clear();

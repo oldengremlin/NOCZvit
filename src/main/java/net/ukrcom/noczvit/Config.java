@@ -19,6 +19,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,7 +45,10 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #claudeProperties()} → {@link #historyResumeProperties()} → {@link #trapProperties()}.
  */
 @Slf4j
-@ToString(includeFieldNames = true)
+// secrets are excluded so that any future log.debug("config={}", config) cannot leak them;
+// `properties` holds every key-value pair, i.e. all secrets a second time
+@ToString(includeFieldNames = true, exclude = {"properties", "zabbixPassword", "mailPassword",
+    "claudeApiKey", "accountMssqlPassword", "accequipmentMssqlPassword"})
 @EqualsAndHashCode
 @Getter
 public class Config {
@@ -122,7 +126,6 @@ public class Config {
     @NonNull
     private String snmpTrapFolder;
     private int snmpTrapDedupSeconds;
-    private int snmpTrapCorrelationMinutes;
     private int snmpTrapColdstartLinkMinutes;
     @NonNull
     private String ramosTrapFolder;
@@ -185,7 +188,6 @@ public class Config {
         claudeExplicit = null;
         snmpTrapFolder = "";
         snmpTrapDedupSeconds = 30;
-        snmpTrapCorrelationMinutes = 10;
         snmpTrapColdstartLinkMinutes = 5;
         ramosTrapFolder = "";
     }
@@ -197,8 +199,10 @@ public class Config {
      * @throws IOException if the file is missing or unreadable
      */
     private void loadProperties() throws IOException {
+        // load(InputStream) decodes as ISO-8859-1 per spec, which mangles Cyrillic values
+        // such as `snmp.ramos=...:name=Датацентр` (they go straight into the report HTML).
         if (configPath != null) {
-            try (InputStream input = new FileInputStream(configPath)) {
+            try (Reader input = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
                 properties.load(input);
             } catch (IOException e) {
                 throw new IOException("Failed to load configuration file: " + configPath, e);
@@ -208,7 +212,7 @@ public class Config {
                 if (input == null) {
                     throw new IOException("Default noczvit.properties not found in resources");
                 }
-                properties.load(input);
+                properties.load(new InputStreamReader(input, StandardCharsets.UTF_8));
             }
         }
     }
@@ -508,14 +512,6 @@ public class Config {
             }
         } catch (NumberFormatException e) {
             log.warn("snmp.trap.dedup.seconds: invalid value, using default {}", snmpTrapDedupSeconds);
-        }
-        try {
-            String corr = stripInlineComment(properties.getProperty("snmp.trap.correlation.minutes", ""));
-            if (!corr.isBlank()) {
-                snmpTrapCorrelationMinutes = Integer.parseInt(corr);
-            }
-        } catch (NumberFormatException e) {
-            log.warn("snmp.trap.correlation.minutes: invalid value, using default {}", snmpTrapCorrelationMinutes);
         }
         try {
             String link = stripInlineComment(properties.getProperty("snmp.trap.coldstart.link.minutes", ""));

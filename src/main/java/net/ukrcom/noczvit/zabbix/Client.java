@@ -29,6 +29,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -59,6 +60,13 @@ public class Client {
     private static final AtomicInteger ID_GEN = new AtomicInteger(1);
     private static final Gson GSON = new Gson();
 
+    // Without these a stalled Zabbix front-end hangs the whole cron run indefinitely:
+    // java.net.http.HttpClient has no default connect or read timeout.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    /** chart2.php renders PNGs and is legitimately slower than the JSON-RPC endpoint. */
+    private static final Duration GRAPH_TIMEOUT = Duration.ofSeconds(60);
+
     private final Config config;
     private final HttpClient http;
     private volatile String authToken;
@@ -79,6 +87,7 @@ public class Client {
                 .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(CONNECT_TIMEOUT)
                 .build();
     }
 
@@ -105,11 +114,12 @@ public class Client {
             JsonElement result = resp.get("result");
             if (result != null && result.isJsonPrimitive()) {
                 authToken = result.getAsString();
-                log.debug("Zabbix API login OK, token={}...", authToken.substring(0, 8));
+                log.debug("Zabbix API login OK, token={}...",
+                        authToken.substring(0, Math.min(8, authToken.length())));
                 return true;
             }
             log.warn("Zabbix API login failed: {}", resp);
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix API login error: {}", e.getMessage());
         }
         return false;
@@ -132,6 +142,7 @@ public class Client {
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(loginUrl))
                     .header("Content-Type", "application/x-www-form-urlencoded")
+                    .timeout(REQUEST_TIMEOUT)
                     .POST(HttpRequest.BodyPublishers.ofString(formBody))
                     .build();
 
@@ -153,7 +164,7 @@ public class Client {
             }
 
             return hasCookie;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix web login error: {}", e.getMessage());
             return false;
         }
@@ -244,7 +255,7 @@ public class Client {
             log.debug("Zabbix event.get: {} подій у [{}, {}]", problems.size(), from, to);
             return problems;
 
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix event.get помилка: {}", e.getMessage());
             return Collections.emptyList();
         }
@@ -275,7 +286,7 @@ public class Client {
                 map.put(obj.get("eventid").getAsString(), obj.get("clock").getAsLong());
             }
             return map;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix event.get (recovery clocks) помилка: {}", e.getMessage());
             return Collections.emptyMap();
         }
@@ -314,7 +325,7 @@ public class Client {
                 }
             }
             return map;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix trigger.get fallback помилка: {}", e.getMessage());
             return Collections.emptyMap();
         }
@@ -371,7 +382,7 @@ public class Client {
                     + "<img src=\"data:image/png;base64," + Base64.getEncoder().encodeToString(img) + "\""
                     + " width=\"" + w + "\" height=\"" + h + "\" style=\"display:block;max-width:100%\">"
                     + "</td></tr>\n";
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix {}: {}", debugLabel, e.getMessage());
             return "";
         }
@@ -457,6 +468,7 @@ public class Client {
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(GRAPH_TIMEOUT)
                 .GET()
                 .build();
 
@@ -506,6 +518,7 @@ public class Client {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(config.getZabbixApi()))
                 .header("Content-Type", "application/json")
+                .timeout(REQUEST_TIMEOUT)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
 

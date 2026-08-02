@@ -20,6 +20,7 @@ import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -55,8 +56,13 @@ public class SummaryClient {
     private final boolean debug;
 
     public SummaryClient(Config config) {
+        // SDK defaults to a 10-minute request timeout plus retries; the call is synchronous
+        // on the main thread after all parallel branches are done, so a stalled API would
+        // delay the report by tens of minutes. Summary already degrades to "" on failure.
         this.client = AnthropicOkHttpClient.builder()
                 .apiKey(config.getClaudeApiKey())
+                .timeout(Duration.ofSeconds(90))
+                .maxRetries(1)
                 .build();
         this.model = config.getClaudeModel();
         this.maxTokens = config.getClaudeMaxTokens();
@@ -345,13 +351,12 @@ public class SummaryClient {
     // (?i) alone does not fold Cyrillic case in Java — (?iu) is required
     private static final String CYR = "[а-яА-ЯіІїЇєЄёЁ]";
     private static String fixRussianisms(String text) {
-        // "события/собитія" → "події/подій/подіях"
-        text = text.replaceAll("(?iu)со[бб]ити[яьa]", "події");
-        text = text.replaceAll("(?iu)событи[яьa]", "події");
-        text = text.replaceAll("(?iu)со[бб]ити[йi]", "подій");
-        text = text.replaceAll("(?iu)событи[йi]", "подій");
-        text = text.replaceAll("(?iu)со[бб]ити[аa]х", "подіях");
-        text = text.replaceAll("(?iu)событи[аa]х", "подіях");
+        // "события/собитія" → "події/подій/подіях"; longer forms first, otherwise "событиях"
+        // is eaten by the "…ия" rule and yields "подіїх". Stem soб[ыи]т[иі] covers all three
+        // spellings seen from the model: событи-, собити-, собиті-.
+        text = text.replaceAll("(?iu)соб[ыи]т[иі][яa]х", "подіях");
+        text = text.replaceAll("(?iu)соб[ыи]т[иі][йi]", "подій");
+        text = text.replaceAll("(?iu)соб[ыи]т[иі][яьa]", "події");
         // "смена" (shift) → "зміна"; longer forms first to avoid partial matches
         text = text.replaceAll("(?iu)(?<!" + CYR + ")сменою(?!" + CYR + ")", "зміною");
         text = text.replaceAll("(?iu)(?<!" + CYR + ")смен[иы](?!" + CYR + ")", "зміни");
