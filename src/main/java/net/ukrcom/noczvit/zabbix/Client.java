@@ -114,11 +114,12 @@ public class Client {
             JsonElement result = resp.get("result");
             if (result != null && result.isJsonPrimitive()) {
                 authToken = result.getAsString();
-                log.debug("Zabbix API login OK, token={}...", authToken.substring(0, 8));
+                log.debug("Zabbix API login OK, token={}...",
+                        authToken.substring(0, Math.min(8, authToken.length())));
                 return true;
             }
             log.warn("Zabbix API login failed: {}", resp);
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix API login error: {}", e.getMessage());
         }
         return false;
@@ -163,7 +164,7 @@ public class Client {
             }
 
             return hasCookie;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix web login error: {}", e.getMessage());
             return false;
         }
@@ -254,7 +255,7 @@ public class Client {
             log.debug("Zabbix event.get: {} подій у [{}, {}]", problems.size(), from, to);
             return problems;
 
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix event.get помилка: {}", e.getMessage());
             return Collections.emptyList();
         }
@@ -285,7 +286,7 @@ public class Client {
                 map.put(obj.get("eventid").getAsString(), obj.get("clock").getAsLong());
             }
             return map;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix event.get (recovery clocks) помилка: {}", e.getMessage());
             return Collections.emptyMap();
         }
@@ -324,7 +325,7 @@ public class Client {
                 }
             }
             return map;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix trigger.get fallback помилка: {}", e.getMessage());
             return Collections.emptyMap();
         }
@@ -381,7 +382,7 @@ public class Client {
                     + "<img src=\"data:image/png;base64," + Base64.getEncoder().encodeToString(img) + "\""
                     + " width=\"" + w + "\" height=\"" + h + "\" style=\"display:block;max-width:100%\">"
                     + "</td></tr>\n";
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix {}: {}", debugLabel, e.getMessage());
             return "";
         }

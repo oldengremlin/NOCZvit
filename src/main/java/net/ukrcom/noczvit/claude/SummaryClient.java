@@ -351,13 +351,12 @@ public class SummaryClient {
     // (?i) alone does not fold Cyrillic case in Java — (?iu) is required
     private static final String CYR = "[а-яА-ЯіІїЇєЄёЁ]";
     private static String fixRussianisms(String text) {
-        // "события/собитія" → "події/подій/подіях"
-        text = text.replaceAll("(?iu)со[бб]ити[яьa]", "події");
-        text = text.replaceAll("(?iu)событи[яьa]", "події");
-        text = text.replaceAll("(?iu)со[бб]ити[йi]", "подій");
-        text = text.replaceAll("(?iu)событи[йi]", "подій");
-        text = text.replaceAll("(?iu)со[бб]ити[аa]х", "подіях");
-        text = text.replaceAll("(?iu)событи[аa]х", "подіях");
+        // "события/собитія" → "події/подій/подіях"; longer forms first, otherwise "событиях"
+        // is eaten by the "…ия" rule and yields "подіїх". Stem soб[ыи]т[иі] covers all three
+        // spellings seen from the model: событи-, собити-, собиті-.
+        text = text.replaceAll("(?iu)соб[ыи]т[иі][яa]х", "подіях");
+        text = text.replaceAll("(?iu)соб[ыи]т[иі][йi]", "подій");
+        text = text.replaceAll("(?iu)соб[ыи]т[иі][яьa]", "події");
         // "смена" (shift) → "зміна"; longer forms first to avoid partial matches
         text = text.replaceAll("(?iu)(?<!" + CYR + ")сменою(?!" + CYR + ")", "зміною");
         text = text.replaceAll("(?iu)(?<!" + CYR + ")смен[иы](?!" + CYR + ")", "зміни");

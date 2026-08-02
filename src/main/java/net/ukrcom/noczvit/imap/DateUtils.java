@@ -14,14 +14,19 @@
  */
 package net.ukrcom.noczvit.imap;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Package-private utilities for date string localisation.
+ * Utilities for date string localisation and zone-safe timestamp conversion.
  */
-class DateUtils {
+public class DateUtils {
 
     private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
     private static final Map<String, String> MONTH_MAP = Map.ofEntries(
@@ -49,5 +54,25 @@ class DateUtils {
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * Converts a device-reported local timestamp to an {@link Instant}, using the offset that was
+     * in effect when the carrying email was sent to disambiguate.
+     *
+     * <p>RAMOS and Emerson traps report wall-clock time without a zone. During the autumn DST
+     * overlap the same wall-clock hour occurs twice, and {@code atZone()} always picks the first
+     * (summer) one — putting events from the second pass an hour in the past, which can drop them
+     * out of the report window or order a Cleared trap before its Active. The email {@code Date:}
+     * header carries a real offset stamped moments later, so it identifies the correct pass.
+     *
+     * @param local             wall-clock timestamp reported by the device
+     * @param referenceEpochSec epoch seconds of the carrying email ({@code RawMessage.unixDate()})
+     * @return resolved instant; for gap (spring-forward) times java.time shifts forward as usual
+     */
+    public static Instant toInstant(LocalDateTime local, long referenceEpochSec) {
+        ZoneId zone = ZoneId.systemDefault();
+        ZoneOffset preferred = zone.getRules().getOffset(Instant.ofEpochSecond(referenceEpochSec));
+        return ZonedDateTime.ofLocal(local, zone, preferred).toInstant();
     }
 }

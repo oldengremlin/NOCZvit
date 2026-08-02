@@ -14,11 +14,9 @@
  */
 package net.ukrcom.noczvit;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -228,21 +226,35 @@ public class Debtors {
             return result;
         }
         try {
-            JsonArray array = JsonParser.parseString(paramValue).getAsJsonArray();
-            for (JsonElement element : array) {
+            JsonElement root = JsonParser.parseString(paramValue);
+            if (!root.isJsonArray()) {
+                log.warn("Debtors: ServicesLastState is not a JSON array, skipping");
+                return result;
+            }
+            for (JsonElement element : root.getAsJsonArray()) {
+                if (!element.isJsonObject()) {
+                    continue;
+                }
                 JsonObject obj = element.getAsJsonObject();
-                String firmId = obj.get("Key").getAsString();
-                int customerId = obj.get("Value").getAsInt();
-                Map<String, String> firmMap = accountMap.get(customerId);
+                JsonElement key = obj.get("Key");
+                JsonElement value = obj.get("Value");
+                if (key == null || value == null
+                        || !key.isJsonPrimitive() || !value.isJsonPrimitive()) {
+                    continue;
+                }
+                Map<String, String> firmMap = accountMap.get(value.getAsInt());
                 if (firmMap != null) {
-                    String title = firmMap.get(firmId);
+                    String title = firmMap.get(key.getAsString());
                     if (title != null) {
-                        result.add(customerId + ", " + title);
+                        result.add(value.getAsInt() + ", " + title);
                     }
                 }
             }
-        } catch (JsonSyntaxException e) {
-            log.warn("Debtors JSON parse error: {}", e.getMessage());
+            // A single malformed ServicesLastState row used to abort the entire report:
+            // getAsJsonArray/getAsInt throw IllegalState/NumberFormat/UnsupportedOperation,
+            // none of which JsonSyntaxException covers, and the failure propagated to exit(1).
+        } catch (RuntimeException e) {
+            log.warn("Debtors JSON parse error: {}", e.toString());
         }
         return result;
     }

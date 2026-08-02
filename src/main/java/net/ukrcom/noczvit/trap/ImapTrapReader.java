@@ -25,6 +25,7 @@ import jakarta.mail.Session;
 import jakarta.mail.search.SearchTerm;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -133,9 +134,14 @@ public class ImapTrapReader {
                             public boolean match(Message message) {
                                 try {
                                     Date sentDate = message.getSentDate();
+                                    // null for a message without a Date: header — an NPE here
+                                    // would escape search() and abort the whole report
+                                    if (sentDate == null) {
+                                        return false;
+                                    }
                                     long unixDate = sentDate.getTime() / 1000;
                                     return unixDate >= fromEpoch && unixDate <= toEpoch;
-                                } catch (MessagingException e) {
+                                } catch (MessagingException | RuntimeException e) {
                                     return false;
                                 }
                             }
@@ -223,8 +229,15 @@ public class ImapTrapReader {
             try {
                 unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
             } catch (DateTimeParseException e) {
-                log.debug("ImapTrapReader: failed to parse date «{}»", dateStr);
-                return Optional.empty();
+                // See ImapReader: the strict pattern rejects legitimate RFC 5322 forms such as
+                // a trailing "(EEST)" zone comment, so fall back to the lenient MailDateFormat.
+                Date sent = msg.getSentDate();
+                if (sent == null) {
+                    log.warn("ImapTrapReader: unparseable Date «{}» and no sent date, skipping", dateStr);
+                    return Optional.empty();
+                }
+                unixDate = sent.getTime() / 1000;
+                log.debug("ImapTrapReader: Date «{}» not in strict format, used lenient parse", dateStr);
             }
             String body;
             try {
@@ -242,22 +255,43 @@ public class ImapTrapReader {
 
     private String extractText(Message message) throws MessagingException, IOException {
         if (message.isMimeType("text/plain")) {
-            Object content = message.getContent();
-            return switch (content) {
-                case String s -> s;
-                case InputStream is -> new String(is.readAllBytes(), "UTF-8");
-                default -> "";
-            };
+            return contentAsText(message.getContent());
         }
         if (message.isMimeType("multipart/*")) {
-            Multipart multipart = (Multipart) message.getContent();
-            for (int i = 0; i < multipart.getCount(); i++) {
-                BodyPart part = multipart.getBodyPart(i);
-                if (part.isMimeType("text/plain")) {
-                    return (String) part.getContent();
+            return extractText((Multipart) message.getContent());
+        }
+        return "";
+    }
+
+    /**
+     * Walks a multipart tree depth-first and returns the first {@code text/plain} part found.
+     *
+     * <p>Recursion is required: a trap mail carrying an attachment is typically
+     * {@code multipart/mixed → multipart/alternative → text/plain}, and a flat scan of the top
+     * level would silently yield an empty body, dropping the trap.
+     */
+    private String extractText(Multipart multipart) throws MessagingException, IOException {
+        for (int i = 0; i < multipart.getCount(); i++) {
+            BodyPart part = multipart.getBodyPart(i);
+            if (part.isMimeType("text/plain")) {
+                return contentAsText(part.getContent());
+            }
+            if (part.getContent() instanceof Multipart nested) {
+                String text = extractText(nested);
+                if (!text.isEmpty()) {
+                    return text;
                 }
             }
         }
         return "";
+    }
+
+    /** Normalises a MIME part payload to text; {@code InputStream} parts are read as UTF-8. */
+    private static String contentAsText(Object content) throws IOException {
+        return switch (content) {
+            case String s -> s;
+            case InputStream is -> new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            default -> "";
+        };
     }
 }
