@@ -6,6 +6,25 @@
 
 ---
 
+## [1.17.0] — 2026-08-02
+
+### Додано
+- **`RamosTrapParser.expandAbbreviations()`**: розгортання абревіатури `AVR` → «автоматичний ввід резерву» у назвах датчиків (регістронезалежно, `\bAVR\b`) — для коректного контексту при передаванні Claude
+- **Стан `Sensor Error` у RAMOS**: додано до `REPORTABLE_STATES` → відображається в HTML-таблиці звіту (масова поява зазвичай означає перезавантаження контролера); до Claude **не передається**
+- **`ZabbixIncidentConverter.resolveDeviceWord()`**: повна матриця типів пристроїв за hostname-префіксом — `adlink*` → «контролері сухих контактів», `alca*`/`ies*` → «DSLAM», `a*` → «кондиціонері», `r*` → «маршрутизаторі», `s*` → «комутаторі», `p*` → «устаткуванні безперебійного живлення»
+
+### Змінено
+- **`RamosTrapSection`**: нейтральний сірий фон рядків замість кольорового (`ramos-crit` / `ramos-warn` CSS-класи видалено); стиль відповідає іншим таблицям звіту
+- **`RamosTrapSection`**: поле `sensorType` виключено з plain-text блоку для Claude (залишається в HTML-таблиці); усуває некоректний переклад «Temperature Array» → «температура скупчення»
+- **Виправлено шлях `ramos.trap.folder`** у `noczvit.properties.sample`: `INBOX.Internal.SNMP Traps` (замість неіснуючого `INBOX.Internal.SNMP Traps.RAMOS`)
+
+### Виправлено
+- **`SummaryClient.fixRussianisms()`**: усі флаги `(?i)` замінено на `(?iu)` — Java `CASE_INSENSITIVE` не охоплює Кирилицю без `UNICODE_CASE`; додано заміни «конец» (усі відмінки) → «кінець», «наконец» → «врешті-решт», «смена/смени/смену/смені/сменою» → «зміна/зміни/зміну/зміні/зміною»
+- **`AdlinkIncidentParser.ADLINK_PATTERN`** та **`ZabbixIncidentConverter.TRAP_CARD_PATTERN`**: додано `(?i)` — рядки `Trap card N, port N, line N` від різних версій прошивки можуть мати різний регістр
+- **`ZabbixIncidentConverter`**: `s*`-хости (swіtch) правильно визначаються як «комутатор» замість «маршрутизатор»; видалено надлишкову перевірку `!host.startsWith("adlink")`
+
+---
+
 ## [1.16.0] — 2026-07-31
 
 ### Додано
