@@ -111,7 +111,7 @@ public class RamosTrapParser {
 
             // Normalise multiline hex: collapse internal newlines + leading whitespace into a space
             String sensorNameNorm = sensorNameRaw.replaceAll("[\\r\\n]+[ \\t]*", " ").strip();
-            String sensorName = decodeSensorName(sensorNameNorm);
+            String sensorName = expandAbbreviations(decodeSensorName(sensorNameNorm));
             String room = extractRoom(sensorName);
 
             Instant timestamp;
@@ -145,6 +145,10 @@ public class RamosTrapParser {
             log.debug("RamosTrapParser: hex decode failed for «{}»: {}", raw, e.getMessage());
             return raw;
         }
+    }
+
+    private static String expandAbbreviations(String name) {
+        return name.replaceAll("(?i)\\bAVR\\b", "автоматичний ввід резерву");
     }
 
     private static String extractRoom(String sensorName) {
