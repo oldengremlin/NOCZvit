@@ -38,7 +38,9 @@ import net.ukrcom.noczvit.model.Incident.Status;
  * вирішено</li>
  * <li>Локація шукається у PD-словнику за hostname; якщо не знайдено — hostname
  * залишається як локація і додається до {@code reviewNames}</li>
- * <li>Якщо hostname починається з 'r' — у опис додається «маршрутизаторі»</li>
+ * <li>Якщо hostname починається з 'r' — у опис додається «маршрутизаторі» (крім
+ * {@code ramos} — це вузол моніторингу датацентру, а не роутер); {@code uvpn} та
+ * {@code noc12593} теж роутери, хоч і не починаються з 'r'</li>
  * </ul>
  */
 @Slf4j
@@ -94,12 +96,16 @@ public class ZabbixIncidentConverter {
 
     /**
      * Maps hostname prefix to a Ukrainian device-type word used in incident descriptions.
-     * adlink → dry-contact device (no word); alca/ies → DSLAM; a* → кондиціонер;
+     * adlink → dry-contact device (no word); alca/ies → DSLAM; ramos → no word
+     * (datacenter monitoring unit, not a router despite the 'r'); uvpn/noc12593 →
+     * маршрутизатор (routers whose hostname doesn't start with 'r'); a* → кондиціонер;
      * r* → маршрутизатор; s* → комутатор; p* → ДБЖ.
      */
     private static String resolveDeviceWord(String host) {
         if (host.startsWith("adlink")) return "контролері сухих контактів ";
         if (host.startsWith("alca") || host.startsWith("ies")) return "DSLAM ";
+        if (host.startsWith("ramos")) return "";
+        if (host.startsWith("uvpn") || host.startsWith("noc12593")) return "маршрутизаторі ";
         if (host.startsWith("a")) return "кондиціонері ";
         if (host.startsWith("r")) return "маршрутизаторі ";
         if (host.startsWith("s")) return "комутаторі ";
