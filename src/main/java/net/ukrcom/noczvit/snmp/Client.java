@@ -166,12 +166,11 @@ public class Client {
             log.debug("{} -> {} -> {}", host + "." + domain, config.getHosts().get(hostname).get("desc"), desc);
             log.debug("{} -> {} -> {}", host + "." + domain, config.getHosts().get(hostname).get("temp"), temp);
 
-            String graphRow = (zabbix != null) ? zabbix.getGraphRow(host, desc, from, to) : "";
             return new CelsiusResult(
                     "<td><b>" + host + "." + domain + "</b></td>"
                     + "<td>" + desc + "</td>"
                     + "<td><b>" + temp + "</b>°C</td>",
-                    graphRow
+                    (zabbix != null) ? zabbix.getGraphRow(host, desc, from, to) : ""
             );
         } catch (IOException e) {
             log.warn("SNMP celsius {}: {}", host, e.getMessage());

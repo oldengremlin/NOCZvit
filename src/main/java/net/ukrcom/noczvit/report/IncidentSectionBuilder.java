@@ -97,9 +97,7 @@ public class IncidentSectionBuilder {
             return html.toString();
         }
 
-        List<IncidentRow> rows = pairIncidents(incidents);
-
-        Map<String, List<IncidentRow>> byLocation = rows.stream()
+        Map<String, List<IncidentRow>> byLocation = pairIncidents(incidents).stream()
                 .collect(Collectors.groupingBy(IncidentRow::location, LinkedHashMap::new, Collectors.toList()));
 
         AtomicInteger n = new AtomicInteger(0);

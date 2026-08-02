@@ -92,11 +92,10 @@ public class Debtors {
 //              ФУНКЦІОНАЛЬНИЙ СТИЛЬ
 //
                 AtomicInteger n = new AtomicInteger(0);
-                String debtorsHtml = fetchDebtors(buildAccountMap()).stream()
+                returnMessage.append(fetchDebtors(buildAccountMap()).stream()
                         .map(debtor -> "<tr><td>" + n.incrementAndGet() + ".</td>"
                         + "<td>" + StringEscapeUtils.escapeHtml4(debtor) + "</td></tr>\n")
-                        .collect(Collectors.joining());
-                returnMessage.append(debtorsHtml);
+                        .collect(Collectors.joining()));
 
             } catch (SQLException e) {
                 log.error("Debtors DB error: {}", e.getMessage());
