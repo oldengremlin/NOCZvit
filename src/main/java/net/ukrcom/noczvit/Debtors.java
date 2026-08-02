@@ -75,22 +75,8 @@ public class Debtors {
 
         if (config.isDebtorsEnabled()) {
             try {
-//
-//              ІМПЕРАТИВНИЙ СТИЛЬ
-//
-                /*
-                int n = 0;
-                Map<Integer, Map<String, String>> accountMap = buildAccountMap();
-                for (String debtor : fetchDebtors(accountMap)) {
-                    returnMessage.append("<tr><td>").append(++n).append(".</td>")
-                            .append("<td>").append(StringEscapeUtils.escapeHtml4(debtor)).append("</td></tr>\n");
-                }
-                 */
-//
-//              ФУНКЦІОНАЛЬНИЙ СТИЛЬ
-//
                 AtomicInteger n = new AtomicInteger(0);
-                returnMessage.append(fetchDebtors(buildAccountMap()).stream()
+                returnMessage.append(fetchDebtors().stream()
                         .map(debtor -> "<tr><td>" + n.incrementAndGet() + ".</td>"
                         + "<td>" + StringEscapeUtils.escapeHtml4(debtor) + "</td></tr>\n")
                         .collect(Collectors.joining()));
@@ -175,32 +161,78 @@ public class Debtors {
         return DriverManager.getConnection(url, user, password);
     }
 
+    /** One entry of the {@code ServicesLastState} JSON array. */
+    private record ServiceEntry(String firmId, int customerId) {
+    }
+
+    /** MSSQL caps a statement at 2100 parameters; stay well below when building the IN list. */
+    private static final int ID_BATCH = 1000;
+
     /**
-     * Loads {@code Customer_id → FirmId → Title} from the account DB's {@code Customers} table.
+     * Loads {@code Customer_id → FirmId → Title} for the given customer IDs only.
+     *
+     * <p>The blocked-subscriber list holds tens of entries while {@code Customers} holds tens of
+     * thousands of rows, so the IDs are resolved with a filtered query instead of pulling the
+     * whole table into a nested map. The two databases live on separate servers, which is exactly
+     * why the read order is inverted: the ID set comes from the accequipment DB first.
      */
-    private Map<Integer, Map<String, String>> buildAccountMap() throws SQLException {
+    private Map<Integer, Map<String, String>> buildAccountMap(List<Integer> customerIds) throws SQLException {
         Map<Integer, Map<String, String>> accountMap = new HashMap<>();
+        if (customerIds.isEmpty()) {
+            return accountMap;
+        }
         try (Connection conn = connectTo(
                 config.getAccountMssqlServer(), config.getAccountMssqlDatabase(),
-                config.getAccountMssqlUser(), config.getAccountMssqlPassword()); PreparedStatement stmt = conn.prepareStatement(
-             "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]"); ResultSet rs = stmt.executeQuery()) {
-            while (rs.next()) {
-                int customerId = rs.getInt("Customer_id");
-                String firmId = rs.getString("FirmId");
-                String title = rs.getString("Title");
-                accountMap.computeIfAbsent(customerId, k -> new HashMap<>())
-                        .putIfAbsent(firmId, title);
+                config.getAccountMssqlUser(), config.getAccountMssqlPassword())) {
+            for (int off = 0; off < customerIds.size(); off += ID_BATCH) {
+                List<Integer> batch = customerIds.subList(off, Math.min(off + ID_BATCH, customerIds.size()));
+                // placeholders are generated from the batch size, values are always bound
+                String placeholders = batch.stream().map(id -> "?").collect(Collectors.joining(","));
+                try (PreparedStatement stmt = conn.prepareStatement(
+                        "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]"
+                        + " WHERE Customer_id IN (" + placeholders + ")")) {
+                    for (int i = 0; i < batch.size(); i++) {
+                        stmt.setInt(i + 1, batch.get(i));
+                    }
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        while (rs.next()) {
+                            accountMap.computeIfAbsent(rs.getInt("Customer_id"), k -> new HashMap<>())
+                                    .putIfAbsent(rs.getString("FirmId"), rs.getString("Title"));
+                        }
+                    }
+                }
             }
         }
         return accountMap;
     }
 
     /**
-     * Reads the latest {@code ServicesLastState} JSON blob from the accequipment DB and
-     * resolves each entry to a subscriber name using {@code accountMap}.
+     * Reads the latest {@code ServicesLastState} blob from the accequipment DB, then resolves the
+     * referenced customer IDs to subscriber names via the account DB.
      */
-    private List<String> fetchDebtors(Map<Integer, Map<String, String>> accountMap) throws SQLException {
+    private List<String> fetchDebtors() throws SQLException {
+        List<ServiceEntry> entries = readServicesLastState();
+        if (entries.isEmpty()) {
+            return List.of();
+        }
+        Map<Integer, Map<String, String>> accountMap = buildAccountMap(
+                entries.stream().map(ServiceEntry::customerId).distinct().toList());
+
         List<String> result = new ArrayList<>();
+        for (ServiceEntry entry : entries) {
+            Map<String, String> firmMap = accountMap.get(entry.customerId());
+            if (firmMap != null) {
+                String title = firmMap.get(entry.firmId());
+                if (title != null) {
+                    result.add(entry.customerId() + ", " + title);
+                }
+            }
+        }
+        return result;
+    }
+
+    /** Reads the most recent {@code ServicesLastState} parameter value and parses it. */
+    private List<ServiceEntry> readServicesLastState() throws SQLException {
         try (Connection conn = connectTo(
                 config.getAccequipmentMssqlServer(), config.getAccequipmentMssqlDatabase(),
                 config.getAccequipmentMssqlUser(), config.getAccequipmentMssqlPassword()); PreparedStatement stmt = conn.prepareStatement(
@@ -208,20 +240,17 @@ public class Debtors {
              + " WHERE [ParamName] = ? ORDER BY [ParamDate] DESC")) {
             stmt.setString(1, "ServicesLastState");
             try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    result = parseServicesLastState(rs.getString(1), accountMap);
-                }
+                return rs.next() ? parseServicesLastState(rs.getString(1)) : List.of();
             }
         }
-        return result;
     }
 
     /**
-     * Parses the {@code ServicesLastState} JSON array ({@code [{"Key":firmId,"Value":customerId},...]}
-     * ) into a list of {@code "customerId, Title"} strings, resolved via {@code accountMap}.
+     * Parses the {@code ServicesLastState} JSON array
+     * ({@code [{"Key":firmId,"Value":customerId},...]}) into {@link ServiceEntry} records.
      */
-    private List<String> parseServicesLastState(String paramValue, Map<Integer, Map<String, String>> accountMap) {
-        List<String> result = new ArrayList<>();
+    private List<ServiceEntry> parseServicesLastState(String paramValue) {
+        List<ServiceEntry> result = new ArrayList<>();
         if (paramValue == null || paramValue.isBlank()) {
             return result;
         }
@@ -242,13 +271,7 @@ public class Debtors {
                         || !key.isJsonPrimitive() || !value.isJsonPrimitive()) {
                     continue;
                 }
-                Map<String, String> firmMap = accountMap.get(value.getAsInt());
-                if (firmMap != null) {
-                    String title = firmMap.get(key.getAsString());
-                    if (title != null) {
-                        result.add(value.getAsInt() + ", " + title);
-                    }
-                }
+                result.add(new ServiceEntry(key.getAsString(), value.getAsInt()));
             }
             // A single malformed ServicesLastState row used to abort the entire report:
             // getAsJsonArray/getAsInt throw IllegalState/NumberFormat/UnsupportedOperation,

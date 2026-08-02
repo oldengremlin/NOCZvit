@@ -22,7 +22,6 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.BodyPart;
 import jakarta.mail.Session;
-import jakarta.mail.search.SearchTerm;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +36,7 @@ import java.util.Optional;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
+import net.ukrcom.noczvit.imap.ImapReader;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
@@ -129,23 +129,9 @@ public class ImapTrapReader {
                     if (fetchAll) {
                         messages = imapFolder.getMessages();
                     } else {
-                        messages = imapFolder.search(new SearchTerm() {
-                            @Override
-                            public boolean match(Message message) {
-                                try {
-                                    Date sentDate = message.getSentDate();
-                                    // null for a message without a Date: header — an NPE here
-                                    // would escape search() and abort the whole report
-                                    if (sentDate == null) {
-                                        return false;
-                                    }
-                                    long unixDate = sentDate.getTime() / 1000;
-                                    return unixDate >= fromEpoch && unixDate <= toEpoch;
-                                } catch (MessagingException | RuntimeException e) {
-                                    return false;
-                                }
-                            }
-                        });
+                        // Server-side SEARCH; see ImapReader.dateRangeTerm for why an anonymous
+                        // SearchTerm must not be used here (it downloads the entire folder).
+                        messages = imapFolder.search(ImapReader.dateRangeTerm(fromEpoch, toEpoch));
                     }
 
                     for (Message msg : messages) {

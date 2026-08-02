@@ -22,7 +22,10 @@ import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.Session;
+import jakarta.mail.search.AndTerm;
+import jakarta.mail.search.ComparisonTerm;
 import jakarta.mail.search.SearchTerm;
+import jakarta.mail.search.SentDateTerm;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -108,23 +111,7 @@ public class ImapReader {
                     messages = folder.getMessages();
                 } else {
                     log.info("IMAP filter: sent >= {} && sent <= {}", fromEpoch, toEpoch);
-                    messages = folder.search(new SearchTerm() {
-                        @Override
-                        public boolean match(Message message) {
-                            try {
-                                Date sentDate = message.getSentDate();
-                                // null for a message without a Date: header — an NPE here would
-                                // escape folder.search() and abort the whole report
-                                if (sentDate == null) {
-                                    return false;
-                                }
-                                long unixDate = sentDate.getTime() / 1000;
-                                return unixDate >= fromEpoch && unixDate <= toEpoch;
-                            } catch (MessagingException | RuntimeException e) {
-                                return false;
-                            }
-                        }
-                    });
+                    messages = folder.search(dateRangeTerm(fromEpoch, toEpoch));
                 }
 
                 for (Message msg : messages) {
@@ -134,6 +121,24 @@ public class ImapReader {
             }
         }
         return result;
+    }
+
+    /**
+     * Builds a server-side {@code SEARCH} term for the given epoch range.
+     *
+     * <p>Only standard terms are translated into an IMAP {@code SEARCH} command; an anonymous
+     * {@link jakarta.mail.search.SearchTerm} subclass silently falls back to
+     * {@link jakarta.mail.Folder#search}, which downloads <em>every</em> message in the folder
+     * and calls {@code getSentDate()} on each — the single most expensive operation of a run.
+     *
+     * <p>IMAP {@code SEARCH} compares dates at day granularity, so the range is padded by one day
+     * on each side to stay immune to server/client timezone differences. Exact second-level
+     * trimming already happens downstream (see {@code imap.Client} and {@code NOCZvit}).
+     */
+    public static SearchTerm dateRangeTerm(long fromEpoch, long toEpoch) {
+        return new AndTerm(
+                new SentDateTerm(ComparisonTerm.GE, new Date((fromEpoch - 86400) * 1000)),
+                new SentDateTerm(ComparisonTerm.LE, new Date((toEpoch + 86400) * 1000)));
     }
 
     /**
