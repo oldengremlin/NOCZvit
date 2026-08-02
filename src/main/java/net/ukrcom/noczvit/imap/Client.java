@@ -42,13 +42,15 @@ public class Client {
     private final AdlinkIncidentParser adlinkParser;
 
     /**
-     * Creates the client and loads both dictionaries.
+     * Creates the client using an already-loaded dictionary.
      *
-     * @throws IOException if a dictionary file cannot be read
+     * <p>The dictionary is passed in rather than constructed here so that the whole process
+     * shares one instance: building a second one re-read both files, recompiled every pattern
+     * and gave the parsers a lookup cache separate from the one {@code ZabbixIncidentConverter}
+     * uses.
      */
-    public Client(Config config) throws IOException {
+    public Client(Config config, Dictionary dictionary) {
         this.config = config;
-        Dictionary dictionary = new Dictionary(config);
         this.reader = new ImapReader(config);
         this.pdParser = new PdIncidentParser(dictionary);
         this.osmParser = new OsmIncidentParser(dictionary);

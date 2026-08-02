@@ -185,7 +185,6 @@ public class IncidentSectionBuilder {
         boolean paired = row.start() != null && row.end() != null;
         Incident primary = row.start() != null ? row.start() : row.end();
 
-        String rowClass = "";
 
         String startCell = row.start() != null ? row.start().messageDateStr() : "—";
         String endCell = row.end() != null ? row.end().messageDateStr() : "—";
@@ -209,7 +208,7 @@ public class IncidentSectionBuilder {
         }
 
         String device = StringEscapeUtils.escapeHtml4(row.device());
-        return "<tr" + rowClass + ">"
+        return "<tr>"
                 + "<td>" + n.incrementAndGet() + ".</td>"
                 + "<td>" + startCell + "</td>"
                 + "<td>" + endCell + "</td>"

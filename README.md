@@ -518,7 +518,6 @@ accequipment-mssql-password=secret
 # Підтримує wildcard-патерн (* = будь-які суфікси на тому ж рівні)
 # snmp.trap.folder=INBOX.Internal.SNMP Traps.DC-Room*
 # snmp.trap.dedup.seconds=30
-# snmp.trap.correlation.minutes=10
 # snmp.trap.coldstart.link.minutes=5
 
 # RAMOS трапи (датчики навколишнього середовища CONTEG RAMOS Ultra/Optima — опціонально)

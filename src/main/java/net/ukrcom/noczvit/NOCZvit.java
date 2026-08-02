@@ -123,14 +123,10 @@ public class NOCZvit {
 
                 CompletableFuture<List<Incident>> imapFuture;
                 if (config.isIncidentsEnabled()) {
-                    imapFuture = CompletableFuture.supplyAsync(() -> {
-                        try {
-                            return new net.ukrcom.noczvit.imap.Client(config).prepareImapFolder(
-                                    isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }, ioExecutor);
+                    imapFuture = CompletableFuture.supplyAsync(
+                            () -> new net.ukrcom.noczvit.imap.Client(config, dictionary).prepareImapFolder(
+                                    isInteractive, prevDutyBegin, prevDutyEnd, currDutyBegin, currDutyEnd),
+                            ioExecutor);
                 } else {
                     imapFuture = CompletableFuture.completedFuture(null);
                 }
@@ -189,7 +185,6 @@ public class NOCZvit {
                                     .toList();
                             events = TrapDeduplicator.deduplicate(events, config.getSnmpTrapDedupSeconds());
                             TrapCorrelator.CorrelationResult corr = new TrapCorrelator(
-                                    config.getSnmpTrapCorrelationMinutes(),
                                     config.getSnmpTrapColdstartLinkMinutes()).correlate(events);
                             return new EmersonTrapSection().build(corr.incidents(), corr.unknownTraps());
                         } catch (MessagingException e) {
@@ -283,11 +278,7 @@ public class NOCZvit {
                     + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
                     + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
                     + "tr:nth-child(even) td{background:#f5f7fa}"
-                    + "tr.row-start td{background:#fff0f0}"
-                    + "tr.row-end td{background:#f0fff0}"
                     + "tr.row-critical td{background:#fff0f0}"
-                    + "tr.row-start:nth-child(even) td{background:#f5e2e2}"
-                    + "tr.row-end:nth-child(even) td{background:#e2f5e2}"
                     + "tr.row-critical:nth-child(even) td{background:#f5e2e2}"
                     + "tr:hover td{background:#e8ecf5!important}"
                     + ".section{margin-bottom:20px}"

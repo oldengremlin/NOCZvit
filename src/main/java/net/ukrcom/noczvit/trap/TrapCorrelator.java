@@ -258,16 +258,13 @@ public class TrapCorrelator {
         TRAP_DESCRIPTIONS.put("Cold Start",                           "Перезапуск картки моніторингу.");
     }
 
-    private final int correlationSeconds;
     private final int coldstartLinkSeconds;
 
     /**
-     * @param correlationMinutes    maximum gap (minutes) between Active and Cleared to correlate
      * @param coldstartLinkMinutes  time window (minutes) within which an ADC Cold Start after a PDC
      *                              power restoration is considered related
      */
-    public TrapCorrelator(int correlationMinutes, int coldstartLinkMinutes) {
-        this.correlationSeconds = correlationMinutes * 60;
+    public TrapCorrelator(int coldstartLinkMinutes) {
         this.coldstartLinkSeconds = coldstartLinkMinutes * 60;
     }
 
