@@ -20,6 +20,7 @@ import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -55,8 +56,13 @@ public class SummaryClient {
     private final boolean debug;
 
     public SummaryClient(Config config) {
+        // SDK defaults to a 10-minute request timeout plus retries; the call is synchronous
+        // on the main thread after all parallel branches are done, so a stalled API would
+        // delay the report by tens of minutes. Summary already degrades to "" on failure.
         this.client = AnthropicOkHttpClient.builder()
                 .apiKey(config.getClaudeApiKey())
+                .timeout(Duration.ofSeconds(90))
+                .maxRetries(1)
                 .build();
         this.model = config.getClaudeModel();
         this.maxTokens = config.getClaudeMaxTokens();

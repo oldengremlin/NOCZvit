@@ -823,6 +823,21 @@ At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
 - `dictionary_pd.txt` — фрази для розпізнавання PD-інцидентів
 - `dictionary_sdh.txt` — фрази для розпізнавання SDH-інцидентів
 
+### Мережеві таймаути
+
+Програма запускається з cron, тому будь-яке нескінченне очікування означає мовчазну втрату звіту й накопичення завислих JVM-процесів. Усі зовнішні виклики обмежені:
+
+| Підсистема | Таймаути |
+|---|---|
+| IMAP (`ImapReader`, `ImapTrapReader`) | `connectiontimeout` 10 с, `timeout` 30 с, `writetimeout` 30 с |
+| MSSQL / jTDS (`Debtors`) | `loginTimeout=10`, `socketTimeout=60` у JDBC-URL |
+| Zabbix API (`zabbix/Client`) | `connectTimeout` 10 с, запит 30 с |
+| Zabbix `chart2.php` | запит 60 с (рендер PNG повільніший) |
+| Claude API (`SummaryClient`) | 90 с, `maxRetries(1)` |
+| Уся фаза паралельної ініціалізації | `orTimeout(10 хв)` на `allOf(...)` |
+
+**Важливо при редагуванні IMAP-налаштувань:** префікс властивостей залежить від протоколу. `session.getStore("imaps")` змушує jakarta.mail читати `mail.imaps.*`, тому `mail.imap.timeout` при `mail.ssl=true` не діє взагалі. Код обирає префікс за `config.isMailSsl()` — цю логіку не можна спрощувати до одного жорстко зашитого префікса.
+
 ### Екранування даних у звіті
 
 Звіт — це HTML-лист, який формується конкатенацією рядків, тому всі значення з **недовірених джерел** екрануються через `StringEscapeUtils.escapeHtml4` (commons-text):

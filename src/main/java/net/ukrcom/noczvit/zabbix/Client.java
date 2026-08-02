@@ -29,6 +29,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -59,6 +60,13 @@ public class Client {
     private static final AtomicInteger ID_GEN = new AtomicInteger(1);
     private static final Gson GSON = new Gson();
 
+    // Without these a stalled Zabbix front-end hangs the whole cron run indefinitely:
+    // java.net.http.HttpClient has no default connect or read timeout.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    /** chart2.php renders PNGs and is legitimately slower than the JSON-RPC endpoint. */
+    private static final Duration GRAPH_TIMEOUT = Duration.ofSeconds(60);
+
     private final Config config;
     private final HttpClient http;
     private volatile String authToken;
@@ -79,6 +87,7 @@ public class Client {
                 .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(CONNECT_TIMEOUT)
                 .build();
     }
 
@@ -132,6 +141,7 @@ public class Client {
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(loginUrl))
                     .header("Content-Type", "application/x-www-form-urlencoded")
+                    .timeout(REQUEST_TIMEOUT)
                     .POST(HttpRequest.BodyPublishers.ofString(formBody))
                     .build();
 
@@ -457,6 +467,7 @@ public class Client {
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(GRAPH_TIMEOUT)
                 .GET()
                 .build();
 
@@ -506,6 +517,7 @@ public class Client {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(config.getZabbixApi()))
                 .header("Content-Type", "application/json")
+                .timeout(REQUEST_TIMEOUT)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
 

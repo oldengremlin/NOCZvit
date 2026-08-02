@@ -6,6 +6,22 @@
 
 ---
 
+## [1.17.4] — 2026-08-02
+
+### Виправлено
+- **Мережеві таймаути — раніше не було жодного.** Один завислий сокет підвішував cron-запуск назавжди (`executor.close()` чекає `awaitTermination(1, DAYS)`), процеси накопичувались щодня, а ззовні виглядало «живим»:
+  - **jTDS** (`Debtors`): додано `;loginTimeout=10;socketTimeout=60` — драйвер має дефолт `0`, тобто нескінченне очікування
+  - **Zabbix** (`zabbix/Client`): `connectTimeout` 10 с на клієнті, `timeout` 30 с на JSON-RPC-запитах, 60 с на `chart2.php` (рендер PNG повільніший). `java.net.http.HttpClient` не має дефолтних таймаутів
+  - **Claude** (`SummaryClient`): `timeout` 90 с і `maxRetries(1)` — дефолт SDK 10 хв на запит плюс ретраї, а виклик синхронний у головному потоці
+  - **IMAP** (`ImapReader`, `ImapTrapReader`): таймаути реєструються під префіксом, що відповідає протоколу (`mail.imaps.` при SSL, `mail.imap.` інакше). Раніше `mail.imap.timeout` при `mail.ssl=true` **ігнорувався повністю**, бо `getStore("imaps")` змушує jakarta.mail читати інший префікс. Додано `connectiontimeout` (його не було взагалі)
+- **`orTimeout(10 хв)`** на `allOf(...)` у `NOCZvit` — страхувальна сітка на випадок помилки в таймаутах окремих клієнтів
+- **`log.error("Fatal error", e)`** замість `log.error("Fatal error: {}", e.getMessage())` — загорнутий NPE друкував `Fatal error: null` без жодної діагностики
+
+### Змінено
+- Прибрано мертву властивість `maven.compiler.release=25` з `pom.xml` — `maven-compiler-plugin` має явний `<release>21</release>`, який її перекривав; реальна ціль збірки — Java 21 (байткод major 65)
+
+---
+
 ## [1.17.3] — 2026-08-02
 
 ### Виправлено

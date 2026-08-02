@@ -94,7 +94,12 @@ public class ImapTrapReader {
         props.put("mail.imap.ssl.enable", config.isMailSsl());
         props.put("mail.imap.host", config.getMailHostname());
         props.put("mail.imap.port", config.isMailSsl() ? "993" : "143");
-        props.put("mail.imap.timeout", "5000");
+        // getStore("imaps") makes jakarta.mail read the "mail.imaps." prefix, so timeouts
+        // must be registered under the prefix that matches the protocol actually used.
+        String p = config.isMailSsl() ? "mail.imaps." : "mail.imap.";
+        props.put(p + "connectiontimeout", "10000");
+        props.put(p + "timeout", "30000");
+        props.put(p + "writetimeout", "30000");
 
         List<RawMessage> result = new ArrayList<>();
         Session session = Session.getInstance(props);

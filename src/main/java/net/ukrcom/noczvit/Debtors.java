@@ -169,7 +169,10 @@ public class Debtors {
      */
     private Connection connectTo(String server, String database, String user, String password) throws SQLException {
         String[] hostPort = resolveServer(server);
-        String url = "jdbc:jtds:sqlserver://" + hostPort[0] + ":" + hostPort[1] + "/" + database;
+        // jTDS defaults both timeouts to 0 (= wait forever); a firewalled MSSQL host would
+        // otherwise hang the cron run indefinitely.
+        String url = "jdbc:jtds:sqlserver://" + hostPort[0] + ":" + hostPort[1] + "/" + database
+                + ";loginTimeout=10;socketTimeout=60";
         log.debug("Debtors connecting: {}", url);
         return DriverManager.getConnection(url, user, password);
     }

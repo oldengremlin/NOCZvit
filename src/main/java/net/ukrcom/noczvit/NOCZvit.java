@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,9 @@ public class NOCZvit {
 
     /** Date-time format used throughout the report for display and prompt strings. */
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** Upper bound for the whole parallel init phase; well above any healthy run. */
+    private static final int INIT_TIMEOUT_MINUTES = 10;
 
     /**
      * Application entry point.
@@ -220,8 +224,11 @@ public class NOCZvit {
                 }
 
                 try {
+                    // Safety net: per-protocol timeouts are set in each client, but a bug there
+                    // would otherwise hang the cron run forever (executor.close() waits 1 day).
                     CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture,
-                            trapFuture, ramosTrapFuture).join();
+                            trapFuture, ramosTrapFuture)
+                            .orTimeout(INIT_TIMEOUT_MINUTES, TimeUnit.MINUTES).join();
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause();
                     if (cause instanceof RuntimeException re && re.getCause() instanceof MessagingException me) {
@@ -342,7 +349,8 @@ public class NOCZvit {
             new EmailSender(config).sendReport(subject, message.toString());
 
         } catch (MessagingException | IOException e) {
-            log.error("Fatal error: {}", e.getMessage());
+            // full stack trace: a wrapped NPE used to print "Fatal error: null" with no context
+            log.error("Fatal error", e);
             System.exit(1);
         }
     }
