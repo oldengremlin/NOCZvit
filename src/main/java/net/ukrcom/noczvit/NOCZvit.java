@@ -339,8 +339,7 @@ public class NOCZvit {
 
             message.append("</body></html>");
 
-            EmailSender emailSender = new EmailSender(config);
-            emailSender.sendReport(subject, message.toString());
+            new EmailSender(config).sendReport(subject, message.toString());
 
         } catch (MessagingException | IOException e) {
             log.error("Fatal error: {}", e.getMessage());
