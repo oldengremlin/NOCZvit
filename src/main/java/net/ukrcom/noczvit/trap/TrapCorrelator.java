@@ -60,7 +60,8 @@ public class TrapCorrelator {
     private static final Set<String> NO_UNRESOLVED_SUFFIX = Set.of(
             "Active:Alarm:Battery Discharging",
             "Active:Alarm:MMS On Battery",
-            "Active:Alarm:Compressor Short Cycle"
+            "Active:Alarm:Compressor Short Cycle",
+            "Active:Alarm:Compressor Low Suction Pressure"
     );
 
     // Point-in-time detection events: Active fires once to signal a detected condition,

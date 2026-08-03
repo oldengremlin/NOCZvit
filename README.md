@@ -436,6 +436,7 @@ java -jar target/NOCZvit-1.16.0.jar [OPTIONS]
 | `--config=<шлях>` | Шлях до зовнішнього файлу конфігурації (за замовчуванням — вбудований `noczvit.properties`) |
 | `--dictionarypd=<шлях>` | Шлях до зовнішнього словника PD |
 | `--dictionarysdh=<шлях>` | Шлях до зовнішнього словника SDH |
+| `--dictionarydeviceword=<шлях>` | Шлях до зовнішнього словника типів пристроїв (за замовчуванням — вбудований `dictionary_device_word.txt`) |
 | `--incidents` / `--no-incidents` | Увімкнути/вимкнути блок інцидентів |
 | `--temperature` / `--no-temperature` | Увімкнути/вимкнути блок температури (SNMP Celsius) |
 | `--ramos` / `--no-ramos` | Увімкнути/вимкнути блок Ramos |
@@ -608,19 +609,7 @@ Zabbix надсилає два листи на кожен тікет пробл�
 
 **Zabbix API-інциденти** (коли `zabbix=true`) отримують синтетичний ключ пейрингу `"zabbix:host:clock"` і також відображаються об'єднано.
 
-**Тип пристрою у описі** визначається за префіксом hostname (`ZabbixIncidentConverter.resolveDeviceWord()`):
-
-| Hostname-префікс | Тип пристрою |
-|---|---|
-| `adlink*` | контролері сухих контактів |
-| `alca*`, `ies*` | DSLAM |
-| `ramos*` | *(без уточнення типу — вузол моніторингу датацентру, не роутер)* |
-| `uvpn*`, `noc12593*` | маршрутизаторі *(роутери, hostname не починається з 'r')* |
-| `a*` (крім adlink/alca) | кондиціонері |
-| `r*` (крім ramos) | маршрутизаторі |
-| `s*` | комутаторі |
-| `p*` | устаткуванні безперебійного живлення |
-| інші | *(без уточнення типу)* |
+**Тип пристрою у описі** визначається за префіксом hostname через словник `dictionary_device_word.txt` (`Dictionary.lookupDeviceWord()`) — той самий механізм, що й PD/SDH-словники: `key=value`, ключ — regex, записи сортуються за довжиною спадаюче, тому специфічні префікси (`adlink`, `ramos`, `uvpn`, `noc12593`, `ukrcom-gw`) автоматично переважають над короткими загальними (`a`, `r`, `s`, `p`) незалежно від порядку рядків у файлі. Порожнє значення чи відсутність збігу — без уточнення типу. Шлях до зовнішнього файлу: `--dictionarydeviceword=<шлях>` (за замовчуванням — вбудований `dictionary_device_word.txt`, який містить стандартний набір префіксів компанії).
 
 Опис формується як: «Zabbix зареєстровано початок/кінець інциденту, \<подія\> на \<тип пристрою\>\<локація\>».
 
@@ -740,6 +729,10 @@ ADC Cold Start, що з'являється протягом `snmp.trap.coldstart
 
 Наразі до `SELF_CLOSING_ACTIVE` відноситься: `Active:Alarm:Compressor Short Cycle`.
 
+**NO_UNRESOLVED_SUFFIX — трапи без «До кінця зміни не відновлено»:**
+
+Для трапів, що описують штатний, а не аварійний процес, суфікс «До кінця зміни не відновлено.» не додається навіть якщо подія лишилась незакритою на кінець зміни: `Active:Alarm:Battery Discharging`, `Active:Alarm:MMS On Battery`, `Active:Alarm:Compressor Short Cycle`, `Active:Alarm:Compressor Low Suction Pressure`.
+
 **PS-секція — нерозпізнані типи подій:**
 
 Трапи типу `Active:Alarm:*`, для яких немає запису в таблиці описів (тобто не в `ACTIVE_TO_CLEARED`) і які не є ігнорованими, — потрапляють до `unknownTraps`. Наприкінці звіту (після блоку температури) вони відображаються в окремій PS-секції з кремовим фоном (#fffde7): список типів подій, згрупованих за пристроєм, з часом отримання. Це дозволяє помітити нові типи трапів без втрати інформації.
@@ -825,6 +818,7 @@ At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
 
 - `dictionary_pd.txt` — фрази для розпізнавання PD-інцидентів
 - `dictionary_sdh.txt` — фрази для розпізнавання SDH-інцидентів
+- `dictionary_device_word.txt` — hostname-префікс → тип пристрою для опису Zabbix-інциденту (єдиний словник, що постачається з реальними даними за замовчуванням — решта потребують `--dictionarypd=`/`--dictionarysdh=`)
 
 ### Фільтрація на боці IMAP-сервера
 
@@ -891,7 +885,7 @@ NOCZvit/
 ├── src/main/java/net/ukrcom/noczvit/
 │   ├── NOCZvit.java               — точка входу
 │   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
-│   ├── Dictionary.java            — словники PD/SDH (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N)
+│   ├── Dictionary.java            — словники PD/SDH/device-word (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N)
 │   ├── Debtors.java               — список боржників із MSSQL
 │   ├── imap/
 │   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
@@ -934,6 +928,7 @@ NOCZvit/
 │   ├── logback.xml                — конфігурація логування (Logback)
 │   ├── dictionary_pd.txt          — словник PD/OSPF/adlink (regex → назва / опис)
 │   ├── dictionary_sdh.txt         — словник SDH/OSM (regex → назва виносу)
+│   ├── dictionary_device_word.txt — словник hostname-префікс → тип пристрою (regex → «маршрутизаторі», «комутаторі» тощо)
 │   ├── help.txt
 │   └── version.properties
 └── pom.xml
