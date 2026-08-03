@@ -75,6 +75,8 @@ public class Config {
     private String dictionaryPdPath;
     @NonNull
     private String dictionarySdhPath;
+    @NonNull
+    private String dictionaryDeviceWordPath;
     private static final String HELP_PATH = "help.txt";
 
     @NonNull
@@ -179,6 +181,7 @@ public class Config {
         configPath = null;
         dictionaryPdPath = null;
         dictionarySdhPath = null;
+        dictionaryDeviceWordPath = null;
         claudeApiKey = "";
         claudeModel = "claude-haiku-4-5";
         claudeMaxTokens = 4096;
@@ -219,7 +222,8 @@ public class Config {
 
     /**
      * Scans {@code args} for path-type arguments ({@code --config=}, {@code --dictionarypd=},
-     * {@code --dictionarysdh=}) that must be known before properties are loaded.
+     * {@code --dictionarysdh=}, {@code --dictionarydeviceword=}) that must be known before
+     * properties are loaded.
      */
     private void parsePathArgs(String[] args) {
         for (String arg : args) {
@@ -229,6 +233,8 @@ public class Config {
                 dictionaryPdPath = arg.substring("--dictionarypd=".length()).trim();
             } else if (arg.startsWith("--dictionarysdh=")) {
                 dictionarySdhPath = arg.substring("--dictionarysdh=".length()).trim();
+            } else if (arg.startsWith("--dictionarydeviceword=")) {
+                dictionaryDeviceWordPath = arg.substring("--dictionarydeviceword=".length()).trim();
             }
         }
     }

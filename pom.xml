@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>net.ukr-com</groupId>
     <artifactId>NOCZvit</artifactId>
-    <version>1.18.5</version>
+    <version>1.19.0</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -76,6 +76,7 @@
                     <include>noczvit.properties</include>
                     <include>dictionary_sdh.txt</include>
                     <include>dictionary_pd.txt</include>
+                    <include>dictionary_device_word.txt</include>
                     <include>help.txt</include>
                     <include>version.properties</include>
                     <include>logback.xml</include>

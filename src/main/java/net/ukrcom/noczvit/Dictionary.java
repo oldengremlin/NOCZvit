@@ -30,8 +30,9 @@ import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Loads and caches two regex-keyed lookup dictionaries: PD (Zabbix/PD hostnames → location
- * names) and SDH (OSM location codes → human-readable names).
+ * Loads and caches three regex-keyed lookup dictionaries: PD (Zabbix/PD hostnames → location
+ * names), SDH (OSM location codes → human-readable names), and device-word (Zabbix hostname
+ * prefix → Ukrainian device-type word, e.g. {@code "маршрутизаторі "}).
  *
  * <p>Entries are sorted longest-regex-first before compilation so that more specific patterns
  * win over shorter, more generic ones. Results are cached in a {@link ConcurrentHashMap} so
@@ -49,20 +50,24 @@ public class Dictionary {
 
     private final Map<Pattern, String> pdDictionary;
     private final Map<Pattern, String> sdhDictionary;
+    private final Map<Pattern, String> deviceWordDictionary;
     private final ConcurrentHashMap<String, String> pdCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> sdhCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> deviceWordCache = new ConcurrentHashMap<>();
 
     /**
-     * Loads both dictionaries using paths from {@code config}, or from bundled resources when
-     * the paths are null.
+     * Loads all three dictionaries using paths from {@code config}, or from bundled resources
+     * when the paths are null.
      *
-     * @throws IOException if either dictionary file/resource is missing or unreadable
+     * @throws IOException if a dictionary file/resource is missing or unreadable
      */
     public Dictionary(Config config) throws IOException {
         pdDictionary = new LinkedHashMap<>();
         sdhDictionary = new LinkedHashMap<>();
+        deviceWordDictionary = new LinkedHashMap<>();
         loadDictionary(config.getDictionaryPdPath(), "dictionary_pd.txt", pdDictionary);
         loadDictionary(config.getDictionarySdhPath(), "dictionary_sdh.txt", sdhDictionary);
+        loadDictionary(config.getDictionaryDeviceWordPath(), "dictionary_device_word.txt", deviceWordDictionary);
     }
 
     /**
@@ -180,6 +185,26 @@ public class Dictionary {
                 }
             }
             return k;
+        });
+    }
+
+    /**
+     * Translates a Zabbix hostname to a Ukrainian device-type word used in incident
+     * descriptions (e.g. {@code "маршрутизаторі "}). Unlike {@link #lookupPD} and
+     * {@link #lookupSDH}, falls back to {@code ""} (no word) rather than the original key
+     * when no pattern matches. Results are cached for repeated lookups.
+     *
+     * @param host raw hostname (e.g. {@code r234-1})
+     * @return resolved device-type word with trailing space, or {@code ""} when not found
+     */
+    public String lookupDeviceWord(String host) {
+        return deviceWordCache.computeIfAbsent(host, k -> {
+            for (Map.Entry<Pattern, String> entry : deviceWordDictionary.entrySet()) {
+                if (entry.getKey().matcher(k).find()) {
+                    return entry.getValue();
+                }
+            }
+            return "";
         });
     }
 }

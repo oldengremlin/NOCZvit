@@ -3,6 +3,10 @@
 *.sh
 source.txt
 
+# dictionary_device_word.txt is bundled as the built-in default (generic device-type
+# vocabulary, not deployment-specific data like dictionary_pd/dictionary_sdh) — commit it
+!src/main/resources/dictionary_device_word.txt
+
 # Compiled class file
 *.class
 
