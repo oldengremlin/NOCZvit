@@ -318,25 +318,7 @@ public class Config {
      * Each entry has the form {@code hostname:key=val;key=val,...}.
      */
     private void hostsProperties() {
-        Map<String, Map<String, String>> mutableHosts = new HashMap<>();
-        String hostsStr = properties.getProperty("snmp.hosts");
-        if (hostsStr != null) {
-            for (String hostEntry : hostsStr.split(",")) {
-                String[] parts = hostEntry.split(":", 2);
-                if (parts.length > 1) {
-                    String hostName = parts[0].trim();
-                    Map<String, String> hostData = new HashMap<>();
-                    for (String attr : parts[1].split(";")) {
-                        String[] kv = attr.split("=", 2);
-                        if (kv.length > 1) {
-                            hostData.put(kv[0].trim(), kv[1].trim());
-                        }
-                    }
-                    mutableHosts.put(hostName, Collections.unmodifiableMap(hostData));
-                }
-            }
-        }
-        hosts = Collections.unmodifiableMap(mutableHosts);
+        hosts = parseKeyedAttributes("snmp.hosts");
     }
 
     /**
@@ -344,25 +326,37 @@ public class Config {
      * Each entry has the form {@code ip:key=val;key=val,...}.
      */
     private void ramosProperties() {
-        Map<String, Map<String, String>> mutableRamos = new HashMap<>();
-        String ramosStr = properties.getProperty("snmp.ramos");
-        if (ramosStr != null) {
-            for (String ramosEntry : ramosStr.split(",")) {
-                String[] parts = ramosEntry.split(":", 2);
+        ramos = parseKeyedAttributes("snmp.ramos");
+    }
+
+    /**
+     * Parses a property holding comma-separated {@code key:attr=val;attr=val} entries into a
+     * nested map. Entries without a {@code :} separator and attributes without {@code =} are
+     * skipped. Both levels are wrapped unmodifiable — the maps are published to virtual threads
+     * once parsing finishes and must never be mutated afterwards.
+     *
+     * @param propertyKey property name to read (e.g. {@code snmp.hosts})
+     * @return immutable map of key → immutable attribute map; empty when the property is absent
+     */
+    private Map<String, Map<String, String>> parseKeyedAttributes(String propertyKey) {
+        Map<String, Map<String, String>> result = new HashMap<>();
+        String raw = properties.getProperty(propertyKey);
+        if (raw != null) {
+            for (String entry : raw.split(",")) {
+                String[] parts = entry.split(":", 2);
                 if (parts.length > 1) {
-                    String ip = parts[0].trim();
-                    Map<String, String> ramosData = new HashMap<>();
+                    Map<String, String> attributes = new HashMap<>();
                     for (String attr : parts[1].split(";")) {
                         String[] kv = attr.split("=", 2);
                         if (kv.length > 1) {
-                            ramosData.put(kv[0].trim(), kv[1].trim());
+                            attributes.put(kv[0].trim(), kv[1].trim());
                         }
                     }
-                    mutableRamos.put(ip, Collections.unmodifiableMap(ramosData));
+                    result.put(parts[0].trim(), Collections.unmodifiableMap(attributes));
                 }
             }
         }
-        ramos = Collections.unmodifiableMap(mutableRamos);
+        return Collections.unmodifiableMap(result);
     }
 
     /** Reads SNMP community strings and OID settings for Celsius / temperature polling. */

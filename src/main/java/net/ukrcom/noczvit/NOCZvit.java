@@ -291,22 +291,15 @@ public class NOCZvit {
             String allTrapPlainText = trapResult.plainText()
                     + (ramosTrapResult.plainText().isBlank() ? "" : "\n" + ramosTrapResult.plainText());
 
-            if (nightShift) {
-                subject = "Автоматизований звіт за період з " + prevDutyBegin.format(DATE_TIME_FORMATTER) + " по " + prevDutyEnd.format(DATE_TIME_FORMATTER);
-                if (config.isIncidentsEnabled() && incidents != null) {
-                    String summaryHtml = summaryClient != null
-                                         ? summaryClient.generateSummary(incidentsForTable, prevDutyBegin, prevDutyEnd,
-                                                                          allTrapPlainText) : null;
-                    message.append(incidentBuilder.build(incidentsForTable, zabbix, prevDutyBegin, prevDutyEnd, summaryHtml));
-                }
-            } else {
-                subject = "Автоматизований звіт за період з " + currDutyBegin.format(DATE_TIME_FORMATTER) + " по " + currDutyEnd.format(DATE_TIME_FORMATTER);
-                if (config.isIncidentsEnabled() && incidents != null) {
-                    String summaryHtml = summaryClient != null
-                                         ? summaryClient.generateSummary(incidentsForTable, currDutyBegin, currDutyEnd,
-                                                                          allTrapPlainText) : null;
-                    message.append(incidentBuilder.build(incidentsForTable, zabbix, currDutyBegin, currDutyEnd, summaryHtml));
-                }
+            // reportFrom/reportTo already resolve the night/day period (see above) — the two
+            // branches differed only in which duty pair they passed on.
+            subject = "Автоматизований звіт за період з " + reportFrom.format(DATE_TIME_FORMATTER)
+                    + " по " + reportTo.format(DATE_TIME_FORMATTER);
+            if (config.isIncidentsEnabled() && incidents != null) {
+                String summaryHtml = summaryClient != null
+                                     ? summaryClient.generateSummary(incidentsForTable, reportFrom, reportTo,
+                                                                      allTrapPlainText) : null;
+                message.append(incidentBuilder.build(incidentsForTable, zabbix, reportFrom, reportTo, summaryHtml));
             }
 
             if (!trapResult.isEmpty()) {

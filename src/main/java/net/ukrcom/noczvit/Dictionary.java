@@ -41,6 +41,14 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Dictionary {
 
+    /**
+     * Regex fragment matching an adlink dry-contact address ({@code "card N, port N, line N"}),
+     * shared by the IMAP subject parser and the Zabbix API problem-name parser. Each caller wraps
+     * it with its own prefix, so capture-group numbering is the caller's business.
+     */
+    public static final String CARD_PORT_LINE_REGEX =
+            "card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)";
+
     // Нормалізація ключа перед пошуком у PD-словнику:
     //   знімаємо префікс r/s/p та ies*/alca- (як у PdIncidentParser.DEVICE_PREFIX_PATTERN)
     //   і лише якщо префікс знятий — знімаємо суфікс -N (порядковий номер вузла).
@@ -153,18 +161,16 @@ public class Dictionary {
                                 ? k
                                 : PD_HOST_SUFFIX.matcher(afterPrefix).replaceFirst("");
 
-            for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
-                if (entry.getKey().matcher(normalized).find()) {
-                    return entry.getValue();
-                }
+            // null (not "") is the no-match sentinel: dictionary values are never null but may
+            // legitimately be empty (e.g. «^ramos=» in dictionary_device_word.txt), so an empty
+            // match must still count as a hit and skip the fallback pass.
+            String byNormalized = firstMatch(pdDictionary, normalized, null);
+            if (byNormalized != null) {
+                return byNormalized;
             }
             // Fallback: спробуємо оригінальний ключ (коли normalized не збігся, але оригінал збігається)
             if (!normalized.equals(k)) {
-                for (Map.Entry<Pattern, String> entry : pdDictionary.entrySet()) {
-                    if (entry.getKey().matcher(k).find()) {
-                        return entry.getValue();
-                    }
-                }
+                return firstMatch(pdDictionary, k, k);
             }
             return k;
         });
@@ -178,14 +184,7 @@ public class Dictionary {
      * @return resolved location name, or {@code key} unchanged when not found
      */
     public String lookupSDH(String key) {
-        return sdhCache.computeIfAbsent(key, k -> {
-            for (Map.Entry<Pattern, String> entry : sdhDictionary.entrySet()) {
-                if (entry.getKey().matcher(k).find()) {
-                    return entry.getValue();
-                }
-            }
-            return k;
-        });
+        return sdhCache.computeIfAbsent(key, k -> firstMatch(sdhDictionary, k, k));
     }
 
     /**
@@ -198,13 +197,78 @@ public class Dictionary {
      * @return resolved device-type word with trailing space, or {@code ""} when not found
      */
     public String lookupDeviceWord(String host) {
-        return deviceWordCache.computeIfAbsent(host, k -> {
-            for (Map.Entry<Pattern, String> entry : deviceWordDictionary.entrySet()) {
-                if (entry.getKey().matcher(k).find()) {
-                    return entry.getValue();
-                }
+        return deviceWordCache.computeIfAbsent(host, k -> firstMatch(deviceWordDictionary, k, ""));
+    }
+
+    /**
+     * Outcome of a dictionary lookup: the resolved value plus whether the key fell through
+     * unresolved (the dictionary returned the key itself), which the report surfaces as
+     * «потребує коригування назви».
+     *
+     * @param value       resolved name, or the original key when nothing matched
+     * @param needsReview {@code true} when nothing matched
+     */
+    public record Resolution(String value, boolean needsReview) {
+    }
+
+    /**
+     * Looks a hostname up in the PD dictionary and reports whether it resolved.
+     *
+     * @param key raw hostname
+     * @return resolved value and review flag
+     */
+    public Resolution resolvePD(String key) {
+        String value = lookupPD(key);
+        return new Resolution(value, value.equals(key));
+    }
+
+    /**
+     * Looks an OSM location code up in the SDH dictionary and reports whether it resolved.
+     *
+     * @param key OSM location code
+     * @return resolved value and review flag
+     */
+    public Resolution resolveSDH(String key) {
+        String value = lookupSDH(key);
+        return new Resolution(value, value.equals(key));
+    }
+
+    /**
+     * Builds the PD-dictionary key for one adlink dry-contact line
+     * ({@code device:card:port:line}).
+     *
+     * @param device adlink hostname
+     * @param card   card number
+     * @param port   port number
+     * @param line   line number
+     * @return composite dictionary key
+     */
+    public static String lineKey(String device, String card, String port, String line) {
+        return device + ":" + card + ":" + port + ":" + line;
+    }
+
+    /**
+     * Returns the value of the first dictionary entry whose regex matches {@code key}, or
+     * {@code fallback} when none does. Entries are pre-sorted longest-key-first, so the most
+     * specific pattern wins.
+     *
+     * <p>Reads only the (effectively immutable after construction) pattern map and allocates a
+     * fresh {@link java.util.regex.Matcher} per entry — {@link Pattern} is thread-safe but
+     * {@code Matcher} is not, so no matcher is ever shared. Deliberately touches none of the
+     * caches: it runs inside {@code computeIfAbsent}, where re-entering the same map would
+     * risk an {@link IllegalStateException} or a stuck bin.
+     *
+     * @param dictionary compiled pattern → value map to scan
+     * @param key        string to match against
+     * @param fallback   value returned when nothing matches (may be {@code null})
+     * @return matched value, or {@code fallback}
+     */
+    private static String firstMatch(Map<Pattern, String> dictionary, String key, String fallback) {
+        for (Map.Entry<Pattern, String> entry : dictionary.entrySet()) {
+            if (entry.getKey().matcher(key).find()) {
+                return entry.getValue();
             }
-            return "";
-        });
+        }
+        return fallback;
     }
 }

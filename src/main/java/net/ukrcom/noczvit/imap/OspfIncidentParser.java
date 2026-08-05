@@ -22,6 +22,7 @@ import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
+import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
  * Domain: parses Zabbix ospfNbrStateChange alert emails into {@link Incident}
@@ -51,30 +52,22 @@ public class OspfIncidentParser {
         String channel = parts.length > 4 ? parts[4] : "";
 
         String originalRouter = router;
-        router = dictionary.lookupPD(router);
-        boolean needsReviewRouter = originalRouter.equals(router);
+        Dictionary.Resolution routerRes = dictionary.resolvePD(router);
+        router = routerRes.value();
 
         String originalChannel = channel;
-        channel = dictionary.lookupPD(channel);
-        boolean needsReviewChannel = originalChannel.equals(channel);
+        Dictionary.Resolution channelRes = dictionary.resolvePD(channel);
+        channel = channelRes.value();
 
-        Status status = resolveStatus(subject);
-        String statePart = switch (status) {
-            case START ->
-                "Zabbix зареєстровано початок інциденту, ";
-            case END ->
-                "Zabbix зареєстровано кінець інциденту, ";
-            case NONE ->
-                "Zabbix зареєстровано ";
-        };
-        String description = (statePart + "падіння каналу на " + router + " по каналу " + channel)
-                .replaceAll("\\s+", " ");
+        Status status = IncidentDescriptions.resolveStatus(subject);
+        String description = IncidentDescriptions.describe(IncidentDescriptions.SOURCE_ZABBIX, status,
+                "падіння каналу на " + router + " по каналу " + channel);
 
         List<String> reviewNames = new ArrayList<>();
-        if (needsReviewRouter) {
+        if (routerRes.needsReview()) {
             reviewNames.add(originalRouter);
         }
-        if (needsReviewChannel) {
+        if (channelRes.needsReview()) {
             reviewNames.add(originalChannel);
         }
 
@@ -89,16 +82,5 @@ public class OspfIncidentParser {
                 description, List.copyOf(reviewNames),
                 msg.inReplyTo()
         ));
-    }
-
-    /** Maps the subject keyword ({@code "Resolved:"} / {@code "Problem:"}) to a lifecycle status. */
-    private Status resolveStatus(String subject) {
-        if (subject.contains(" Resolved:")) {
-            return Status.END;
-        }
-        if (subject.contains(" Problem:")) {
-            return Status.START;
-        }
-        return Status.NONE;
     }
 }

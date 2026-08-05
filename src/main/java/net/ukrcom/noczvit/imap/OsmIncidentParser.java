@@ -29,6 +29,7 @@ import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
+import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
  * Domain: parses OSM/SDH alert emails into {@link Incident} objects. No I/O —
@@ -71,28 +72,23 @@ public class OsmIncidentParser {
             to = geoParts.length > 1 ? geoParts[1] : "";
         }
 
-        String originalFrom = from;
-        from = dictionary.lookupSDH(from);
-        boolean needsReviewFrom = originalFrom.equals(from);
+        Dictionary.Resolution fromRes = dictionary.resolveSDH(from);
+        from = fromRes.value();
+        boolean needsReviewFrom = fromRes.needsReview();
 
+        // An absent "to" (non-STM subjects) resolves to itself and would look unresolved —
+        // an empty code is not a missing dictionary entry, so it never goes to review.
         String originalTo = to;
-        to = dictionary.lookupSDH(to);
-        boolean needsReviewTo = !originalTo.isEmpty() && originalTo.equals(to);
+        Dictionary.Resolution toRes = dictionary.resolveSDH(to);
+        to = toRes.value();
+        boolean needsReviewTo = !originalTo.isEmpty() && toRes.needsReview();
 
         String geoMsg = "STM".equals(type)
                         ? (to.isEmpty() ? "на " + from : "з " + from + " на " + to)
                         : from;
 
-        Status status = resolveStatus(subject);
+        Status status = IncidentDescriptions.resolveStatus(subject);
 
-        String statePart = switch (status) {
-            case START ->
-                "OSM зареєстровано початок інциденту, ";
-            case END ->
-                "OSM зареєстровано кінець інциденту, ";
-            case NONE ->
-                "OSM зареєстровано інцидент, ";
-        };
         String eventDesc;
         if ("Power".equals(type)) {
             eventDesc = subject.contains("Air Condition")
@@ -101,7 +97,8 @@ public class OsmIncidentParser {
         } else {
             eventDesc = "втрата зв'язності " + geoMsg;
         }
-        String description = (statePart + eventDesc).replaceAll("\\s+", " ");
+        String description = IncidentDescriptions.describe(
+                IncidentDescriptions.SOURCE_OSM, status, eventDesc, "інцидент, ");
 
         // Extract precise event time from Trap value in body
         long eventTs = msg.unixDate();
@@ -150,16 +147,5 @@ public class OsmIncidentParser {
                 description, List.copyOf(reviewNames),
                 msg.inReplyTo()
         ));
-    }
-
-    /** Maps the subject keyword ({@code "Resolved:"} / {@code "Problem:"}) to a lifecycle status. */
-    private Status resolveStatus(String subject) {
-        if (subject.contains(" Resolved:")) {
-            return Status.END;
-        }
-        if (subject.contains(" Problem:")) {
-            return Status.START;
-        }
-        return Status.NONE;
     }
 }

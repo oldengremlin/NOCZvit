@@ -20,12 +20,10 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -49,18 +47,17 @@ import net.ukrcom.noczvit.imap.RawMessage;
  * is decoded to UTF-8 as {@code "Room4 АНТИПОТОП S06"}.
  *
  * <p>Only events whose state is one of Critical, High Critical, Low Critical,
- * High Warning, Low Warning, or Warning are returned.
+ * High Warning, Low Warning, Warning, or Sensor Error are returned
+ * (see {@link RamosTrapEvent#REPORTABLE_STATES}).
  */
 @Slf4j
 public class RamosTrapParser {
 
-    private static final DateTimeFormatter DATE_FORMATTER =
-            DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss", Locale.ENGLISH);
-
-    // Matches the header line; group 1 = timestamp, group 2 = source IP.
+    // Shared header (group 1 = timestamp, group 2 = source IP) + RAMOS's own body: three quoted
+    // fields — state, sensor name, sensor type (groups 3-5).
     // [^\n]* swallows the uptime portion without crossing the line boundary.
     private static final Pattern TRAP_RE = Pattern.compile(
-            "At\\s+(\\d{2}-\\d{2}-\\d{4}\\s+\\d{2}:\\d{2}:\\d{2}),\\s+from\\s+([\\d.]+),"
+            TrapMailFormat.HEADER_PREFIX
             + "[^\\n]*registered trap:\\s*\\r?\\n"
             + "[ \\t]+\"([^\"]+)\"\\s*/\\s+\"([^\"]+)\"\\s*/\\s+\"([^\"]+)\"",
             Pattern.CASE_INSENSITIVE);
@@ -72,11 +69,6 @@ public class RamosTrapParser {
             "^(?:[0-9A-Fa-f]{2}\\s+){3,}[0-9A-Fa-f]{2}\\s*$");
 
     private static final Pattern ROOM_RE = Pattern.compile("(?i)room\\s*(\\d)");
-
-    private static final Set<String> REPORTABLE_STATES = Set.of(
-            "Critical", "High Critical", "Low Critical",
-            "High Warning", "Low Warning", "Warning",
-            "Sensor Error");
 
     private RamosTrapParser() {
     }
@@ -110,7 +102,7 @@ public class RamosTrapParser {
             String sensorNameRaw = m.group(4);
             String sensorType   = m.group(5).strip();
 
-            if (!REPORTABLE_STATES.contains(state)) {
+            if (!RamosTrapEvent.REPORTABLE_STATES.contains(state)) {
                 continue;
             }
 
@@ -123,7 +115,7 @@ public class RamosTrapParser {
             Instant timestamp;
             try {
                 timestamp = DateUtils.toInstant(
-                        LocalDateTime.parse(timestampStr.trim(), DATE_FORMATTER), messageEpochSec);
+                        LocalDateTime.parse(timestampStr.trim(), TrapMailFormat.HEADER_TIMESTAMP), messageEpochSec);
             } catch (Exception e) {
                 log.debug("RamosTrapParser: cannot parse timestamp «{}»", timestampStr);
                 continue;

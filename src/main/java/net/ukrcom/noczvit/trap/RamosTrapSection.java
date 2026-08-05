@@ -20,10 +20,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.text.StringEscapeUtils;
 
 /**
  * Renders {@link RamosTrapEvent} objects into an HTML report section and a Claude-ready
@@ -45,9 +45,6 @@ public class RamosTrapSection {
             DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final DateTimeFormatter DT_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
-
-    private static final Set<String> CRITICAL_STATES =
-            Set.of("Critical", "High Critical", "Low Critical");
 
     /**
      * Rendered output for one RAMOS trap section.
@@ -97,7 +94,7 @@ public class RamosTrapSection {
             List<RamosTrapEvent> roomEvents = entry.getValue();
 
             html.append("<div class=\"section\">\n")
-                .append("<h3 class=\"ramos-room\">").append(htmlEscape(room)).append("</h3>\n")
+                .append("<h3 class=\"ramos-room\">").append(StringEscapeUtils.escapeHtml4(room)).append("</h3>\n")
                 .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
                 .append("<th>Час</th>")
@@ -107,13 +104,13 @@ public class RamosTrapSection {
                 .append("</tr></thead><tbody>\n");
 
             for (RamosTrapEvent ev : roomEvents) {
-                boolean critical = CRITICAL_STATES.contains(ev.state());
+                boolean critical = RamosTrapEvent.CRITICAL_STATES.contains(ev.state());
 
                 html.append("<tr>")
                     .append("<td>").append(TIME_FMT.format(ev.timestamp())).append("</td>")
-                    .append("<td><b>").append(htmlEscape(ev.state())).append("</b></td>")
-                    .append("<td>").append(htmlEscape(ev.sensorName())).append("</td>")
-                    .append("<td>").append(htmlEscape(ev.sensorType())).append("</td>")
+                    .append("<td><b>").append(StringEscapeUtils.escapeHtml4(ev.state())).append("</b></td>")
+                    .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorName())).append("</td>")
+                    .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorType())).append("</td>")
                     .append("</tr>\n");
 
                 if (critical) {
@@ -133,15 +130,5 @@ public class RamosTrapSection {
         log.info("RamosTrapSection: {} event(s) rendered across {} room(s)",
                 events.size(), byRoom.size());
         return new SectionResult(html.toString(), plainResult);
-    }
-
-    private static String htmlEscape(String s) {
-        if (s == null) {
-            return "";
-        }
-        return s.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
     }
 }

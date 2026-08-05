@@ -224,8 +224,10 @@ public class SummaryClient {
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
                                ResumeRecord previous, String trapPlainText) {
         StringBuilder sb = new StringBuilder();
-        // Count unique incident threads — same logic as IncidentSectionBuilder pairing:
-        // each distinct inReplyTo key = 1 thread; incidents without a key each count as 1.
+        // Count unique incident threads: each distinct inReplyTo key = 1 thread; incidents
+        // without a key each count as 1. This partitions on the same key IncidentSectionBuilder
+        // pairs on, so the count matches its row count — but it is only the grouping step, not
+        // the pairing itself (no START/END selection, no NONE-status handling, no ordering).
         long uniqueCount = incidents.stream()
                 .filter(i -> i.inReplyTo() != null && !i.inReplyTo().isBlank())
                 .map(Incident::inReplyTo).distinct().count()

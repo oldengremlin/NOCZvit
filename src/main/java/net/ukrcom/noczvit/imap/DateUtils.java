@@ -24,16 +24,27 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Utilities for date string localisation and zone-safe timestamp conversion.
+ * Utilities for date string localisation and zone-safe timestamp conversion. The sole source
+ * of Ukrainian month names in the project — every {@code Incident} source (IMAP-based and the
+ * Zabbix API) formats its display date through {@link #convertMonthNumToMnemo} or
+ * {@link #formatUa} so all incident tables render identically regardless of source.
  */
 public class DateUtils {
 
+    // English month abbreviation → Ukrainian; translates raw IMAP Date: header text in convertMonthNumToMnemo.
     private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
     private static final Map<String, String> MONTH_MAP = Map.ofEntries(
             Map.entry("Jan", "січ"), Map.entry("Feb", "лют"), Map.entry("Mar", "бер"), Map.entry("Apr", "квіт"),
             Map.entry("May", "трав"), Map.entry("Jun", "черв"), Map.entry("Jul", "лип"), Map.entry("Aug", "серп"),
             Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
     );
+
+    // Month number (1-12, matching LocalDateTime.getMonthValue()) → Ukrainian abbreviation; used
+    // by formatUa. Index 0 is unused padding. Same spellings as MONTH_MAP above — keep in sync.
+    private static final String[] UA_MONTHS = {
+        "", "січ", "лют", "бер", "квіт", "трав", "черв",
+        "лип", "серп", "вер", "жовт", "лист", "груд"
+    };
 
     private DateUtils() {
     }
@@ -45,7 +56,7 @@ public class DateUtils {
      * @param dt raw date string (e.g. {@code "Mon, 01 Jan 2025 08:00:00 +0200"})
      * @return localised date string (e.g. {@code "01 січ 2025 08:00:00"})
      */
-    static String convertMonthNumToMnemo(String dt) {
+    public static String convertMonthNumToMnemo(String dt) {
         dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\s*\\+\\d{4}$", "");
         Matcher matcher = MONTH_PATTERN.matcher(dt);
         StringBuilder sb = new StringBuilder();
@@ -54,6 +65,18 @@ public class DateUtils {
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * Formats a {@link LocalDateTime} as a Ukrainian-locale date-time string
+     * ({@code "dd mmm yyyy HH:mm:ss"}, e.g. {@code "01 січ 2025 08:00:00"}) — the same format
+     * {@link #convertMonthNumToMnemo} produces from a raw IMAP header, for sources (e.g. the
+     * Zabbix API) that already have a parsed {@link LocalDateTime} instead of a header string.
+     */
+    public static String formatUa(LocalDateTime dt) {
+        return String.format("%02d %s %d %02d:%02d:%02d",
+                dt.getDayOfMonth(), UA_MONTHS[dt.getMonthValue()], dt.getYear(),
+                dt.getHour(), dt.getMinute(), dt.getSecond());
     }
 
     /**

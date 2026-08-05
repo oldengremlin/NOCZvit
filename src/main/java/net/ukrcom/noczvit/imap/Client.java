@@ -20,7 +20,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 import net.ukrcom.noczvit.Dictionary;
@@ -33,6 +35,10 @@ import net.ukrcom.noczvit.model.Incident;
  */
 @Slf4j
 public class Client {
+
+    // Zabbix emits each adlink alert twice within seconds; collapse repeats of the same
+    // subject that arrive within this window.
+    private static final long ADLINK_DEDUP_WINDOW_SEC = 60;
 
     private final Config config;
     private final ImapReader reader;
@@ -91,28 +97,23 @@ public class Client {
 
         List<Incident> incidents = new ArrayList<>();
         for (RawMessage msg : deduped) {
+            // The window guard is identical for every source, so it is applied once up front.
+            // The OSM branch used to filter after parsing, on Incident.messageTs — which is
+            // assigned msg.unixDate() anyway, so the outcome is unchanged and out-of-window
+            // messages are no longer parsed just to be discarded.
+            if (msg.unixDate() < fromEpoch || msg.unixDate() > toEpoch) {
+                log.debug("Skipping message (time filter): unixDate={}, subject={}",
+                        msg.unixDate(), msg.subject());
+                continue;
+            }
             if (isPdMessage(msg.subject())) {
-                if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
-                    pdParser.parse(msg).ifPresent(incidents::add);
-                } else {
-                    log.debug("Skipping PD message (time filter): unixDate={}", msg.unixDate());
-                }
+                pdParser.parse(msg).ifPresent(incidents::add);
             } else if (isOspfMessage(msg.subject())) {
-                if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
-                    ospfParser.parse(msg).ifPresent(incidents::add);
-                } else {
-                    log.debug("Skipping OSPF message (time filter): unixDate={}", msg.unixDate());
-                }
+                ospfParser.parse(msg).ifPresent(incidents::add);
             } else if (isAdlinkMessage(msg.subject())) {
-                if (msg.unixDate() >= fromEpoch && msg.unixDate() <= toEpoch) {
-                    adlinkParser.parse(msg).ifPresent(incidents::add);
-                } else {
-                    log.debug("Skipping adlink message (time filter): unixDate={}", msg.unixDate());
-                }
+                adlinkParser.parse(msg).ifPresent(incidents::add);
             } else if (isOsmMessage(msg.subject())) {
-                osmParser.parse(msg)
-                        .filter(i -> i.messageTs() >= fromEpoch && i.messageTs() <= toEpoch)
-                        .ifPresent(incidents::add);
+                osmParser.parse(msg).ifPresent(incidents::add);
             }
         }
 
@@ -131,19 +132,20 @@ public class Client {
         List<RawMessage> sorted = new ArrayList<>(messages);
         sorted.sort(Comparator.comparingLong(RawMessage::unixDate));
 
+        // Last kept timestamp per subject — same map-based approach as TrapDeduplicator.
+        // The previous version rescanned a growing list of every adlink seen so far, which is
+        // quadratic; since the input is already sorted ascending, only the last kept one matters.
+        Map<String, Long> lastKept = new HashMap<>();
         List<RawMessage> result = new ArrayList<>();
-        List<RawMessage> seenAdlinks = new ArrayList<>();
         for (RawMessage msg : sorted) {
             if (!isAdlinkMessage(msg.subject())) {
                 result.add(msg);
                 continue;
             }
-            boolean isDuplicate = seenAdlinks.stream().anyMatch(seen
-                    -> seen.subject().equals(msg.subject())
-                    && msg.unixDate() - seen.unixDate() <= 60);
-            if (!isDuplicate) {
+            Long previous = lastKept.get(msg.subject());
+            if (previous == null || msg.unixDate() - previous > ADLINK_DEDUP_WINDOW_SEC) {
+                lastKept.put(msg.subject(), msg.unixDate());
                 result.add(msg);
-                seenAdlinks.add(msg);
             } else {
                 log.debug("Deduplicating adlink message: subject={}, ts={}", msg.subject(), msg.unixDate());
             }

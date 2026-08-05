@@ -17,7 +17,6 @@ package net.ukrcom.noczvit.trap;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,13 +47,12 @@ public class EmersonTrapParser {
             "^Got trap from ([\\w-]+)",
             Pattern.CASE_INSENSITIVE);
 
+    // Shared header (group 1 = timestamp, group 2 = IP) + Emerson's own body: free text after
+    // "registered trap:" — group 3.
     private static final Pattern BODY_RE = Pattern.compile(
-            "At\\s+(\\d{2}-\\d{2}-\\d{4}\\s+\\d{2}:\\d{2}:\\d{2}),\\s+from\\s+([\\d.]+),"
+            TrapMailFormat.HEADER_PREFIX
             + "\\s+after\\s+uptime\\s+[\\d:.]+,\\s*registered\\s+trap:\\s*\\r?\\n\\s+(.*)",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-
-    private static final DateTimeFormatter BODY_DT = DateTimeFormatter.ofPattern(
-            "dd-MM-yyyy HH:mm:ss", Locale.ENGLISH);
 
     private EmersonTrapParser() {
     }
@@ -109,7 +107,7 @@ public class EmersonTrapParser {
         Instant timestamp;
         try {
             timestamp = DateUtils.toInstant(
-                    LocalDateTime.parse(bodyMatcher.group(1).trim(), BODY_DT), msg.unixDate());
+                    LocalDateTime.parse(bodyMatcher.group(1).trim(), TrapMailFormat.HEADER_TIMESTAMP), msg.unixDate());
         } catch (DateTimeParseException e) {
             // Fall back to the email Date: header timestamp
             timestamp = Instant.ofEpochSecond(msg.unixDate());
