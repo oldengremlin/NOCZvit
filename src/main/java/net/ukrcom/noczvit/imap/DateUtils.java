@@ -46,7 +46,7 @@ public class DateUtils {
      * @return localised date string (e.g. {@code "01 січ 2025 08:00:00"})
      */
     static String convertMonthNumToMnemo(String dt) {
-        dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\+\\d{4}$", "");
+        dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\s*\\+\\d{4}$", "");
         Matcher matcher = MONTH_PATTERN.matcher(dt);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {

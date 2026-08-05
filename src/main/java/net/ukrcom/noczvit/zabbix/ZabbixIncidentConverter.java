@@ -126,11 +126,13 @@ public class ZabbixIncidentConverter {
     }
 
     /**
-     * Formats a {@link LocalDateTime} as a Ukrainian-locale date-time string
-     * ({@code "d mmm yyyy HH:mm:ss"}, e.g. {@code "1 січ 2025 08:00:00"}).
+     * Formats a {@link LocalDateTime} as a Ukrainian-locale date-time string, matching the
+     * zero-padded day format that {@link net.ukrcom.noczvit.imap.DateUtils#convertMonthNumToMnemo}
+     * produces for the other four {@link net.ukrcom.noczvit.model.Incident} sources
+     * ({@code "dd mmm yyyy HH:mm:ss"}, e.g. {@code "01 січ 2025 08:00:00"}).
      */
     private static String formatUa(LocalDateTime dt) {
-        return String.format("%d %s %d %02d:%02d:%02d",
+        return String.format("%02d %s %d %02d:%02d:%02d",
                 dt.getDayOfMonth(), UA_MONTHS[dt.getMonthValue()], dt.getYear(),
                 dt.getHour(), dt.getMinute(), dt.getSecond());
     }
