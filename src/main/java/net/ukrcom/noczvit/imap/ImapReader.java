@@ -16,27 +16,17 @@ package net.ukrcom.noczvit.imap;
 
 import com.sun.mail.imap.IMAPFolder;
 import com.sun.mail.imap.IMAPStore;
-import jakarta.mail.BodyPart;
 import jakarta.mail.Folder;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
-import jakarta.mail.Multipart;
 import jakarta.mail.Session;
 import jakarta.mail.search.AndTerm;
 import jakarta.mail.search.ComparisonTerm;
 import jakarta.mail.search.SearchTerm;
 import jakarta.mail.search.SentDateTerm;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
@@ -44,13 +34,12 @@ import net.ukrcom.noczvit.Config;
 /**
  * Infrastructure: connects to an IMAP server and returns raw messages. No
  * business logic — callers decide what to do with the messages.
+ *
+ * <p>Connection setup and message conversion are shared with {@code trap.ImapTrapReader}
+ * via {@link MailMessageSupport}.
  */
 @Slf4j
 public class ImapReader {
-
-    // RFC 2822 allows single-digit day (e.g. "Thu, 9 Jul 2026") — use 'd' not 'dd'
-    private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER
-            = DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
 
@@ -73,22 +62,14 @@ public class ImapReader {
      * @throws jakarta.mail.MessagingException
      */
     public List<RawMessage> readMessages(boolean fetchAll, long fromEpoch, long toEpoch) throws MessagingException {
-        Properties props = new Properties();
-        props.put("mail.imap.ssl.enable", config.isMailSsl());
-        props.put("mail.imap.host", config.getMailHostname());
-        props.put("mail.imap.port", config.isMailSsl() ? "993" : "143");
-        // getStore("imaps") makes jakarta.mail read the "mail.imaps." prefix, so timeouts
-        // must be registered under the prefix that matches the protocol actually used.
-        String p = config.isMailSsl() ? "mail.imaps." : "mail.imap.";
-        props.put(p + "connectiontimeout", "10000");
-        props.put(p + "timeout", "30000");
-        props.put(p + "writetimeout", "30000");
+        Properties props = MailMessageSupport.imapProperties(config);
 
         List<RawMessage> result = new ArrayList<>();
         Session session = Session.getInstance(props);
 
-        try (IMAPStore store = (IMAPStore) session.getStore(config.isMailSsl() ? "imaps" : "imap")) {
-            log.debug("Connecting to IMAP server: {}:{}", config.getMailHostname(), config.isMailSsl() ? "993" : "143");
+        try (IMAPStore store = (IMAPStore) session.getStore(MailMessageSupport.imapProtocol(config))) {
+            log.debug("Connecting to IMAP server: {}:{}", config.getMailHostname(),
+                    MailMessageSupport.imapPort(config));
             store.connect(config.getMailHostname(), config.getMailUsername(), config.getMailPassword());
             log.debug("Connected to IMAP server");
 
@@ -115,7 +96,8 @@ public class ImapReader {
                 }
 
                 for (Message msg : messages) {
-                    parseRawMessage(msg).ifPresent(result::add);
+                    MailMessageSupport.parseRawMessage(msg, true, "ImapReader")
+                            .ifPresent(result::add);
                 }
                 log.info("IMAP: read {} messages", result.size());
             }
@@ -141,101 +123,4 @@ public class ImapReader {
                 new SentDateTerm(ComparisonTerm.LE, new Date((toEpoch + 86400) * 1000)));
     }
 
-    /**
-     * Converts a Jakarta Mail {@link Message} to a {@link RawMessage}.
-     * Returns empty if the {@code Date} header is missing, unparseable, or the subject is null.
-     */
-    private Optional<RawMessage> parseRawMessage(Message msg) {
-        try {
-            String[] dateHeaders = msg.getHeader("Date");
-            if (dateHeaders == null || dateHeaders.length == 0) {
-                return Optional.empty();
-            }
-            String dateStr = dateHeaders[0];
-            String subject = msg.getSubject();
-            if (subject == null) {
-                return Optional.empty();
-            }
-            long unixDate;
-            try {
-                unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
-            } catch (DateTimeParseException e) {
-                // The strict pattern rejects RFC 5322 forms real MTAs emit — a trailing zone
-                // comment ("+0300 (EEST)", added by Postfix), folding whitespace before a
-                // single-digit day, a missing day-of-week or missing seconds. Dropping such
-                // messages was silent (log.debug is off in production), so fall back to
-                // jakarta.mail's lenient MailDateFormat instead.
-                Date sent = msg.getSentDate();
-                if (sent == null) {
-                    log.warn("Unparseable Date header «{}» and no sent date, skipping message", dateStr);
-                    return Optional.empty();
-                }
-                unixDate = sent.getTime() / 1000;
-                log.debug("Date header «{}» not in strict format, used lenient parse", dateStr);
-            }
-            String body;
-            try {
-                body = extractText(msg);
-            } catch (MessagingException | IOException e) {
-                log.debug("Failed to get message body: {}", e.getMessage());
-                body = "";
-            }
-            String[] replyToHeaders = msg.getHeader("In-Reply-To");
-            String inReplyTo = (replyToHeaders != null && replyToHeaders.length > 0)
-                    ? replyToHeaders[0].trim() : "";
-            return Optional.of(new RawMessage(dateStr, unixDate, subject, body, inReplyTo));
-        } catch (MessagingException e) {
-            log.warn("Failed to parse IMAP message header: {}", e.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Extracts the plain-text body from a message. Returns an empty string when no
-     * {@code text/plain} part is found or the message has an unsupported MIME structure.
-     */
-    private String extractText(Message message) throws MessagingException, IOException {
-        if (message.isMimeType("text/plain")) {
-            return contentAsText(message.getContent());
-        }
-        if (message.isMimeType("multipart/*")) {
-            return extractText((Multipart) message.getContent());
-        }
-        return "";
-    }
-
-    /**
-     * Walks a multipart tree depth-first and returns the first {@code text/plain} part found.
-     *
-     * <p>Recursion is required: a message with an attachment is typically
-     * {@code multipart/mixed → multipart/alternative → text/plain}, and a flat scan of the top
-     * level finds no {@code text/plain} part at all, silently yielding an empty body.
-     */
-    private String extractText(Multipart multipart) throws MessagingException, IOException {
-        for (int i = 0; i < multipart.getCount(); i++) {
-            BodyPart part = multipart.getBodyPart(i);
-            if (part.isMimeType("text/plain")) {
-                return contentAsText(part.getContent());
-            }
-            if (part.getContent() instanceof Multipart nested) {
-                String text = extractText(nested);
-                if (!text.isEmpty()) {
-                    return text;
-                }
-            }
-        }
-        return "";
-    }
-
-    /** Normalises a MIME part payload to text; {@code InputStream} parts are read as UTF-8. */
-    private static String contentAsText(Object content) throws IOException {
-        return switch (content) {
-            case String s ->
-                s;
-            case InputStream is ->
-                new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            default ->
-                "";
-        };
-    }
 }

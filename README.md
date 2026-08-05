@@ -890,6 +890,7 @@ NOCZvit/
 │   ├── imap/
 │   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
 │   │   ├── ImapReader.java        — I/O: читання сирих повідомлень з IMAP-папки
+│   │   ├── MailMessageSupport.java — спільні для ImapReader та ImapTrapReader: підключення до IMAP, парсинг Message → RawMessage, обхід MIME (stateless, thread-safe)
 │   │   ├── RawMessage.java        — record: незмінний DTO (subject, body, unixDate, dateStr, inReplyTo)
 │   │   ├── PdIncidentParser.java  — Zabbix ICMP ping / restarted
 │   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події

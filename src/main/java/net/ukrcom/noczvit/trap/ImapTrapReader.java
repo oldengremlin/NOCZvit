@@ -19,24 +19,14 @@ import com.sun.mail.imap.IMAPStore;
 import jakarta.mail.Folder;
 import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
-import jakarta.mail.Multipart;
-import jakarta.mail.BodyPart;
 import jakarta.mail.Session;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 import net.ukrcom.noczvit.imap.ImapReader;
+import net.ukrcom.noczvit.imap.MailMessageSupport;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
@@ -45,13 +35,12 @@ import net.ukrcom.noczvit.imap.RawMessage;
  *
  * <p>The folder pattern in {@code snmp.trap.folder} may be a literal folder path or
  * may end with {@code *} to match multiple sibling folders.
+ *
+ * <p>Connection setup and message conversion are shared with {@link ImapReader} via
+ * {@link MailMessageSupport}; only folder-wildcard resolution is specific to this reader.
  */
 @Slf4j
 public class ImapTrapReader {
-
-    // RFC 2822 allows single-digit day (e.g. "Thu, 9 Jul 2026") — use 'd' not 'dd'
-    private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER
-            = DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
     private final Config config;
 
@@ -91,23 +80,14 @@ public class ImapTrapReader {
      */
     public List<RawMessage> readTrapsFromFolder(boolean fetchAll, long fromEpoch, long toEpoch,
                                                 String folderPattern) throws MessagingException {
-        Properties props = new Properties();
-        props.put("mail.imap.ssl.enable", config.isMailSsl());
-        props.put("mail.imap.host", config.getMailHostname());
-        props.put("mail.imap.port", config.isMailSsl() ? "993" : "143");
-        // getStore("imaps") makes jakarta.mail read the "mail.imaps." prefix, so timeouts
-        // must be registered under the prefix that matches the protocol actually used.
-        String p = config.isMailSsl() ? "mail.imaps." : "mail.imap.";
-        props.put(p + "connectiontimeout", "10000");
-        props.put(p + "timeout", "30000");
-        props.put(p + "writetimeout", "30000");
+        Properties props = MailMessageSupport.imapProperties(config);
 
         List<RawMessage> result = new ArrayList<>();
         Session session = Session.getInstance(props);
 
-        try (IMAPStore store = (IMAPStore) session.getStore(config.isMailSsl() ? "imaps" : "imap")) {
+        try (IMAPStore store = (IMAPStore) session.getStore(MailMessageSupport.imapProtocol(config))) {
             log.debug("ImapTrapReader: connecting to {}:{}", config.getMailHostname(),
-                    config.isMailSsl() ? "993" : "143");
+                    MailMessageSupport.imapPort(config));
             store.connect(config.getMailHostname(), config.getMailUsername(), config.getMailPassword());
 
             List<Folder> folders = resolveFolders(store, folderPattern);
@@ -135,7 +115,9 @@ public class ImapTrapReader {
                     }
 
                     for (Message msg : messages) {
-                        parseRawMessage(msg).ifPresent(result::add);
+                        // Trap mails carry no In-Reply-To pairing — pass false to store an empty key
+                        MailMessageSupport.parseRawMessage(msg, false, "ImapTrapReader")
+                                .ifPresent(result::add);
                     }
                     log.info("ImapTrapReader: read {} messages from «{}»",
                             result.size(), imapFolder.getFullName());
@@ -200,84 +182,4 @@ public class ImapTrapReader {
         return result;
     }
 
-    private Optional<RawMessage> parseRawMessage(Message msg) {
-        try {
-            String[] dateHeaders = msg.getHeader("Date");
-            if (dateHeaders == null || dateHeaders.length == 0) {
-                return Optional.empty();
-            }
-            String dateStr = dateHeaders[0];
-            String subject = msg.getSubject();
-            if (subject == null) {
-                return Optional.empty();
-            }
-            long unixDate;
-            try {
-                unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
-            } catch (DateTimeParseException e) {
-                // See ImapReader: the strict pattern rejects legitimate RFC 5322 forms such as
-                // a trailing "(EEST)" zone comment, so fall back to the lenient MailDateFormat.
-                Date sent = msg.getSentDate();
-                if (sent == null) {
-                    log.warn("ImapTrapReader: unparseable Date «{}» and no sent date, skipping", dateStr);
-                    return Optional.empty();
-                }
-                unixDate = sent.getTime() / 1000;
-                log.debug("ImapTrapReader: Date «{}» not in strict format, used lenient parse", dateStr);
-            }
-            String body;
-            try {
-                body = extractText(msg);
-            } catch (MessagingException | IOException e) {
-                log.debug("ImapTrapReader: failed to get message body: {}", e.getMessage());
-                body = "";
-            }
-            return Optional.of(new RawMessage(dateStr, unixDate, subject, body, ""));
-        } catch (MessagingException e) {
-            log.warn("ImapTrapReader: failed to parse message header: {}", e.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    private String extractText(Message message) throws MessagingException, IOException {
-        if (message.isMimeType("text/plain")) {
-            return contentAsText(message.getContent());
-        }
-        if (message.isMimeType("multipart/*")) {
-            return extractText((Multipart) message.getContent());
-        }
-        return "";
-    }
-
-    /**
-     * Walks a multipart tree depth-first and returns the first {@code text/plain} part found.
-     *
-     * <p>Recursion is required: a trap mail carrying an attachment is typically
-     * {@code multipart/mixed → multipart/alternative → text/plain}, and a flat scan of the top
-     * level would silently yield an empty body, dropping the trap.
-     */
-    private String extractText(Multipart multipart) throws MessagingException, IOException {
-        for (int i = 0; i < multipart.getCount(); i++) {
-            BodyPart part = multipart.getBodyPart(i);
-            if (part.isMimeType("text/plain")) {
-                return contentAsText(part.getContent());
-            }
-            if (part.getContent() instanceof Multipart nested) {
-                String text = extractText(nested);
-                if (!text.isEmpty()) {
-                    return text;
-                }
-            }
-        }
-        return "";
-    }
-
-    /** Normalises a MIME part payload to text; {@code InputStream} parts are read as UTF-8. */
-    private static String contentAsText(Object content) throws IOException {
-        return switch (content) {
-            case String s -> s;
-            case InputStream is -> new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            default -> "";
-        };
-    }
 }
