@@ -27,6 +27,7 @@ import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
+import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
  * Перетворює {@link ZabbixProblem} на {@link Incident}-об'єкти для відображення
@@ -48,7 +49,7 @@ import net.ukrcom.noczvit.model.Incident.Status;
 public class ZabbixIncidentConverter {
 
     private static final Pattern TRAP_CARD_PATTERN
-            = Pattern.compile("(?i)card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
+            = Pattern.compile("(?i)" + Dictionary.CARD_PORT_LINE_REGEX);
 
     private final Dictionary dictionary;
 
@@ -64,29 +65,29 @@ public class ZabbixIncidentConverter {
      */
     public List<Incident> convert(ZabbixProblem p) {
         String host = p.host();
-        String location = dictionary.lookupPD(host);
-        boolean needsReview = location.equals(host);
-        List<String> reviewNames = needsReview ? List.of(host) : List.of();
+        Dictionary.Resolution location = dictionary.resolvePD(host);
+        List<String> reviewNames = location.needsReview() ? List.of(host) : List.of();
 
         String eventDesc = resolveEventDesc(host, p.name());
         String deviceWord = dictionary.lookupDeviceWord(host);
-        String descSuffix = eventDesc + " на " + (deviceWord.isEmpty() ? "" : deviceWord + " ") + location;
+        String descSuffix = eventDesc + " на "
+                + (deviceWord.isEmpty() ? "" : deviceWord + " ") + location.value();
         String pairKey = "zabbix:" + host + ":" + p.clock();
 
         List<Incident> result = new ArrayList<>(2);
 
-        result.add(buildIncident(p.clock(), location, host,
-                "Zabbix зареєстровано початок інциденту, " + descSuffix,
+        result.add(buildIncident(p.clock(), location.value(), host,
+                IncidentDescriptions.statePrefix(IncidentDescriptions.SOURCE_ZABBIX, Status.START) + descSuffix,
                 Status.START, reviewNames, pairKey));
 
         if (!p.isActive()) {
-            result.add(buildIncident(p.rClock(), location, host,
-                    "Zabbix зареєстровано кінець інциденту, " + descSuffix,
+            result.add(buildIncident(p.rClock(), location.value(), host,
+                    IncidentDescriptions.statePrefix(IncidentDescriptions.SOURCE_ZABBIX, Status.END) + descSuffix,
                     Status.END, reviewNames, pairKey));
         }
 
         log.debug("ZabbixIncidentConverter: {} → location='{}', needsReview={}, active={}",
-                host, location, needsReview, p.isActive());
+                host, location.value(), location.needsReview(), p.isActive());
         return result;
     }
 
@@ -103,9 +104,9 @@ public class ZabbixIncidentConverter {
         if (!m.find()) {
             return name;
         }
-        String lineKey = host + ":" + m.group(1) + ":" + m.group(2) + ":" + m.group(3);
-        String resolved = dictionary.lookupPD(lineKey);
-        return lineKey.equals(resolved) ? name : resolved;
+        String lineKey = Dictionary.lineKey(host, m.group(1), m.group(2), m.group(3));
+        Dictionary.Resolution resolved = dictionary.resolvePD(lineKey);
+        return resolved.needsReview() ? name : resolved.value();
     }
 
     /**

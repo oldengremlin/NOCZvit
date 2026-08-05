@@ -24,6 +24,7 @@ import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
+import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
  * Domain: parses Zabbix dry-contact (adlink) alert emails into {@link Incident}
@@ -40,7 +41,7 @@ import net.ukrcom.noczvit.model.Incident.Status;
 public class AdlinkIncidentParser {
 
     private static final Pattern ADLINK_PATTERN
-            = Pattern.compile("(?i)(adlink[\\w-]+):\\s*(?:Trap\\s+)?card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
+            = Pattern.compile("(?i)(adlink[\\w-]+):\\s*(?:Trap\\s+)?" + Dictionary.CARD_PORT_LINE_REGEX);
 
     private final Dictionary dictionary;
 
@@ -64,59 +65,37 @@ public class AdlinkIncidentParser {
         }
 
         String device = matcher.group(1);
-        String card = matcher.group(2);
-        String port = matcher.group(3);
         String line = matcher.group(4);
-        String lineKey = device + ":" + card + ":" + port + ":" + line;
+        String lineKey = Dictionary.lineKey(device, matcher.group(2), matcher.group(3), line);
 
-        String location = dictionary.lookupPD(device);
-        boolean needsReviewLocation = device.equals(location);
+        Dictionary.Resolution location = dictionary.resolvePD(device);
+        Dictionary.Resolution event = dictionary.resolvePD(lineKey);
 
-        String eventDesc = dictionary.lookupPD(lineKey);
-        boolean needsReviewEvent = lineKey.equals(eventDesc);
-        if (needsReviewEvent) {
-            eventDesc = "спрацювання сухого контакту, лінія " + line;
-        }
+        String eventDesc = event.needsReview()
+                           ? "спрацювання сухого контакту, лінія " + line
+                           : event.value();
 
-        Status status = resolveStatus(subject);
-        String statePart = switch (status) {
-            case START ->
-                "Zabbix зареєстровано початок інциденту, ";
-            case END ->
-                "Zabbix зареєстровано кінець інциденту, ";
-            case NONE ->
-                "Zabbix зареєстровано ";
-        };
-        String description = (statePart + eventDesc).replaceAll("\\s+", " ");
+        Status status = IncidentDescriptions.resolveStatus(subject);
+        String description = IncidentDescriptions.describe(
+                IncidentDescriptions.SOURCE_ZABBIX, status, eventDesc);
 
         List<String> reviewNames = new ArrayList<>();
-        if (needsReviewLocation) {
+        if (location.needsReview()) {
             reviewNames.add(device);
         }
-        if (needsReviewEvent) {
+        if (event.needsReview()) {
             reviewNames.add(lineKey);
         }
 
         String dateLoc = DateUtils.convertMonthNumToMnemo(msg.dateStr());
         log.debug("Adlink parsed: device={}, lineKey={}, ts={}", device, lineKey, msg.unixDate());
         return Optional.of(new Incident(
-                location, "",
+                location.value(), "",
                 msg.unixDate(), msg.unixDate(),
                 dateLoc, dateLoc,
                 Source.PD, status,
                 description, List.copyOf(reviewNames),
                 msg.inReplyTo()
         ));
-    }
-
-    /** Maps the subject keyword ({@code "Resolved:"} / {@code "Problem:"}) to a lifecycle status. */
-    private Status resolveStatus(String subject) {
-        if (subject.contains(" Resolved:")) {
-            return Status.END;
-        }
-        if (subject.contains(" Problem:")) {
-            return Status.START;
-        }
-        return Status.NONE;
     }
 }

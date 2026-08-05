@@ -22,6 +22,7 @@ import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
+import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
  * Domain: parses Zabbix/PD alert emails into {@link Incident} objects. No I/O —
@@ -71,10 +72,9 @@ public class PdIncidentParser {
             String fromObject = fromName.matches(".*-\\d+$")
                                 ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "")
                                 : fromName;
-            from = fromObject.replace("-65535", "");
-            String transformedFrom = dictionary.lookupPD(fromObject);
-            boolean needsReview = fromObject.equals(transformedFrom);
-            from = transformedFrom;
+            Dictionary.Resolution resolved = dictionary.resolvePD(fromObject);
+            boolean needsReview = resolved.needsReview();
+            from = resolved.value();
 
             Status status = resolveStatus(subject, type);
             String description = buildDescription(status, type, from);
@@ -122,19 +122,16 @@ public class PdIncidentParser {
 
     /**
      * Determines the incident status from the subject keyword and event type token.
-     * {@code "Problem:"} with {@code type="been"} (restart) maps to {@code NONE}.
+     *
+     * <p>Extends {@link IncidentDescriptions#resolveStatus} with one PD-only rule: a restart
+     * ({@code type="been"}) is reported under a {@code "Problem:"} subject but is an
+     * informational event, not the start of an incident.
      */
     private Status resolveStatus(String subject, String type) {
         if (subject.contains(" Problem:") && type.contains("been")) {
             return Status.NONE;
         }
-        if (subject.contains(" Resolved:")) {
-            return Status.END;
-        }
-        if (subject.contains(" Problem:")) {
-            return Status.START;
-        }
-        return Status.NONE;
+        return IncidentDescriptions.resolveStatus(subject);
     }
 
     /**
@@ -142,14 +139,6 @@ public class PdIncidentParser {
      * and resolved location name.
      */
     private String buildDescription(Status status, String type, String from) {
-        String state = switch (status) {
-            case START ->
-                "Zabbix зареєстровано початок інциденту, ";
-            case END ->
-                "Zabbix зареєстровано кінець інциденту, ";
-            case NONE ->
-                "Zabbix зареєстровано ";
-        };
         String eventDesc = switch (type) {
             case "ICMP" ->
                 "зникнення зв'язку з обладнанням на ";
@@ -160,6 +149,7 @@ public class PdIncidentParser {
             default ->
                 type + " ";
         };
-        return (state + eventDesc + from).replaceAll("\\s+", " ");
+        return IncidentDescriptions.describe(
+                IncidentDescriptions.SOURCE_ZABBIX, status, eventDesc + from);
     }
 }

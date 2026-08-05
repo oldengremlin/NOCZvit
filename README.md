@@ -133,6 +133,20 @@ classDiagram
     class Dictionary {
         +lookupPD(key) String
         +lookupSDH(key) String
+        +lookupDeviceWord(host) String
+        +resolvePD(key) Resolution
+        +resolveSDH(key) Resolution
+        +lineKey(device, card, port, line)$ String
+    }
+    class Resolution {
+        <<record>>
+        +value() String
+        +needsReview() bool
+    }
+    class IncidentDescriptions {
+        +resolveStatus(subject)$ Status
+        +statePrefix(source, status)$ String
+        +describe(source, status, event)$ String
     }
     class EmailSender {
         +sendReport(subject, body)
@@ -283,6 +297,13 @@ classDiagram
 
     Incident --> Source
     Incident --> Status
+    Dictionary ..> Resolution : returns
+
+    PdIncidentParser ..> IncidentDescriptions : wording
+    OsmIncidentParser ..> IncidentDescriptions : wording
+    OspfIncidentParser ..> IncidentDescriptions : wording
+    AdlinkIncidentParser ..> IncidentDescriptions : wording
+    ZabbixIncidentConverter ..> IncidentDescriptions : wording
 
     ZabbixClient ..> ZabbixProblem : creates
     ProblemFilter ..> ZabbixProblem : filters
@@ -885,7 +906,7 @@ NOCZvit/
 ├── src/main/java/net/ukrcom/noczvit/
 │   ├── NOCZvit.java               — точка входу
 │   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
-│   ├── Dictionary.java            — словники PD/SDH/device-word (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N)
+│   ├── Dictionary.java            — словники PD/SDH/device-word (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N; resolvePD/resolveSDH → Resolution(value, needsReview); ключ adlink device:card:port:line)
 │   ├── Debtors.java               — список боржників із MSSQL
 │   ├── imap/
 │   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
@@ -898,7 +919,8 @@ NOCZvit/
 │   │   ├── AdlinkIncidentParser.java — сухі контакти adlink (card/port/line → словник)
 │   │   └── DateUtils.java         — конвертація місяців у локалізований рядок
 │   ├── model/
-│   │   └── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
+│   │   ├── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
+│   │   └── IncidentDescriptions.java — спільні для всіх 5 джерел: subject → Status, префікси описів («Zabbix/OSM зареєстровано …»), збірка опису (stateless)
 │   ├── report/
 │   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (пейринг [-]/[+] за In-Reply-To:, Ping-графіки)
 │   ├── claude/
