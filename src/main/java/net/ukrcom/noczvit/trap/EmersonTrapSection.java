@@ -14,8 +14,6 @@
  */
 package net.ukrcom.noczvit.trap;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -24,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
+import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
@@ -130,7 +129,7 @@ public class EmersonTrapSection {
                 String startStr = HTML_FMT.format(inc.activatedAt());
                 String endStr = inc.clearedAt() != null ? HTML_FMT.format(inc.clearedAt()) : "—";
                 String durStr = inc.clearedAt() != null
-                        ? formatDuration(inc.activatedAt(), inc.clearedAt()) : "—";
+                        ? DurationFormat.between(inc.activatedAt(), inc.clearedAt()) : "—";
 
                 String descHtml = inc.severity() == TrapIncident.Severity.INFO
                         ? "<i>" + StringEscapeUtils.escapeHtml4(inc.description()) + "</i>"
@@ -195,23 +194,5 @@ public class EmersonTrapSection {
 
         html.append("</div>\n");
         return html.toString();
-    }
-
-    private static String formatDuration(Instant from, Instant to) {
-        long seconds = Duration.between(from, to).getSeconds();
-        if (seconds < 0) {
-            seconds = 0;
-        }
-        long hours = seconds / 3600;
-        long minutes = (seconds % 3600) / 60;
-        long secs = seconds % 60;
-
-        if (hours > 0) {
-            return hours + " год " + minutes + " хв " + secs + " с";
-        }
-        if (minutes > 0) {
-            return minutes + " хв " + secs + " с";
-        }
-        return secs + " с";
     }
 }

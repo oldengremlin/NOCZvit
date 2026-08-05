@@ -227,7 +227,10 @@ classDiagram
         +build(incidents, zabbix, from, to) String
         +build(incidents, zabbix, from, to, summaryHtml) String
         -pairIncidents(incidents) List~IncidentRow~
-        -formatDuration(seconds) String
+    }
+    class DurationFormat {
+        +humanize(seconds)$ String
+        +between(from, to)$ String
     }
     class IncidentRow {
         <<record>>
@@ -311,6 +314,8 @@ classDiagram
     ZabbixIncidentConverter ..> Dictionary : lookup
     ZabbixIncidentConverter ..> Incident : creates
 
+    IncidentSectionBuilder ..> DurationFormat : formats
+    EmersonTrapSection ..> DurationFormat : formats
     IncidentSectionBuilder ..> Incident : renders
     IncidentSectionBuilder ..> ZabbixClient : Ping-графіки
 
@@ -624,7 +629,7 @@ Zabbix надсилає два листи на кожен тікет пробл�
 | Тільки `[+]` (початок — поза звітом) | — | час `[+]` | — |
 | Тільки `[-]` (кінець — поза звітом) | час `[-]` | — | — |
 
-**Формат тривалості:** `< 1 хв` якщо менше 60 с; далі `X хв` або `X год Y хв`.
+**Формат тривалості:** `< 1 хв` якщо менше 60 с; далі `X хв` або `X год Y хв`. Єдиний для всіх таблиць звіту (інциденти та трап-секції) — `report/DurationFormat`.
 
 **Дедуплікація:** якщо у вікні звіту трапилось декілька `[-]` або `[+]` з однаковим `In-Reply-To:` — береться перший `[-]` і останній `[+]` (за `messageTs`).
 
@@ -922,6 +927,7 @@ NOCZvit/
 │   │   ├── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
 │   │   └── IncidentDescriptions.java — спільні для всіх 5 джерел: subject → Status, префікси описів («Zabbix/OSM зареєстровано …»), збірка опису (stateless)
 │   ├── report/
+│   │   ├── DurationFormat.java    — єдиний формат «Тривалість» для всіх таблиць звіту (< 1 хв / X хв / X год Y хв)
 │   │   └── IncidentSectionBuilder.java — HTML-секція інцидентів (пейринг [-]/[+] за In-Reply-To:, Ping-графіки)
 │   ├── claude/
 │   │   └── SummaryClient.java     — Claude API: генерація короткого резюме зміни (опціонально)

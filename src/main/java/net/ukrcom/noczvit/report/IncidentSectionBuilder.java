@@ -189,7 +189,7 @@ public class IncidentSectionBuilder {
         String startCell = row.start() != null ? row.start().messageDateStr() : "—";
         String endCell = row.end() != null ? row.end().messageDateStr() : "—";
         String durationCell = paired
-                ? formatDuration(row.end().messageTs() - row.start().messageTs())
+                ? DurationFormat.humanize(row.end().messageTs() - row.start().messageTs())
                 : "—";
 
         String rawDesc = paired
@@ -216,20 +216,6 @@ public class IncidentSectionBuilder {
                 + "<td>" + descHtml + "</td>"
                 + "<td>" + device + "</td>"
                 + "</tr>\n";
-    }
-
-    /**
-     * Formats a duration in seconds to a human-readable Ukrainian string.
-     * Durations under 60 s are shown as {@code "< 1 хв"}.
-     */
-    private String formatDuration(long seconds) {
-        if (seconds < 0) seconds = 0;
-        if (seconds < 60) return "< 1 хв";
-        long minutes = seconds / 60;
-        if (minutes < 60) return minutes + " хв";
-        long hours = minutes / 60;
-        long mins = minutes % 60;
-        return mins > 0 ? hours + " год " + mins + " хв" : hours + " год";
     }
 
     /**
