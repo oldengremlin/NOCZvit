@@ -6,6 +6,13 @@
 
 ---
 
+## [1.19.2] — 2026-08-05
+
+### Змінено
+- **Прибрано дублювання таблиці українських назв місяців.** `ZabbixIncidentConverter` мав власний `UA_MONTHS` і приватний `formatUa()`, паралельні до `MONTH_MAP`/`convertMonthNumToMnemo` у `DateUtils` — не через архітектурну потребу, а тому що `convertMonthNumToMnemo` був package-private і фізично недоступний з пакету `zabbix`. Метод зроблено `public`, до `DateUtils` додано `formatUa(LocalDateTime)` (та сама таблиця місяців, інший вхідний тип — рядок заголовка `Date:` проти вже розпарсеного `LocalDateTime`). `ZabbixIncidentConverter` тепер викликає `DateUtils.formatUa()`; локальні `UA_MONTHS`/`formatUa()` видалено. Без зміни поведінки — лише єдине джерело правди для назв місяців
+
+---
+
 ## [1.19.1] — 2026-08-05
 
 ### Виправлено

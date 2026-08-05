@@ -23,6 +23,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Dictionary;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Source;
 import net.ukrcom.noczvit.model.Incident.Status;
@@ -48,11 +49,6 @@ public class ZabbixIncidentConverter {
 
     private static final Pattern TRAP_CARD_PATTERN
             = Pattern.compile("(?i)card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)");
-
-    private static final String[] UA_MONTHS = {
-        "", "січ", "лют", "бер", "квіт", "трав", "черв",
-        "лип", "серп", "вер", "жовт", "лист", "груд"
-    };
 
     private final Dictionary dictionary;
 
@@ -120,20 +116,8 @@ public class ZabbixIncidentConverter {
                                    String pairKey) {
         LocalDateTime dt = Instant.ofEpochSecond(epochSec)
                 .atZone(ZoneId.systemDefault()).toLocalDateTime();
-        String dateStr = formatUa(dt);
+        String dateStr = DateUtils.formatUa(dt);
         return new Incident(location, host, epochSec, epochSec,
                 dateStr, dateStr, Source.ZABBIX, status, description, reviewNames, pairKey);
-    }
-
-    /**
-     * Formats a {@link LocalDateTime} as a Ukrainian-locale date-time string, matching the
-     * zero-padded day format that {@link net.ukrcom.noczvit.imap.DateUtils#convertMonthNumToMnemo}
-     * produces for the other four {@link net.ukrcom.noczvit.model.Incident} sources
-     * ({@code "dd mmm yyyy HH:mm:ss"}, e.g. {@code "01 січ 2025 08:00:00"}).
-     */
-    private static String formatUa(LocalDateTime dt) {
-        return String.format("%02d %s %d %02d:%02d:%02d",
-                dt.getDayOfMonth(), UA_MONTHS[dt.getMonthValue()], dt.getYear(),
-                dt.getHour(), dt.getMinute(), dt.getSecond());
     }
 }
