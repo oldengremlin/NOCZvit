@@ -919,7 +919,7 @@ NOCZvit/
 │   │   ├── MailMessageSupport.java — спільні для ImapReader та ImapTrapReader: підключення до IMAP, парсинг Message → RawMessage, обхід MIME (stateless, thread-safe)
 │   │   ├── RawMessage.java        — record: незмінний DTO (subject, body, unixDate, dateStr, inReplyTo)
 │   │   ├── PdIncidentParser.java  — Zabbix ICMP ping / restarted
-│   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події
+│   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події (пізніший за алерт — обрізається; уточнення «який відбувся» лише коли раніший)
 │   │   ├── OspfIncidentParser.java — Zabbix ospfNbrStateChange
 │   │   ├── AdlinkIncidentParser.java — сухі контакти adlink (card/port/line → словник)
 │   │   └── DateUtils.java         — ЄДИНИЙ формат дати для всього звіту: formatUa(LocalDateTime/Instant) та convertMonthNumToMnemo (нормалізує день до 2 цифр)

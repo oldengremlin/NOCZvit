@@ -122,8 +122,20 @@ public class OsmIncidentParser {
             }
         }
 
-        // Append trap time note to description when event time differs from message time
-        if (eventTs != msg.unixDate()) {
+        // An event cannot have happened after the alert that reports it, yet OSM regularly sends
+        // a Trap value a couple of minutes ahead of its own mail — clock skew between the OSM
+        // host and the mail server, not a real event time. Clamp those to the alert time.
+        if (eventTs > msg.unixDate()) {
+            log.debug("Trap value {} is after the alert ({}), clamping to the alert time",
+                    eventTs, msg.unixDate());
+            eventTs = msg.unixDate();
+            eventDateStr = msg.dateStr();
+        }
+
+        // Only a Trap value that predates the alert says something the Початок column does not —
+        // the event sat unreported for a while. A value equal to it (including everything just
+        // clamped above) adds nothing, so the note is omitted.
+        if (eventTs < msg.unixDate()) {
             description += ", який відбувся " + DateUtils.convertMonthNumToMnemo(eventDateStr);
         }
 
