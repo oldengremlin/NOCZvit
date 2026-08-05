@@ -44,6 +44,12 @@ public class OsmIncidentParser {
             = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
     private static final Pattern PATTERN_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
 
+    // How far a Trap value must predate its alert before the «який відбувся …» note is worth
+    // adding. Below this the gap is clock skew or processing lag between the OSM host and the
+    // mail server — observed at ~2 minutes — and the note would only restate the «Початок»
+    // column. Only a genuinely delayed report says something that column cannot.
+    private static final long TRAP_NOTE_MIN_LAG_SEC = 5 * 60;
+
     private final Dictionary dictionary;
 
     public OsmIncidentParser(Dictionary dictionary) {
@@ -132,10 +138,11 @@ public class OsmIncidentParser {
             eventDateStr = msg.dateStr();
         }
 
-        // Only a Trap value that predates the alert says something the Початок column does not —
-        // the event sat unreported for a while. A value equal to it (including everything just
-        // clamped above) adds nothing, so the note is omitted.
-        if (eventTs < msg.unixDate()) {
+        // Only a Trap value that predates the alert by more than the skew threshold says
+        // something the «Початок» column does not — the event sat unreported that long. Anything
+        // closer (including everything just clamped above) adds nothing, so the note is omitted.
+        // eventTs stays as reported either way; only the note is suppressed.
+        if (msg.unixDate() - eventTs >= TRAP_NOTE_MIN_LAG_SEC) {
             description += ", який відбувся " + DateUtils.convertMonthNumToMnemo(eventDateStr);
         }
 
