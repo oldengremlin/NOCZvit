@@ -930,6 +930,7 @@ NOCZvit/
 │   │   └── ResumeRecord.java      — record: DTO одного збереженого резюме
 │   ├── trap/
 │   │   ├── ImapTrapReader.java    — читання SNMP/RAMOS трап листів з IMAP-папок (wildcard-підтримка)
+│   │   ├── TrapMailFormat.java    — спільний для Emerson/RAMOS формат трап-листа: regex-заголовок (час+IP) та формат часу
 │   │   ├── EmersonTrapParser.java — парсинг subject+body листа → TrapEvent (нормалізація типу трапу)
 │   │   ├── TrapDeduplicator.java  — дедуплікація Cold Start трапів у часовому вікні
 │   │   ├── TrapCorrelator.java    — state machine: ланцюжки PDC + самостійні ADC + Cold Start linking

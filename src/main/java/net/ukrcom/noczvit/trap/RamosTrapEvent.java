@@ -15,6 +15,7 @@
 package net.ukrcom.noczvit.trap;
 
 import java.time.Instant;
+import java.util.Set;
 
 /**
  * One point-in-time RAMOS environmental sensor event parsed from an IMAP trap email.
@@ -33,4 +34,19 @@ public record RamosTrapEvent(
         String sensorName,
         String sensorType,
         String room
-) {}
+) {
+
+    /**
+     * States severe enough to highlight in the report and forward to the AI prompt — the
+     * narrowest tier. A strict subset of {@link #REPORTABLE_STATES}; both sets are kept here so
+     * a spelling change lands in one place instead of drifting between parser and renderer.
+     */
+    public static final Set<String> CRITICAL_STATES =
+            Set.of("Critical", "High Critical", "Low Critical");
+
+    /** States worth parsing at all; everything else is normal operation and is dropped. */
+    public static final Set<String> REPORTABLE_STATES = Set.of(
+            "Critical", "High Critical", "Low Critical",
+            "High Warning", "Low Warning", "Warning",
+            "Sensor Error");
+}

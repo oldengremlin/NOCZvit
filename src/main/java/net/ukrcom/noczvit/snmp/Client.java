@@ -29,6 +29,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.function.Function;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
@@ -92,35 +93,15 @@ public class Client {
         List<String> hostnames = new ArrayList<>(config.getHosts().keySet());
         Collections.sort(hostnames);
 
-        Semaphore sem = new Semaphore(MAX_CONCURRENT_SNMP);
-        List<Future<CelsiusResult>> futures = new ArrayList<>(hostnames.size());
-
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (String hostname : hostnames) {
-                futures.add(executor.submit(() -> {
-                    sem.acquire();
-                    try {
-                        return queryHostCelsius(hostname, from, to, zabbix);
-                    } finally {
-                        sem.release();
-                    }
-                }));
-            }
-        }
+        List<CelsiusResult> results = pollConcurrently(hostnames,
+                hostname -> queryHostCelsius(hostname, from, to, zabbix), "celsius");
 
         int n = 0;
-        for (Future<CelsiusResult> future : futures) {
-            try {
-                n++;
-                CelsiusResult result = future.get();
-                html.append("<tr><td>").append(n).append(".</td>")
-                        .append(result.cells()).append("</tr>\n");
-                html.append(result.graphRow());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException e) {
-                log.error("SNMP celsius query failed: {}", e.getCause().getMessage());
-            }
+        for (CelsiusResult result : results) {
+            n++;
+            html.append("<tr><td>").append(n).append(".</td>")
+                    .append(result.cells()).append("</tr>\n");
+            html.append(result.graphRow());
         }
 
         html.append("</tbody></table>\n");
@@ -200,15 +181,35 @@ public class Client {
         List<String> hosts = new ArrayList<>(config.getRamos().keySet());
         Collections.sort(hosts);
 
+        pollConcurrently(hosts, this::queryHostRamos, "ramos").forEach(html::append);
+
+        return html.toString();
+    }
+
+    /**
+     * Runs {@code query} for every key on its own virtual thread, bounded to
+     * {@value #MAX_CONCURRENT_SNMP} in flight, and returns the results in input order.
+     *
+     * <p>Failed queries are logged and dropped rather than aborting the section — one
+     * unreachable device must not cost the whole report. The semaphore and the result list are
+     * per-call locals, so concurrent callers never share bounding state; results are collected on
+     * the calling thread after the executor's try-with-resources has joined every task.
+     *
+     * @param keys      hostnames or IPs to poll
+     * @param query     per-key SNMP query
+     * @param logLabel  label used in the failure log line
+     * @return successful results, in the order of {@code keys}
+     */
+    private <T> List<T> pollConcurrently(List<String> keys, Function<String, T> query, String logLabel) {
         Semaphore sem = new Semaphore(MAX_CONCURRENT_SNMP);
-        List<Future<String>> futures = new ArrayList<>(hosts.size());
+        List<Future<T>> futures = new ArrayList<>(keys.size());
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (String host : hosts) {
+            for (String key : keys) {
                 futures.add(executor.submit(() -> {
                     sem.acquire();
                     try {
-                        return queryHostRamos(host);
+                        return query.apply(key);
                     } finally {
                         sem.release();
                     }
@@ -216,17 +217,17 @@ public class Client {
             }
         }
 
-        for (Future<String> future : futures) {
+        List<T> results = new ArrayList<>(futures.size());
+        for (Future<T> future : futures) {
             try {
-                html.append(future.get());
+                results.add(future.get());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
-                log.error("SNMP ramos query failed: {}", e.getCause().getMessage());
+                log.error("SNMP {} query failed: {}", logLabel, e.getCause().getMessage());
             }
         }
-
-        return html.toString();
+        return results;
     }
 
     /**
