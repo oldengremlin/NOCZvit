@@ -922,7 +922,7 @@ NOCZvit/
 │   │   ├── OsmIncidentParser.java — OSM/SDH (Power, STM-N); Trap value → точний час події
 │   │   ├── OspfIncidentParser.java — Zabbix ospfNbrStateChange
 │   │   ├── AdlinkIncidentParser.java — сухі контакти adlink (card/port/line → словник)
-│   │   └── DateUtils.java         — конвертація місяців у локалізований рядок
+│   │   └── DateUtils.java         — ЄДИНИЙ формат дати для всього звіту: formatUa(LocalDateTime/Instant) та convertMonthNumToMnemo (нормалізує день до 2 цифр)
 │   ├── model/
 │   │   ├── Incident.java          — record: доменна модель інциденту (Source, Status, reviewNames)
 │   │   └── IncidentDescriptions.java — спільні для всіх 5 джерел: subject → Status, префікси описів («Zabbix/OSM зареєстровано …»), збірка опису (stateless)

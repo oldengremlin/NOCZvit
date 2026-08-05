@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
-import net.ukrcom.noczvit.NOCZvit;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.history.ResumeHistory;
 import net.ukrcom.noczvit.history.ResumeRecord;
 import net.ukrcom.noczvit.model.Incident;
@@ -235,9 +235,9 @@ public class SummaryClient {
                 .filter(i -> i.inReplyTo() == null || i.inReplyTo().isBlank())
                 .count();
         sb.append("Звітний період: з ")
-                .append(from.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append(DateUtils.formatUa(from))
                 .append(" по ")
-                .append(to.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append(DateUtils.formatUa(to))
                 .append("\n\nУнікальних подій: ").append(uniqueCount).append("\n");
 
         sb.append("\nІнциденти:\n");

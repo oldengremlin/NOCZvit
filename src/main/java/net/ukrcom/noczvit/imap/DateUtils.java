@@ -50,14 +50,22 @@ public class DateUtils {
     }
 
     /**
-     * Replaces English month abbreviations in an IMAP date string with Ukrainian equivalents
-     * and strips the leading day-of-week prefix and trailing timezone offset.
+     * Replaces English month abbreviations in an IMAP date string with Ukrainian equivalents,
+     * strips the leading day-of-week prefix and trailing timezone offset, and zero-pads a
+     * single-digit day.
      *
-     * @param dt raw date string (e.g. {@code "Mon, 01 Jan 2025 08:00:00 +0200"})
+     * <p>The padding matters: RFC 2822 permits both {@code "04 Aug"} and {@code "4 Aug"}, and
+     * senders differ — Zabbix pads, the trap registrator does not. Without normalising here, the
+     * emitted day format would depend on whoever sent the mail and would not match
+     * {@link #formatUa}, putting two shapes in one table.
+     *
+     * @param dt raw date string (e.g. {@code "Mon, 1 Jan 2025 08:00:00 +0200"})
      * @return localised date string (e.g. {@code "01 січ 2025 08:00:00"})
      */
     public static String convertMonthNumToMnemo(String dt) {
-        dt = dt.replaceAll("^\\w{3},\\s+", "").replaceAll("\\s*\\+\\d{4}$", "");
+        dt = dt.replaceAll("^\\w{3},\\s+", "")
+                .replaceAll("\\s*\\+\\d{4}$", "")
+                .replaceFirst("^(\\d) ", "0$1 ");
         Matcher matcher = MONTH_PATTERN.matcher(dt);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
@@ -77,6 +85,17 @@ public class DateUtils {
         return String.format("%02d %s %d %02d:%02d:%02d",
                 dt.getDayOfMonth(), UA_MONTHS[dt.getMonthValue()], dt.getYear(),
                 dt.getHour(), dt.getMinute(), dt.getSecond());
+    }
+
+    /**
+     * Formats an {@link Instant} in the system time zone using {@link #formatUa(LocalDateTime)} —
+     * the single display format for every date shown in the report.
+     *
+     * @param instant point in time (trap timestamps are carried as instants)
+     * @return localised date-time string (e.g. {@code "05 серп 2026 13:37:15"})
+     */
+    public static String formatUa(Instant instant) {
+        return formatUa(LocalDateTime.ofInstant(instant, ZoneId.systemDefault()));
     }
 
     /**

@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import net.ukrcom.noczvit.NOCZvit;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.model.Incident.Status;
 import net.ukrcom.noczvit.zabbix.Client;
@@ -80,8 +80,8 @@ public class IncidentSectionBuilder {
 
         StringBuilder html = new StringBuilder();
         html.append("<p><h1>Інциденти, <u>зареєстровані в автоматичному режимі</u> системами Zabbix та OSM,<br>")
-                .append("що відбувалися в період з ").append(dutyBegin.format(NOCZvit.DATE_TIME_FORMATTER))
-                .append(" по ").append(dutyEnd.format(NOCZvit.DATE_TIME_FORMATTER))
+                .append("що відбувалися в період з ").append(DateUtils.formatUa(dutyBegin))
+                .append(" по ").append(DateUtils.formatUa(dutyEnd))
                 .append("</h1>\n");
 
         if (summaryHtml != null && !summaryHtml.isBlank()) {

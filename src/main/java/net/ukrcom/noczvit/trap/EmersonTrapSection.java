@@ -14,14 +14,12 @@
  */
 package net.ukrcom.noczvit.trap;
 
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
 
@@ -30,14 +28,6 @@ import org.apache.commons.text.StringEscapeUtils;
  * plain-text summary block for the Claude AI prompt.
  */
 public class EmersonTrapSection {
-
-    private static final DateTimeFormatter HTML_FMT = DateTimeFormatter
-            .ofPattern("dd.MM HH:mm:ss", Locale.ROOT)
-            .withZone(ZoneId.systemDefault());
-
-    private static final DateTimeFormatter TEXT_FMT = DateTimeFormatter
-            .ofPattern("dd.MM.yyyy HH:mm", Locale.ROOT)
-            .withZone(ZoneId.systemDefault());
 
     /**
      * Result of {@link #build(List, List)}: an HTML fragment, a plain-text block for the AI prompt,
@@ -126,8 +116,8 @@ public class EmersonTrapSection {
             int n = 0;
             for (TrapIncident inc : devIncidents) {
                 n++;
-                String startStr = HTML_FMT.format(inc.activatedAt());
-                String endStr = inc.clearedAt() != null ? HTML_FMT.format(inc.clearedAt()) : "—";
+                String startStr = DateUtils.formatUa(inc.activatedAt());
+                String endStr = inc.clearedAt() != null ? DateUtils.formatUa(inc.clearedAt()) : "—";
                 String durStr = inc.clearedAt() != null
                         ? DurationFormat.between(inc.activatedAt(), inc.clearedAt()) : "—";
 
@@ -150,8 +140,8 @@ public class EmersonTrapSection {
                         .append("</tr>\n");
 
                 // Plain text row
-                String startTextStr = TEXT_FMT.format(inc.activatedAt());
-                String endTextStr = inc.clearedAt() != null ? TEXT_FMT.format(inc.clearedAt()) : "незакрито";
+                String startTextStr = DateUtils.formatUa(inc.activatedAt());
+                String endTextStr = inc.clearedAt() != null ? DateUtils.formatUa(inc.clearedAt()) : "незакрито";
                 text.append(n).append(". ").append(startTextStr)
                         .append(" – ").append(endTextStr)
                         .append(" | ").append(inc.description());
@@ -187,7 +177,7 @@ public class EmersonTrapSection {
                     .append("<ul class=\"trap-ps-list\">\n");
             evs.forEach(ev ->
                     html.append("<li>").append(StringEscapeUtils.escapeHtml4(ev.trapType()))
-                            .append(" <small>(").append(HTML_FMT.format(ev.timestamp())).append(")</small>")
+                            .append(" <small>(").append(DateUtils.formatUa(ev.timestamp())).append(")</small>")
                             .append("</li>\n"));
             html.append("</ul>\n");
         });
