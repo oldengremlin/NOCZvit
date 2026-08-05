@@ -21,7 +21,6 @@ import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,6 +37,7 @@ import org.snmp4j.smi.VariableBinding;
 import org.apache.commons.text.StringEscapeUtils;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
+import net.ukrcom.noczvit.imap.DateUtils;
 
 /**
  * Polls SNMP-capable devices for temperature data (Celsius section) and Ramos environmental
@@ -51,7 +51,6 @@ import net.ukrcom.noczvit.Config;
 @Slf4j
 public class Client {
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int MAX_CONCURRENT_SNMP = 10;
 
     /**
@@ -80,7 +79,7 @@ public class Client {
     public String getCelsius(LocalDateTime from, LocalDateTime to, net.ukrcom.noczvit.zabbix.Client zabbix) {
         StringBuilder html = new StringBuilder();
         html.append("<h2 class=\"temp-title\">Температура обладнання на виносах, станом на ")
-                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
+                .append(DateUtils.formatUa(LocalDateTime.now()))
                 .append("</h2>\n")
                 .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
@@ -175,7 +174,7 @@ public class Client {
     public String getRamos() {
         StringBuilder html = new StringBuilder();
         html.append("<p>\n<h1>Температурні показники Ramos, станом на ")
-                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER))
+                .append(DateUtils.formatUa(LocalDateTime.now()))
                 .append("</h1>\n");
 
         List<String> hosts = new ArrayList<>(config.getRamos().keySet());

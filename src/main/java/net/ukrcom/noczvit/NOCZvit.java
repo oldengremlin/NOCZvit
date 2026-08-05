@@ -15,6 +15,7 @@
 package net.ukrcom.noczvit;
 
 import net.ukrcom.noczvit.claude.SummaryClient;
+import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.model.Incident;
 import net.ukrcom.noczvit.report.IncidentSectionBuilder;
 import net.ukrcom.noczvit.smtp.EmailSender;
@@ -61,7 +62,11 @@ import org.slf4j.LoggerFactory;
 @Slf4j
 public class NOCZvit {
 
-    /** Date-time format used throughout the report for display and prompt strings. */
+    /**
+     * ISO pattern used only to <em>parse</em> the duty-period boundaries below. Everything the
+     * report displays goes through {@link DateUtils#formatUa} instead, so all dates read the
+     * same regardless of source.
+     */
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     /** Upper bound for the whole parallel init phase; well above any healthy run. */
@@ -293,8 +298,8 @@ public class NOCZvit {
 
             // reportFrom/reportTo already resolve the night/day period (see above) — the two
             // branches differed only in which duty pair they passed on.
-            subject = "Автоматизований звіт за період з " + reportFrom.format(DATE_TIME_FORMATTER)
-                    + " по " + reportTo.format(DATE_TIME_FORMATTER);
+            subject = "Автоматизований звіт за період з " + DateUtils.formatUa(reportFrom)
+                    + " по " + DateUtils.formatUa(reportTo);
             if (config.isIncidentsEnabled() && incidents != null) {
                 String summaryHtml = summaryClient != null
                                      ? summaryClient.generateSummary(incidentsForTable, reportFrom, reportTo,

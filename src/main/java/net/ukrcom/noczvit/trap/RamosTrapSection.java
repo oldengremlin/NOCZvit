@@ -15,14 +15,13 @@
 package net.ukrcom.noczvit.trap;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.imap.DateUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
@@ -40,11 +39,6 @@ import org.apache.commons.text.StringEscapeUtils;
  */
 @Slf4j
 public class RamosTrapSection {
-
-    private static final DateTimeFormatter TIME_FMT =
-            DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
-    private static final DateTimeFormatter DT_FMT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     /**
      * Rendered output for one RAMOS trap section.
@@ -84,7 +78,7 @@ public class RamosTrapSection {
 
         StringBuilder html = new StringBuilder();
         html.append("<h2 class=\"ramos-title\">Ramos — події станом на ")
-            .append(DT_FMT.format(Instant.now()))
+            .append(DateUtils.formatUa(Instant.now()))
             .append("</h2>\n");
 
         StringBuilder plainText = new StringBuilder();
@@ -107,14 +101,14 @@ public class RamosTrapSection {
                 boolean critical = RamosTrapEvent.CRITICAL_STATES.contains(ev.state());
 
                 html.append("<tr>")
-                    .append("<td>").append(TIME_FMT.format(ev.timestamp())).append("</td>")
+                    .append("<td>").append(DateUtils.formatUa(ev.timestamp())).append("</td>")
                     .append("<td><b>").append(StringEscapeUtils.escapeHtml4(ev.state())).append("</b></td>")
                     .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorName())).append("</td>")
                     .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorType())).append("</td>")
                     .append("</tr>\n");
 
                 if (critical) {
-                    plainText.append(TIME_FMT.format(ev.timestamp()))
+                    plainText.append(DateUtils.formatUa(ev.timestamp()))
                              .append(" ").append(ev.state())
                              .append(" / ").append(ev.sensorName())
                              .append("\n");
