@@ -109,7 +109,7 @@ public class SummaryClient {
      * відсутності даних
      */
     public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to) {
-        return generateSummary(allIncidents, from, to, "");
+        return generateSummary(allIncidents, from, to, "", "");
     }
 
     /**
@@ -124,6 +124,25 @@ public class SummaryClient {
      */
     public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to,
                                   String trapPlainText) {
+        return generateSummary(allIncidents, from, to, trapPlainText, "");
+    }
+
+    /**
+     * Викликає Claude API з додатковими блоками подій обладнання датацентру та аудиту
+     * резервного живлення.
+     *
+     * @param allIncidents        всі інциденти зміни
+     * @param from                початок звітного періоду
+     * @param to                  кінець звітного періоду
+     * @param trapPlainText       plain-text блок подій Emerson (з маркерами ізоляції); порожній
+     *                            рядок якщо трап-секція відсутня
+     * @param resiliencePlainText plain-text блок аудиту резервного живлення (лише підсумкові
+     *                            цифри й вердикт, без переліку портів); порожній рядок якщо
+     *                            секція відсутня
+     * @return HTML-фрагмент; порожній рядок при помилці або відсутності даних
+     */
+    public String generateSummary(List<Incident> allIncidents, LocalDateTime from, LocalDateTime to,
+                                  String trapPlainText, String resiliencePlainText) {
         long ctFrom = from.atZone(ZoneId.systemDefault()).toEpochSecond();
         long ctTo = to.atZone(ZoneId.systemDefault()).toEpochSecond();
 
@@ -151,7 +170,7 @@ public class SummaryClient {
         try {
             log.debug("Виклик Claude API ({}) для резюме зміни ({} інцидентів)", model, incidents.size());
 
-            String prompt = buildPrompt(incidents, from, to, previous, trapPlainText);
+            String prompt = buildPrompt(incidents, from, to, previous, trapPlainText, resiliencePlainText);
             log.debug("Claude prompt:\n{}", prompt);
 
             MessageCreateParams params = MessageCreateParams.builder()
@@ -218,11 +237,12 @@ public class SummaryClient {
      * @param incidents     filtered incidents for the current reporting period
      * @param from          start of the reporting period
      * @param to            end of the reporting period
-     * @param previous      summary from the immediately preceding period, or {@code null}
-     * @param trapPlainText plain-text Emerson trap block (with isolation markers); blank to omit
+     * @param previous            summary from the immediately preceding period, or {@code null}
+     * @param trapPlainText       plain-text Emerson trap block (with isolation markers); blank to omit
+     * @param resiliencePlainText plain-text power-resilience-audit block; blank to omit
      */
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
-                               ResumeRecord previous, String trapPlainText) {
+                               ResumeRecord previous, String trapPlainText, String resiliencePlainText) {
         StringBuilder sb = new StringBuilder();
         // Count unique incident threads: each distinct inReplyTo key = 1 thread; incidents
         // without a key each count as 1. This partitions on the same key IncidentSectionBuilder
@@ -268,6 +288,14 @@ public class SummaryClient {
             sb.append("\n").append(trapPlainText).append("\n");
         }
 
+        // На відміну від trapPlainText, тут немає "forced separate paragraph" — аудит резервного
+        // живлення це додаткове джерело контексту для вже наявних host-down інцидентів, а не
+        // самостійна тема. Інструкція вплести його природно в текст лежить нижче, серед доменних
+        // знань, а не в окремому нагадуванні.
+        if (resiliencePlainText != null && !resiliencePlainText.isBlank()) {
+            sb.append("\n").append(resiliencePlainText).append("\n");
+        }
+
         // Closing reminder when DC events are present — placed last so Claude reads it
         // immediately before generating the response
         String trapReminder = (trapPlainText != null && !trapPlainText.isBlank())
@@ -299,6 +327,7 @@ public class SummaryClient {
                 - Для періоду з 20:00 до 07:59 замість "на кінець зміни" пишемо "на кінець звітного періоду". Так правильніше, оскільки в цей час спостереження ведеться в автоматизованому режимі, без людини. Людина (NOC-інженер) на роботі з 08:00 до 19:59.
                 - Якщо надано резюме попереднього звітного періоду: порівняй стан, зазнач, які проблеми вирішено, а які перейшли з попередньої зміни. Не переказуй попереднє резюме дослівно.
                 - Якщо надано блок "ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ": ОБОВ'ЯЗКОВО згадати значущі події — знеструмлення (Loss of Mains), перехід ДБЖ на живлення від батарей, несправності кондиціонерів. НЕ згадувати: "Перезапуск картки моніторингу" (Cold Start) — це технічна деталь, не подія. ЗАБОРОНЕНО переносити події датацентру в резюме наступної зміни — вони ізольовані в межах поточного звітного періоду.
+                - Якщо надано блок "АУДИТ РЕЗЕРВНОГО ЖИВЛЕННЯ": це ДОДАТКОВЕ ДЖЕРЕЛО КОНТЕКСТУ для відповідних host-down інцидентів (падіння вузла по ICMP), а НЕ самостійна тема. НЕ виділяй його в окремий абзац і НЕ перелічуй окремі порти чи інтерфейси — лише природно врахуй підсумковий висновок там, де в тексті вже йдеться про відповідний інцидент недоступності вузла (наприклад, чи вузол протримався на резервному живленні не гірше за клієнтські порти).
 
                 КРИТИЧНО ВАЖЛИВО: відповідь — лише звичайний текст.
                 ЗАБОРОНЕНО будь-яке Markdown-форматування: жодних **, __, #, -, *, _ та подібних символів.

@@ -248,6 +248,7 @@ classDiagram
     class SummaryClient["claude.SummaryClient"] {
         +generateSummary(incidents, from, to) String
         +generateSummary(incidents, from, to, trapPlainText) String
+        +generateSummary(incidents, from, to, trapPlainText, resiliencePlainText) String
     }
     class ResumeHistory["history.ResumeHistory"] {
         +findPrevious(currentFrom) ResumeRecord
@@ -908,6 +909,8 @@ At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
 - Порти без снапшоту в потрібну мить (`noData`) виключені з усіх співвідношень і показані окремим рядком
 - **Порти без опису (`Interface 11()`)** повністю ігноруються — не лише в переліках, а й у всіх лічильниках і співвідношеннях; такий порт нічого не каже про резервне живлення жодного абонента
 - Переліки інтерфейсів (`<ul class="resilience-list">`) — списком, а не одним рядком через крапку з комою; біля кожної назви — мітка часу, коли Zabbix фактично зафіксував показаний стан (`zabbix.Client.HistoryPoint#clock()`), бо останній запис в історії міг бути набагато старшим за саму мить падіння чи відновлення вузла
+- **Групування по локації.** Один винос часто кладе кілька SNMP-моніторованих вузлів одразу (наприклад `ssks-2`/`ssks-4`/`ssks-5` на «Бандери 8 (СКС)») — секція виводить `<h3>` локацію один раз, а кожен вузол під нею — окремим `<h4>`. Коли локація не розпізнана (дорівнює самому hostname), зайвий рівень вкладеності не додається
+- **Інтеграція з Claude AI (`--claude`).** `SectionResult.plainText()` — компактний блок лише з підсумковими цифрами й вердиктом на кожен винос, без жодного переліку портів. На відміну від блоку подій обладнання датацентру (Emerson), який Claude зобов'язаний подати окремим абзацом, тут промпт прямо каже: це додаткове джерело контексту для вже наявних host-down інцидентів, вплести природно в текст, не виносити в окрему тему
 
 Фан-аут по інцидентах — через `ConcurrentPoll` (той самий обмежений паралелізм на virtual threads, що й у `snmp.Client`), кожен інцидент аудитується незалежно.
 

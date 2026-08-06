@@ -14,7 +14,11 @@
  */
 package net.ukrcom.noczvit.zabbix;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
@@ -32,9 +36,12 @@ import org.apache.commons.text.StringEscapeUtils;
 public class PowerResilienceSection {
 
     /**
-     * @param html повний HTML-фрагмент секції; порожній рядок, якщо нема що показати
+     * @param html      повний HTML-фрагмент секції; порожній рядок, якщо нема що показати
+     * @param plainText компактний текстовий блок для Claude — лише підсумкові цифри й вердикт,
+     *                  без переліку окремих портів/інтерфейсів; порожній рядок, якщо нема що
+     *                  показати
      */
-    public record SectionResult(String html) {
+    public record SectionResult(String html, String plainText) {
 
         /** {@code true}, коли немає жодного аудитованого інциденту для відображення. */
         public boolean isEmpty() {
@@ -47,36 +54,88 @@ public class PowerResilienceSection {
     }
 
     /**
-     * Будує HTML секції за наданими результатами аудиту. Повертає порожній результат, якщо
-     * список порожній — немає жодного відповідного host-down інциденту, або жоден не мав даних
-     * по інтерфейсах.
+     * Будує HTML секції та компактний plain-text блок за наданими результатами аудиту. Повертає
+     * порожній результат, якщо список порожній — немає жодного відповідного host-down інциденту,
+     * або жоден не мав даних по інтерфейсах.
      *
      * @param results результати аудиту, по одному на кожен винос; порядок довільний
      * @return {@link SectionResult}; ніколи не {@code null}
      */
     public SectionResult build(List<PowerResilienceResult> results) {
         if (results == null || results.isEmpty()) {
-            return new SectionResult("");
+            return new SectionResult("", "");
         }
+
+        // Групуємо по locations — один винос часто кладе кілька SNMP-моніторованих вузлів
+        // одразу (наприклад ssks-2/ssks-4/ssks-5 на «Бандери 8 (СКС)»), і плаский перелік
+        // «локація (хост)» повторював локацію стільки разів, скільки там вузлів.
+        Map<String, List<PowerResilienceResult>> byLocation = results.stream()
+                .sorted(Comparator.comparing(PowerResilienceResult::location)
+                        .thenComparing(PowerResilienceResult::fallInstant))
+                .collect(Collectors.groupingBy(PowerResilienceResult::location,
+                        LinkedHashMap::new, Collectors.toList()));
 
         StringBuilder html = new StringBuilder();
         html.append("<div class=\"section\">\n")
                 .append("<h2 class=\"resilience-title\">Аудит резервного живлення через непрямий сигнал</h2>\n");
 
-        for (PowerResilienceResult r : results) {
-            html.append(buildOne(r));
+        StringBuilder plainText = new StringBuilder();
+        plainText.append("АУДИТ РЕЗЕРВНОГО ЖИВЛЕННЯ (лише підсумкові висновки, без переліку портів):\n");
+
+        for (Map.Entry<String, List<PowerResilienceResult>> entry : byLocation.entrySet()) {
+            String location = entry.getKey();
+            List<PowerResilienceResult> group = entry.getValue();
+            // Локацію не розпізнано (location == host саме для цього єдиного вузла) — вкладеність
+            // лише дублювала б однакову назву двічі, тож у цьому разі рівень один, а не два.
+            boolean grouped = group.size() > 1 || !location.equals(group.get(0).host());
+            if (grouped) {
+                html.append("<h3 class=\"resilience-location\">")
+                        .append(StringEscapeUtils.escapeHtml4(location)).append("</h3>\n");
+            }
+            for (PowerResilienceResult r : group) {
+                html.append(buildOne(r, grouped));
+                plainText.append(buildPlainTextOne(location, r)).append("\n");
+            }
         }
 
         html.append("</div>\n");
-        return new SectionResult(html.toString());
+        return new SectionResult(html.toString(), plainText.toString());
     }
 
-    private String buildOne(PowerResilienceResult r) {
+    private String buildPlainTextOne(String location, PowerResilienceResult r) {
+        StringBuilder sb = new StringBuilder();
+        String title = location.equals(r.host()) ? r.host() : location + " (" + r.host() + ")";
+        sb.append(title).append(": падіння ").append(DateUtils.formatUa(r.fallInstant()))
+                .append(" → відновлення ").append(DateUtils.formatUa(r.recoveryInstant()))
+                .append(" (").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant())).append(")");
+
+        int totalKnown = r.totalKnown();
+        if (totalKnown == 0) {
+            sb.append("; даних для аналізу немає.");
+            return sb.toString();
+        }
+
+        sb.append("; на момент падіння вузла ").append(r.alreadyDownAtFall())
+                .append(" з ").append(totalKnown).append(" відомих портів уже впали, ")
+                .append(r.stillUpAtFall()).append(" ще працювали.");
+
+        if (!r.verdict().isEmpty()) {
+            sb.append(" Висновок: ").append(r.verdict());
+        } else {
+            sb.append(" Однозначного висновку немає — вирішує інженер.");
+        }
+        return sb.toString();
+    }
+
+    private String buildOne(PowerResilienceResult r, boolean grouped) {
         StringBuilder html = new StringBuilder();
-        String title = r.location().equals(r.host())
+        String tag = grouped ? "h4" : "h3";
+        String cssClass = grouped ? "resilience-host-sub" : "resilience-host";
+        String title = grouped
                 ? r.host()
-                : r.location() + " (" + r.host() + ")";
-        html.append("<h3 class=\"resilience-host\">").append(StringEscapeUtils.escapeHtml4(title)).append("</h3>\n");
+                : (r.location().equals(r.host()) ? r.host() : r.location() + " (" + r.host() + ")");
+        html.append("<").append(tag).append(" class=\"").append(cssClass).append("\">")
+                .append(StringEscapeUtils.escapeHtml4(title)).append("</").append(tag).append(">\n");
 
         html.append("<p>Падіння: <b>").append(DateUtils.formatUa(r.fallInstant())).append("</b>")
                 .append(" → Відновлення: <b>").append(DateUtils.formatUa(r.recoveryInstant())).append("</b>")
