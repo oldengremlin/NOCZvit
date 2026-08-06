@@ -48,6 +48,10 @@ import java.util.Optional;
  *                             його стан DOWN фактично зафіксовано
  * @param uptimeBefore        значення {@code system.uptime} на або до падіння, якщо доступне
  * @param uptimeAfter         значення {@code system.uptime} на або після відновлення, якщо доступне
+ * @param restartDetectedAt   момент події «{@code host} has been restarted» цього ж хоста, якщо
+ *                             Zabbix зафіксував її після відновлення — самостійне (не пов'язане з
+ *                             {@code system.uptime}) підтвердження перезавантаження, готовий
+ *                             висновок самого Zabbix, а не наш здогад
  * @param verdict             м'яка підказка, що з'являється лише на двох однозначних краях (усі/
  *                             жоден з відомих інтерфейсів не впав раніше); порожньо в будь-якому
  *                             іншому випадку — неоднозначна середина отримує факти, а не здогад
@@ -67,6 +71,7 @@ public record PowerResilienceResult(
         List<InterfaceObservation> stillDownNames,
         Optional<Long> uptimeBefore,
         Optional<Long> uptimeAfter,
+        Optional<Instant> restartDetectedAt,
         String verdict) {
 
     /**

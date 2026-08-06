@@ -16,10 +16,13 @@ package net.ukrcom.noczvit.zabbix;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.ConcurrentPoll;
 import net.ukrcom.noczvit.Dictionary;
@@ -35,6 +38,11 @@ import net.ukrcom.noczvit.Dictionary;
  * порти. Вердикт видається лише на двох однозначних краях (усі відомі порти впали раніше вузла,
  * або жоден не впав раніше); решта — цифри без спроби класифікації, висновок за інженером.
  *
+ * <p>Окремо, незалежно від вердикту по портах, перевіряється, чи Zabbix сам зафіксував подію
+ * «{@code host} has been restarted» для цього ж хоста одразу після його відновлення — це вже
+ * готовий висновок самого Zabbix про перезавантаження, а не наш здогад над сирим лічильником
+ * uptime, тож показується завжди, коли знайдений (див. {@link #findRestartEvent}).
+ *
  * <p><b>Багатопотоковість:</b> кожен інцидент опрацьовується незалежно
  * ({@link #auditOne(ZabbixProblem)} не ділить стан з іншими викликами), фан-аут — через
  * {@link ConcurrentPoll}, той самий механізм, що й у {@code snmp.Client}.
@@ -47,6 +55,14 @@ public class PowerResilienceAuditor {
      * який {@code imap.Client.isPdMessage} шукає в темі листа для того ж типу події.
      */
     private static final String HOST_DOWN_TRIGGER = "Unavailable by ICMP ping";
+
+    /**
+     * Підрядок назви тригера, яким сам Zabbix — незалежно від {@code system.uptime} і його ризику
+     * переповнення — детектує перезавантаження хоста. На відміну від лічильника uptime, це вже
+     * готовий висновок Zabbix, а не сирі дані, які довелось би інтерпретувати самим; тому цей факт
+     * не потребує застереження і показується завжди, коли знайдений.
+     */
+    private static final String RESTART_TRIGGER = "has been restarted";
 
     /** Скільки інцидентів аудитуємо одночасно — менше за SNMP (10), бо кожен інцидент сам по
      * собі робить кілька послідовних запитів до Zabbix (по одному-два на інтерфейс). */
@@ -82,10 +98,28 @@ public class PowerResilienceAuditor {
             return List.of();
         }
 
-        return ConcurrentPoll.run(qualifying, this::auditOne, MAX_CONCURRENT_AUDITS, "resilience")
+        Map<String, List<ZabbixProblem>> restartsByHost = problems.stream()
+                .filter(p -> p.name().contains(RESTART_TRIGGER))
+                .collect(Collectors.groupingBy(ZabbixProblem::host));
+
+        return ConcurrentPoll.run(qualifying, p -> auditOne(p, restartsByHost), MAX_CONCURRENT_AUDITS, "resilience")
                 .stream()
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    /**
+     * Знаходить подію «{@code host} has been restarted» цього ж хоста, що почалась не раніше за
+     * відновлення хоста ({@code tUp}) — раніше Zabbix фізично не міг би виявити перезавантаження,
+     * бо ще не опитував хост. Береться найближча така подія після {@code tUp} — жодне довільне
+     * часове вікно не потрібне, бо цей нижній кордон природний, а не підібраний.
+     */
+    private Optional<Instant> findRestartEvent(String host, long tUp,
+            Map<String, List<ZabbixProblem>> restartsByHost) {
+        return restartsByHost.getOrDefault(host, List.of()).stream()
+                .filter(p -> p.clock() >= tUp)
+                .min(Comparator.comparingLong(ZabbixProblem::clock))
+                .map(p -> Instant.ofEpochSecond(p.clock()));
     }
 
     /** Ознака порожнього опису порту — {@code "Interface 11()"}: такий порт нічого не каже про
@@ -96,8 +130,11 @@ public class PowerResilienceAuditor {
      * Аудитує один інцидент. Повертає {@code null}, коли хост не має жодного інтерфейсного
      * SNMP-item — тобто просто нічого аналізувати (та сама умова, що і в оригінальному
      * z-ifstatus.rb: {@code next if snmp_avail == 0}).
+     *
+     * @param restartsByHost усі «has been restarted» події звітного періоду, згруповані по хосту —
+     *                       для пошуку прямого підтвердження перезавантаження саме цього вузла
      */
-    private PowerResilienceResult auditOne(ZabbixProblem problem) {
+    private PowerResilienceResult auditOne(ZabbixProblem problem, Map<String, List<ZabbixProblem>> restartsByHost) {
         String host = problem.host();
         long tDown = problem.clock();
         long tUp = problem.rClock();
@@ -166,6 +203,8 @@ public class PowerResilienceAuditor {
             uptimeAfter = zabbix.historyValueAfter(uptimeItem.get(), tUp).map(Client.HistoryPoint::value);
         }
 
+        Optional<Instant> restartDetectedAt = findRestartEvent(host, tUp, restartsByHost);
+
         String location = dictionary.resolvePD(host).value();
 
         return new PowerResilienceResult(
@@ -173,6 +212,6 @@ public class PowerResilienceAuditor {
                 Instant.ofEpochSecond(tDown), Instant.ofEpochSecond(tUp),
                 alreadyDown, stillUp, recovered, stillDownAfter, noData,
                 List.copyOf(alreadyDownNames), List.copyOf(recoveredNames), List.copyOf(stillDownNames),
-                uptimeBefore, uptimeAfter, verdict);
+                uptimeBefore, uptimeAfter, restartDetectedAt, verdict);
     }
 }
