@@ -126,7 +126,7 @@ public class NOCZvit {
             List<ZabbixProblem> zabbixProblems = Collections.emptyList();
             EmersonTrapSection.SectionResult trapResult = new EmersonTrapSection.SectionResult("", "", "");
             RamosTrapSection.SectionResult ramosTrapResult = new RamosTrapSection.SectionResult("", "");
-            PowerResilienceSection.SectionResult resilienceResult = new PowerResilienceSection.SectionResult("");
+            PowerResilienceSection.SectionResult resilienceResult = new PowerResilienceSection.SectionResult("", "");
 
             try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
 
@@ -296,7 +296,9 @@ public class NOCZvit {
                     + "h2.ramos-title{font-size:16px;color:#e65100;background:#e8eaf0;border-left:4px solid #f38120;margin:16px 0 6px;padding:5px 10px}"
                     + "h3.ramos-room{font-size:13px;color:#bf360c;background:#e8eaf0;border-left:4px solid #f38120;margin:12px 0 4px;padding:5px 10px}"
                     + "h2.resilience-title{font-size:16px;color:#4a148c;background:#e8eaf0;border-left:4px solid #7b1fa2;margin:16px 0 6px;padding:5px 10px}"
+                    + "h3.resilience-location{font-size:13px;color:#4a148c;background:#e8eaf0;border-left:4px solid #7b1fa2;margin:12px 0 4px;padding:5px 10px}"
                     + "h3.resilience-host{font-size:13px;color:#4a148c;background:#e8eaf0;border-left:4px solid #7b1fa2;margin:12px 0 4px;padding:5px 10px}"
+                    + "h4.resilience-host-sub{font-size:12px;color:#4a148c;margin:8px 0 2px 16px;padding:2px 0}"
                     + ".resilience-list{font-size:11px;color:#4a148c;background:#f3e5f5;padding:4px 8px 4px 28px;margin:0 0 4px;list-style:disc}"
                     + ".resilience-list li{padding:1px 0}"
                     + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
@@ -323,7 +325,7 @@ public class NOCZvit {
             if (config.isIncidentsEnabled() && incidents != null) {
                 String summaryHtml = summaryClient != null
                                      ? summaryClient.generateSummary(incidentsForTable, reportFrom, reportTo,
-                                                                      allTrapPlainText) : null;
+                                                                      allTrapPlainText, resilienceResult.plainText()) : null;
                 message.append(incidentBuilder.build(incidentsForTable, zabbix, reportFrom, reportTo, summaryHtml));
             }
 
