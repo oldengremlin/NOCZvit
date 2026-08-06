@@ -98,7 +98,7 @@ public class PowerResilienceSection {
                     .append(StringEscapeUtils.escapeHtml4(location)).append("</h3>\n")
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
-                    .append("<th>Вузол</th>")
+                    .append("<th>Обладнання</th>")
                     .append("<th>Початок</th>")
                     .append("<th>Закінчення</th>")
                     .append("<th>Тривалість</th>")
@@ -147,8 +147,8 @@ public class PowerResilienceSection {
     }
 
     /**
-     * Один рядок таблиці: вузол, час падіння й відновлення, тривалість — окремими колонками (ті
-     * самі назви, що і в таблиці інцидентів), а весь розбір по портах — в останній комірці.
+     * Один рядок таблиці: обладнання, час падіння й відновлення, тривалість — окремими колонками
+     * (ті самі назви, що і в таблиці інцидентів), а весь розбір по портах — в останній комірці.
      */
     private String buildRow(PowerResilienceResult r) {
         StringBuilder html = new StringBuilder();
