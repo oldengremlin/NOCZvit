@@ -421,7 +421,10 @@ public class Client {
             return items;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException — нарівні з IOException, як уже робить getProblems: Zabbix може
+            // віддати HTTP 200 з HTML-заглушкою reverse-proxy замість JSON, і без цього
+            // барʼєра JsonSyntaxException тихо викидав би цілий інцидент зі звіту.
             log.warn("Zabbix item.get(hostId={}, search={}, key={}): {}", hostId, nameSearch, keyFilter, e.getMessage());
         }
         return Collections.emptyList();
@@ -490,7 +493,9 @@ public class Client {
             return Optional.of(new HistoryPoint(Instant.ofEpochSecond(clock), (long) Double.parseDouble(raw)));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (IOException | NumberFormatException e) {
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException покриває і NumberFormatException, і відсутнє поле «value» в
+            // відповіді (NPE), і не-JSON тіло — жодне з них не має коштувати цілого інциденту.
             log.warn("Zabbix history.get(itemId={}, {}={}): {}", item.itemId(), timeParam, timestamp, e.getMessage());
         }
         return Optional.empty();

@@ -6,6 +6,23 @@
 
 ---
 
+## [1.23.4] — 2026-08-06
+
+### Виправлено
+- **Таймаут-запобіжник фази ініціалізації був інертний саме у своєму сценарії** — `NOCZvit.main()`. `orTimeout` не скасовує задачу, лише завершує обгортковий future винятком; зависла задача працює далі. А `try-with-resources` викликав `ExecutorService.close()`, який робить `shutdown()` + `awaitTermination(1, DAYS)` **без переривання задач**. Тобто після спрацювання таймауту cron-запуск блокувався до доби — рівно те, від чого запобіжник мав захищати (як і сказано в коментарі поруч). Тепер успішний шлях завершується `close()`, аварійний — `shutdownNow()`
+
+- **`Initialization failed: null` у лозі** — у `TimeoutException` повідомлення порожнє, а в текст помилки підставлявся `cause.getMessage()`. Тепер підставляється сам `cause`, тож видно клас винятку
+
+- **`zabbixFuture` не входив у `allOf(...)`.** Транзитивно його покривали лише `zabbixProblemsFuture` і `resilienceFuture`, а обидва вимикаються своїми прапорцями. При `--zabbix --no-incidents` (звіт лише з температурою та графіками) його `join()` виконувався поза таймаутом, а `CompletionException` — це `RuntimeException` — пролітав повз `catch (MessagingException | IOException)`, тож замість `log.error("Fatal error", e)` процес помирав з необробленим винятком
+
+- **Нові Zabbix-методи не мали барʼєра `RuntimeException`** — `searchItems`, `historyValue`. Старіші `getProblems`/`getGraphRowForName`/`resolveHostId`/`resolveGraphId` його мають. Через асиметрію одна відповідь із HTML-заглушкою reverse-proxy замість JSON (`JsonSyntaxException`) або без поля `value` (NPE) прокидалася через `auditOne` у `ConcurrentPoll`, і **цілий інцидент тихо зникав** зі звіту, лишаючи в лозі один рядок без стека. Це той самий клас тихої втрати даних, який проєкт уже закривав для парсерів
+
+### Додано
+- Попередження в лозі, коли `resilienceaudit=true` при `incidents=false`: аудит живиться з того самого списку подій Zabbix, який завантажується лише при увімкнених інцидентах, тож комбінація мовчки не робила нічого
+- `resilienceaudit` у `noczvit.properties.sample` — усі сусідні прапорці там були, цей пропустили
+
+---
+
 ## [1.23.3] — 2026-08-06
 
 ### Виправлено
