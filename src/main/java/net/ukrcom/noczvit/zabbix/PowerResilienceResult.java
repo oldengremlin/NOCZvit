@@ -19,34 +19,38 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * One host's power-resilience audit for a single outage: two honest snapshots (state of its
- * known interfaces at the moment the host itself fell, and again at the moment it recovered),
- * with no claim about anything in between — the host was unreachable via SNMP for that whole
- * window, so nothing about it was observable.
+ * Аудит резервного живлення одного хоста для одного виносу: два чесних знімки (стан відомих
+ * інтерфейсів на мить падіння самого хоста і на мить його відновлення), без жодного твердження
+ * про те, що відбувалось між ними — весь цей проміжок хост був недоступний по SNMP, тож нічого
+ * про нього не спостерігалося.
  *
- * @param host                short Zabbix hostname
- * @param location            human-readable location ({@link Dictionary#resolvePD}); may equal
- *                             {@code host} when unresolved
- * @param fallInstant         when the host itself became unreachable
- * @param recoveryInstant     when the host became reachable again
- * @param alreadyDownAtFall   interfaces already DOWN at the moment the host fell
- * @param stillUpAtFall       interfaces still UP at that moment — equals
- *                             {@code recoveredBeforeUs + stillDownAfterUs + noData}'s share of
- *                             this group; see {@link #totalKnown()}
- * @param recoveredBeforeUs   of {@code stillUpAtFall}, how many were already UP again by the
- *                             time the host recovered — i.e. beat the host back
- * @param stillDownAfterUs    of {@code stillUpAtFall}, how many were still DOWN when the host
- *                             recovered — i.e. worse off than the host
- * @param noData              interfaces where a snapshot could not be read at all (no history at
- *                             that instant); excluded from every ratio above, shown separately
- * @param alreadyDownNames    names of the {@code alreadyDownAtFall} interfaces
- * @param recoveredNames      names of the {@code recoveredBeforeUs} interfaces
- * @param stillDownNames      names of the {@code stillDownAfterUs} interfaces
- * @param uptimeBefore        {@code system.uptime} value at-or-before the fall, if available
- * @param uptimeAfter         {@code system.uptime} value at-or-after the recovery, if available
- * @param verdict             soft hint shown only at the two unambiguous edges (all/none of the
- *                             known interfaces fell first); empty in every other case — the
- *                             ambiguous middle gets facts, not a guess
+ * @param host                короткий hostname у Zabbix
+ * @param location            людськочитабельна локація ({@link Dictionary#resolvePD}); може
+ *                             дорівнювати {@code host}, якщо не розпізнано
+ * @param fallInstant         момент, коли сам хост став недоступний
+ * @param recoveryInstant     момент, коли хост знову став доступний
+ * @param alreadyDownAtFall   інтерфейси, що вже були DOWN на момент падіння хоста
+ * @param stillUpAtFall       інтерфейси, що на той момент ще працювали — дорівнює частці
+ *                             {@code recoveredBeforeUs + stillDownAfterUs + noData} цієї групи;
+ *                             див. {@link #totalKnown()}
+ * @param recoveredBeforeUs   з {@code stillUpAtFall} — скільки вже знову були UP на момент
+ *                             відновлення хоста
+ * @param stillDownAfterUs    з {@code stillUpAtFall} — скільки лишались DOWN на момент
+ *                             відновлення хоста — тобто у гіршому стані, ніж сам хост
+ * @param noData              інтерфейси, для яких знімок узагалі не вдалося прочитати (немає
+ *                             історії на потрібну мить); виключені з усіх співвідношень вище,
+ *                             показуються окремо
+ * @param alreadyDownNames    інтерфейси з {@code alreadyDownAtFall}, кожен із міткою часу, коли
+ *                             його стан DOWN фактично зафіксовано
+ * @param recoveredNames      інтерфейси з {@code recoveredBeforeUs}, кожен із міткою часу, коли
+ *                             його стан UP фактично зафіксовано
+ * @param stillDownNames      інтерфейси з {@code stillDownAfterUs}, кожен із міткою часу, коли
+ *                             його стан DOWN фактично зафіксовано
+ * @param uptimeBefore        значення {@code system.uptime} на або до падіння, якщо доступне
+ * @param uptimeAfter         значення {@code system.uptime} на або після відновлення, якщо доступне
+ * @param verdict             м'яка підказка, що з'являється лише на двох однозначних краях (усі/
+ *                             жоден з відомих інтерфейсів не впав раніше); порожньо в будь-якому
+ *                             іншому випадку — неоднозначна середина отримує факти, а не здогад
  */
 public record PowerResilienceResult(
         String host,
@@ -58,22 +62,34 @@ public record PowerResilienceResult(
         int recoveredBeforeUs,
         int stillDownAfterUs,
         int noData,
-        List<String> alreadyDownNames,
-        List<String> recoveredNames,
-        List<String> stillDownNames,
+        List<InterfaceObservation> alreadyDownNames,
+        List<InterfaceObservation> recoveredNames,
+        List<InterfaceObservation> stillDownNames,
         Optional<Long> uptimeBefore,
         Optional<Long> uptimeAfter,
         String verdict) {
 
-    /** Interfaces with a usable state-at-fall snapshot — the denominator of the T_down ratio. */
+    /**
+     * Назва інтерфейсу разом з міткою часу, коли Zabbix фактично зафіксував цей стан — вона
+     * може бути суттєво раніше (або пізніше) за саму мить падіння/відновлення вузла, якщо на
+     * цьому інтерфейсі довкола цього часу нічого не змінювалось.
+     *
+     * @param name       назва інтерфейсу (див. {@link Client.InterfaceItem#name()})
+     * @param observedAt коли цей стан зафіксовано, за {@link Client.HistoryPoint#clock()}
+     */
+    public record InterfaceObservation(String name, Instant observedAt) {
+    }
+
+    /** Інтерфейси з придатним знімком стану на момент падіння — знаменник співвідношення T_down. */
     public int totalKnown() {
         return alreadyDownAtFall + stillUpAtFall;
     }
 
     /**
-     * {@code true} when Zabbix recorded a lower {@code system.uptime} after recovery than before
-     * the fall. Shown only as a raw fact (see {@link PowerResilienceAuditor}) — the counter can
-     * wrap around on its own without a real reboot, so this is not treated as proof either way.
+     * {@code true}, коли Zabbix зафіксував менше значення {@code system.uptime} після
+     * відновлення, ніж було до падіння. Показується лише як довідковий факт (див.
+     * {@link PowerResilienceAuditor}) — лічильник може переповнюватись і без реального
+     * перезавантаження, тож це не доказ ні в той, ні в інший бік.
      */
     public boolean uptimeDecreased() {
         return uptimeBefore.isPresent() && uptimeAfter.isPresent()

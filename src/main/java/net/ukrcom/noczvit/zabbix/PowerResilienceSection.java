@@ -20,38 +20,39 @@ import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
- * Renders {@link PowerResilienceResult} objects into the «Аудит резервного живлення через
- * непрямий сигнал» HTML section.
+ * Рендерить {@link PowerResilienceResult} у HTML-секцію «Аудит резервного живлення через
+ * непрямий сигнал».
  *
- * <p>Deliberately reports facts, not conclusions: a soft verdict appears only at the two
- * unambiguous edges ({@link PowerResilienceResult#verdict()} non-empty); everywhere else the
- * reader gets the raw before/after counts and, in that ambiguous middle only, the uptime-counter
- * fact — per the explicit rule that the uptime note belongs in the "решта" case, not next to an
- * already-clear verdict.
+ * <p>Свідомо показує факти, а не висновки: м'який вердикт з'являється лише на двох однозначних
+ * краях ({@link PowerResilienceResult#verdict()} непорожній); в усіх інших випадках читач бачить
+ * лише сирі цифри до/після, а факт про лічильник uptime — тільки в цій неоднозначній середині,
+ * за явним правилом, що ця нотатка належить саме до випадку «решта», а не поруч із уже чітким
+ * вердиктом.
  */
 public class PowerResilienceSection {
 
     /**
-     * @param html full HTML section fragment; empty string when there is nothing to report
+     * @param html повний HTML-фрагмент секції; порожній рядок, якщо нема що показати
      */
     public record SectionResult(String html) {
 
-        /** {@code true} when there are no audited incidents to render. */
+        /** {@code true}, коли немає жодного аудитованого інциденту для відображення. */
         public boolean isEmpty() {
             return html.isBlank();
         }
     }
 
-    /** Creates the builder. Stateless — safe to reuse across calls. */
+    /** Створює білдер. Без стану — безпечно перевикористовувати між викликами. */
     public PowerResilienceSection() {
     }
 
     /**
-     * Builds the section HTML from the given audit results. Returns an empty result when the
-     * list is empty — no qualifying host-down incident, or none had interface data.
+     * Будує HTML секції за наданими результатами аудиту. Повертає порожній результат, якщо
+     * список порожній — немає жодного відповідного host-down інциденту, або жоден не мав даних
+     * по інтерфейсах.
      *
-     * @param results audit results, one per outage; any order
-     * @return {@link SectionResult}; never null
+     * @param results результати аудиту, по одному на кожен винос; порядок довільний
+     * @return {@link SectionResult}; ніколи не {@code null}
      */
     public SectionResult build(List<PowerResilienceResult> results) {
         if (results == null || results.isEmpty()) {
@@ -128,14 +129,17 @@ public class PowerResilienceSection {
         return html.toString();
     }
 
-    private void appendNames(StringBuilder html, String label, List<String> names) {
-        if (names.isEmpty()) {
+    private void appendNames(StringBuilder html, String label,
+            List<PowerResilienceResult.InterfaceObservation> observations) {
+        if (observations.isEmpty()) {
             return;
         }
         html.append("<p><small>").append(label).append(":</small></p>\n")
                 .append("<ul class=\"resilience-list\">\n");
-        for (String name : names) {
-            html.append("<li>").append(StringEscapeUtils.escapeHtml4(name)).append("</li>\n");
+        for (PowerResilienceResult.InterfaceObservation obs : observations) {
+            html.append("<li>").append(StringEscapeUtils.escapeHtml4(obs.name()))
+                    .append(" — ").append(DateUtils.formatUa(obs.observedAt()))
+                    .append("</li>\n");
         }
         html.append("</ul>\n");
     }

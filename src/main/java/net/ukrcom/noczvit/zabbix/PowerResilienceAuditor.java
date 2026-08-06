@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.ConcurrentPoll;
 import net.ukrcom.noczvit.Dictionary;
@@ -87,6 +88,10 @@ public class PowerResilienceAuditor {
                 .toList();
     }
 
+    /** Ознака порожнього опису порту — {@code "Interface 11()"}: такий порт нічого не каже про
+     * резервне живлення, тож ігнорується повністю, а не лише в переліку назв. */
+    private static final Pattern EMPTY_DESCRIPTION = Pattern.compile("\\(\\s*\\)$");
+
     /**
      * Аудитує один інцидент. Повертає {@code null}, коли хост не має жодного інтерфейсного
      * SNMP-item — тобто просто нічого аналізувати (та сама умова, що і в оригінальному
@@ -97,43 +102,49 @@ public class PowerResilienceAuditor {
         long tDown = problem.clock();
         long tUp = problem.rClock();
 
-        List<Client.InterfaceItem> interfaces = zabbix.getInterfaceItems(host);
-        if (interfaces.isEmpty()) {
+        List<Client.InterfaceItem> allInterfaces = zabbix.getInterfaceItems(host);
+        if (allInterfaces.isEmpty()) {
             log.debug("PowerResilienceAuditor: {} has no interface items, skipping", host);
             return null;
         }
+        List<Client.InterfaceItem> interfaces = allInterfaces.stream()
+                .filter(i -> !EMPTY_DESCRIPTION.matcher(i.name()).find())
+                .toList();
 
         int alreadyDown = 0;
         int stillUp = 0;
         int recovered = 0;
         int stillDownAfter = 0;
         int noData = 0;
-        List<String> alreadyDownNames = new ArrayList<>();
-        List<String> recoveredNames = new ArrayList<>();
-        List<String> stillDownNames = new ArrayList<>();
+        List<PowerResilienceResult.InterfaceObservation> alreadyDownNames = new ArrayList<>();
+        List<PowerResilienceResult.InterfaceObservation> recoveredNames = new ArrayList<>();
+        List<PowerResilienceResult.InterfaceObservation> stillDownNames = new ArrayList<>();
 
         for (Client.InterfaceItem item : interfaces) {
-            Optional<Long> before = zabbix.historyValueBefore(item, tDown);
+            Optional<Client.HistoryPoint> before = zabbix.historyValueBefore(item, tDown);
             if (before.isEmpty()) {
                 noData++;
                 continue;
             }
-            if (before.get() != OPERATIONAL_UP) {
+            if (before.get().value() != OPERATIONAL_UP) {
                 alreadyDown++;
-                alreadyDownNames.add(item.name());
+                alreadyDownNames.add(new PowerResilienceResult.InterfaceObservation(
+                        item.name(), before.get().clock()));
                 continue;
             }
             stillUp++;
 
-            Optional<Long> after = zabbix.historyValueAfter(item, tUp);
+            Optional<Client.HistoryPoint> after = zabbix.historyValueAfter(item, tUp);
             if (after.isEmpty()) {
                 noData++;
-            } else if (after.get() == OPERATIONAL_UP) {
+            } else if (after.get().value() == OPERATIONAL_UP) {
                 recovered++;
-                recoveredNames.add(item.name());
+                recoveredNames.add(new PowerResilienceResult.InterfaceObservation(
+                        item.name(), after.get().clock()));
             } else {
                 stillDownAfter++;
-                stillDownNames.add(item.name());
+                stillDownNames.add(new PowerResilienceResult.InterfaceObservation(
+                        item.name(), after.get().clock()));
             }
         }
 
@@ -151,8 +162,8 @@ public class PowerResilienceAuditor {
         Optional<Long> uptimeAfter = Optional.empty();
         Optional<Client.InterfaceItem> uptimeItem = zabbix.getUptimeItem(host);
         if (uptimeItem.isPresent()) {
-            uptimeBefore = zabbix.historyValueBefore(uptimeItem.get(), tDown);
-            uptimeAfter = zabbix.historyValueAfter(uptimeItem.get(), tUp);
+            uptimeBefore = zabbix.historyValueBefore(uptimeItem.get(), tDown).map(Client.HistoryPoint::value);
+            uptimeAfter = zabbix.historyValueAfter(uptimeItem.get(), tUp).map(Client.HistoryPoint::value);
         }
 
         String location = dictionary.resolvePD(host).value();
