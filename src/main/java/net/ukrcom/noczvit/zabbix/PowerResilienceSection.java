@@ -128,64 +128,74 @@ public class PowerResilienceSection {
     }
 
     private String buildOne(PowerResilienceResult r, boolean grouped) {
-        StringBuilder html = new StringBuilder();
         String tag = grouped ? "h4" : "h3";
         String cssClass = grouped ? "resilience-host-sub" : "resilience-host";
         String title = grouped
                 ? r.host()
                 : (r.location().equals(r.host()) ? r.host() : r.location() + " (" + r.host() + ")");
+
+        StringBuilder html = new StringBuilder();
         html.append("<").append(tag).append(" class=\"").append(cssClass).append("\">")
                 .append(StringEscapeUtils.escapeHtml4(title)).append("</").append(tag).append(">\n");
 
-        html.append("<p>Падіння: <b>").append(DateUtils.formatUa(r.fallInstant())).append("</b>")
+        // Під згрупованим заголовком (вузол під локацією) тіло зсунуте вправо в окремому div —
+        // так вкладеність видно й у самому тексті, а не лише в заголовках.
+        StringBuilder body = new StringBuilder();
+        body.append("<p>Падіння: <b>").append(DateUtils.formatUa(r.fallInstant())).append("</b>")
                 .append(" → Відновлення: <b>").append(DateUtils.formatUa(r.recoveryInstant())).append("</b>")
                 .append(" (тривалість: ").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant()))
                 .append(")</p>\n");
 
         int totalKnown = r.totalKnown();
         if (totalKnown == 0) {
-            html.append("<p><i>Немає даних для аналізу — жоден інтерфейс не мав історії "
+            body.append("<p><i>Немає даних для аналізу — жоден інтерфейс не мав історії "
                     + "на момент падіння вузла.</i></p>\n");
-            return html.toString();
+            return html.append(wrapBody(body, grouped)).toString();
         }
 
-        html.append("<p>На момент падіння вузла: <b>").append(r.alreadyDownAtFall())
+        body.append("<p>На момент падіння вузла: <b>").append(r.alreadyDownAtFall())
                 .append(" з ").append(totalKnown)
                 .append("</b> відомих портів уже впали, <b>").append(r.stillUpAtFall())
                 .append("</b> ще працювали.</p>\n");
 
         if (r.stillUpAtFall() > 0) {
-            html.append("<p>З тих, що ще працювали: <b>").append(r.recoveredBeforeUs())
+            body.append("<p>З тих, що ще працювали: <b>").append(r.recoveredBeforeUs())
                     .append("</b> фіксувалися як активні на момент відновлення вузла");
             if (r.stillDownAfterUs() > 0) {
-                html.append(", <b>").append(r.stillDownAfterUs())
+                body.append(", <b>").append(r.stillDownAfterUs())
                         .append("</b> лишались недоступні й після його відновлення");
             }
-            html.append(".</p>\n");
+            body.append(".</p>\n");
         }
 
         if (!r.verdict().isEmpty()) {
-            html.append("<p><b>").append(StringEscapeUtils.escapeHtml4(r.verdict())).append("</b></p>\n");
+            body.append("<p><b>").append(StringEscapeUtils.escapeHtml4(r.verdict())).append("</b></p>\n");
         } else if (r.uptimeDecreased()) {
             // Uptime fact belongs only here — in the ambiguous middle where the port pattern
             // alone gives no verdict. At the two clear edges the pattern already speaks for
             // itself, and this would just be noise alongside it.
-            html.append("<p><i>Zabbix зафіксував зменшення лічильника uptime з ")
+            body.append("<p><i>Zabbix зафіксував зменшення лічильника uptime з ")
                     .append(r.uptimeBefore().get()).append(" на ").append(r.uptimeAfter().get())
                     .append(" с. Лічильник може переповнюватись і без реального перезавантаження — "
                             + "це довідковий факт, не висновок.</i></p>\n");
         }
 
-        appendNames(html, "Впали раніше вузла", r.alreadyDownNames());
-        appendNames(html, "Активні на момент відновлення вузла", r.recoveredNames());
-        appendNames(html, "Лишались недоступні після відновлення вузла", r.stillDownNames());
+        appendNames(body, "Впали раніше вузла", r.alreadyDownNames());
+        appendNames(body, "Активні на момент відновлення вузла", r.recoveredNames());
+        appendNames(body, "Лишались недоступні після відновлення вузла", r.stillDownNames());
 
         if (r.noData() > 0) {
-            html.append("<p><i>").append(r.noData())
+            body.append("<p><i>").append(r.noData())
                     .append(" — немає даних для аналізу (відсутня історія на потрібний момент).</i></p>\n");
         }
 
-        return html.toString();
+        return html.append(wrapBody(body, grouped)).toString();
+    }
+
+    private String wrapBody(StringBuilder body, boolean grouped) {
+        return grouped
+                ? "<div class=\"resilience-host-body\">\n" + body + "</div>\n"
+                : body.toString();
     }
 
     private void appendNames(StringBuilder html, String label,
