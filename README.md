@@ -38,6 +38,9 @@ flowchart TD
     INC  --> MERGE[/incidentsForTable\nIMAP + Zabbix/]
     ZEVT --> MERGE
 
+    ZS & ZEVT --> RES["PowerResilienceAuditor\nsnapshot до/після падіння вузла\n(опціонально)"]
+    RES --> RSECT2["PowerResilienceSection\nHTML (#7b1fa2)"]
+
     TRAW --> TPARS[EmersonTrapParser]
     TPARS --> TDEDUP[TrapDeduplicator\nCold Start dedup]
     TDEDUP --> TCORR[TrapCorrelator\nstate machine → CorrelationResult]
@@ -61,6 +64,7 @@ flowchart TD
     ISB  --> HTML
     TSECT --> HTML
     RSECT --> HTML
+    RSECT2 --> HTML
     SNMP --> HTML
     DH   --> HTML
 
@@ -265,7 +269,52 @@ classDiagram
         +getProblems(from, to) List~ZabbixProblem~
         +getPingGraphRow() String
         +getGraphRow() String
+        +getInterfaceItems(host) List~InterfaceItem~
+        +getUptimeItem(host) Optional~InterfaceItem~
+        +historyValueBefore(item, ts) Optional~Long~
+        +historyValueAfter(item, ts) Optional~Long~
     }
+    class ConcurrentPoll {
+        +run(keys, query, maxConcurrent, logLabel)$ List~T~
+    }
+    class PowerResilienceAuditor["zabbix.PowerResilienceAuditor"] {
+        +audit(problems) List~PowerResilienceResult~
+    }
+    class PowerResilienceResult["zabbix.PowerResilienceResult"] {
+        <<record>>
+        +host() String
+        +location() String
+        +fallInstant() Instant
+        +recoveryInstant() Instant
+        +alreadyDownAtFall() int
+        +stillUpAtFall() int
+        +recoveredBeforeUs() int
+        +stillDownAfterUs() int
+        +noData() int
+        +uptimeBefore() Optional~Long~
+        +uptimeAfter() Optional~Long~
+        +verdict() String
+        +totalKnown() int
+        +uptimeDecreased() bool
+    }
+    class PowerResilienceSection["zabbix.PowerResilienceSection"] {
+        +build(results) SectionResult
+    }
+    class ResilienceSectionResult["PowerResilienceSection.SectionResult"] {
+        <<record>>
+        +html() String
+        +isEmpty() bool
+    }
+
+    NOCZvit --> PowerResilienceSection
+    PowerResilienceAuditor --> ZabbixClient : item.get/history.get
+    PowerResilienceAuditor --> Dictionary : resolvePD
+    PowerResilienceAuditor --> ConcurrentPoll : fan-out
+    PowerResilienceAuditor ..> ZabbixProblem : reads
+    PowerResilienceAuditor ..> PowerResilienceResult : creates
+    PowerResilienceSection ..> PowerResilienceResult : renders
+    PowerResilienceSection ..> ResilienceSectionResult : creates
+    SnmpClient --> ConcurrentPoll : fan-out
 
     NOCZvit --> Config
     NOCZvit --> ImapClient
@@ -467,6 +516,7 @@ java -jar target/NOCZvit-1.16.0.jar [OPTIONS]
 | `--temperature` / `--no-temperature` | Увімкнути/вимкнути блок температури (SNMP Celsius) |
 | `--ramos` / `--no-ramos` | Увімкнути/вимкнути блок Ramos |
 | `--zabbix` / `--no-zabbix` | Увімкнути/вимкнути вбудовування графіків температури з Zabbix |
+| `--resilience-audit` / `--no-resilience-audit` | Увімкнути/вимкнути секцію «Аудит резервного живлення через непрямий сигнал» (потребує `--zabbix`) |
 | `--claude` / `--no-claude` | Увімкнути/вимкнути AI-резюме зміни (за замовчуванням: увімк. в нормальному режимі, вимк. в `--debug`) |
 | `--debug` / `--no-debug` | Дебаг-режим: звіт надсилається на `email.toDebug` замість `email.to` |
 
@@ -519,6 +569,9 @@ zabbix.username=noczvit
 zabbix.password=secret
 zabbix.graphwidth=640
 zabbix.graphheight=83
+
+# Аудит резервного живлення через непрямий сигнал (опціонально, потребує zabbix=true)
+resilienceaudit=false
 
 # MSSQL (опціонально, для списку боржників)
 account-mssql-server=sqlserver
@@ -837,8 +890,23 @@ At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
 [ RAMOS trap секція   ]  ← після Emerson, перед боржниками
 [ Боржники            ]
 [ Температура SNMP    ]
+[ Ramos SNMP           ]
+[ Аудит резервного живлення ]  ← опційно, одразу після Ramos SNMP
 [ PS-секція           ]
 ```
+
+### Аудит резервного живлення через непрямий сигнал
+
+Опційна секція (`resilienceaudit=true` / `--resilience-audit`, потребує `zabbix=true`), розміщується одразу після секції Ramos SNMP, акцентний колір — фіолетовий (`border-left:#7b1fa2`, текст `#4a148c`).
+
+Відповідає на питання: чи наш вузол протримався на резервному живленні не гірше за клієнтські порти. Для кожного вирішеного host-down інциденту (`Unavailable by ICMP ping`) `PowerResilienceAuditor` будує два знімки стану SNMP-моніторованих інтерфейсів хоста — точно на мить його падіння і точно на мить відновлення (`zabbix.Client.historyValueBefore`/`historyValueAfter`, `history.get` з `time_till`/`time_from` + `limit:1`, без жодного часового вікна). Період, поки вузол сам був недоступний, принципово не описується — Zabbix фізично не опитує інтерфейси хоста, поки той сам down.
+
+- Порти, що вже впали до падіння вузла, і порти, що ще працювали — окремі лічильники; з тих, що ще працювали, окремо рахуються ті, що піднялись раніше/одночасно з вузлом, і ті, що лишились недоступні й після його відновлення
+- М'який вердикт («ймовірно протримали довше» / «варто перевірити резервне живлення») з'являється лише на двох однозначних краях — усі відомі порти впали раніше вузла, або жоден не впав раніше; в іншому разі — лише цифри, висновок за інженером NOC
+- Зменшення лічильника `system.uptime` (якщо доступний item) показується лише в цій неоднозначній середині — ніколи поруч із чітким вердиктом — і завжди з застереженням, що 32-бітний лічильник може переповнюватись і без реального перезавантаження
+- Порти без снапшоту в потрібну мить (`noData`) виключені з усіх співвідношень і показані окремим рядком
+
+Фан-аут по інцидентах — через `ConcurrentPoll` (той самий обмежений паралелізм на virtual threads, що й у `snmp.Client`), кожен інцидент аудитується незалежно.
 
 ### Словники
 
@@ -913,6 +981,7 @@ NOCZvit/
 │   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
 │   ├── Dictionary.java            — словники PD/SDH/device-word (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N; resolvePD/resolveSDH → Resolution(value, needsReview); ключ adlink device:card:port:line)
 │   ├── Debtors.java               — список боржників із MSSQL
+│   ├── ConcurrentPoll.java        — обмежений паралельний fan-out на virtual threads (Semaphore); спільний для snmp.Client та zabbix.PowerResilienceAuditor
 │   ├── imap/
 │   │   ├── Client.java            — оркестратор: читання IMAP → парсинг → List<Incident>
 │   │   ├── ImapReader.java        — I/O: читання сирих повідомлень з IMAP-папки
@@ -949,10 +1018,13 @@ NOCZvit/
 │   ├── snmp/
 │   │   └── Client.java            — SNMP-опитування (virtual threads, паралельно)
 │   └── zabbix/
-│       ├── Client.java            — Zabbix API: login, event.get history, host/graph lookup, chart2.php PNG
+│       ├── Client.java            — Zabbix API: login, event.get history, host/graph lookup, chart2.php PNG, item.get/history.get для аудиту резервного живлення
 │       ├── ZabbixProblem.java     — record: host, name, clock, rClock; isActive()
 │       ├── ZabbixIncidentConverter.java — ZabbixProblem → List<Incident> з Dictionary lookup
-│       └── ProblemFilter.java     — фільтрація: порожній host, SDH-OSM, No SNMP, OSPF, дублікати IMAP
+│       ├── ProblemFilter.java     — фільтрація: порожній host, SDH-OSM, No SNMP, OSPF, дублікати IMAP
+│       ├── PowerResilienceAuditor.java — аудит резервного живлення через непрямий сигнал: знімки стану інтерфейсів до/після падіння вузла, фан-аут через ConcurrentPoll
+│       ├── PowerResilienceResult.java — record: результат аудиту одного інциденту (лічильники, вердикт, uptime до/після)
+│       └── PowerResilienceSection.java — HTML-секція звіту (#7b1fa2)
 ├── src/main/resources/
 │   ├── noczvit.properties         — конфігурація за замовчуванням
 │   ├── logback.xml                — конфігурація логування (Logback)

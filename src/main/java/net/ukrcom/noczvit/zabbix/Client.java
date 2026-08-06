@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
@@ -329,6 +330,154 @@ public class Client {
             log.warn("Zabbix trigger.get fallback помилка: {}", e.getMessage());
             return Collections.emptyMap();
         }
+    }
+
+    /**
+     * One Zabbix item this client can read history for — an interface's Operational status, or a
+     * host's {@code system.uptime} counter.
+     *
+     * @param itemId    Zabbix item ID
+     * @param name      item name ({@code "Interface 11(...) Operational status"}) or, for
+     *                  interface items, the trailing {@code " Operational status"} suffix already
+     *                  stripped by {@link #getInterfaceItems}
+     * @param valueType Zabbix {@code value_type} (0-4), passed back into {@code history.get} —
+     *                  read from the item definition rather than assumed, since it determines
+     *                  which history table the value lives in
+     */
+    public record InterfaceItem(String itemId, String name, int valueType) {
+    }
+
+    /**
+     * Finds every "Operational status" SNMP item on a host — one per monitored interface.
+     * Empty when the host has no such items (not SNMP-monitored, or a template without
+     * interface-level items), which is the signal callers use to skip a host entirely.
+     *
+     * @param hostname short Zabbix hostname
+     * @return interface items with the {@code " Operational status"} suffix stripped from their
+     *         names; empty list on no match or any API error
+     */
+    public List<InterfaceItem> getInterfaceItems(String hostname) {
+        String hostId = resolveHostId(hostname);
+        if (hostId == null) {
+            return Collections.emptyList();
+        }
+        return searchItems(hostId, "Operational status", null).stream()
+                .map(i -> new InterfaceItem(i.itemId(),
+                        i.name().replaceAll("(?i):?\\s*Operational status.*$", ""),
+                        i.valueType()))
+                .toList();
+    }
+
+    /**
+     * Finds the host's {@code system.uptime} item (Template Module Generic SNMPv2: Device
+     * uptime), used for the resilience-audit's counter-decrease fact.
+     *
+     * @param hostname short Zabbix hostname
+     * @return the uptime item, or empty when the host doesn't have one or on any API error
+     */
+    public Optional<InterfaceItem> getUptimeItem(String hostname) {
+        String hostId = resolveHostId(hostname);
+        if (hostId == null) {
+            return Optional.empty();
+        }
+        List<InterfaceItem> found = searchItems(hostId, null, "system.uptime");
+        return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
+    }
+
+    /**
+     * Runs {@code item.get} for a host, either by name substring ({@code nameSearch}) or by exact
+     * item key ({@code keyFilter}) — exactly one of the two must be non-null.
+     */
+    private List<InterfaceItem> searchItems(String hostId, String nameSearch, String keyFilter) {
+        try {
+            JsonObject params = new JsonObject();
+            params.add("output", GSON.toJsonTree(new String[]{"itemid", "name", "value_type"}));
+            params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
+            if (nameSearch != null) {
+                JsonObject search = new JsonObject();
+                search.addProperty("name", nameSearch);
+                params.add("search", search);
+            } else {
+                JsonObject filter = new JsonObject();
+                filter.add("key_", GSON.toJsonTree(new String[]{keyFilter}));
+                params.add("filter", filter);
+            }
+
+            JsonArray result = apiCall("item.get", params, authToken).getAsJsonArray("result");
+            if (result == null) {
+                return Collections.emptyList();
+            }
+            List<InterfaceItem> items = new ArrayList<>(result.size());
+            for (JsonElement el : result) {
+                JsonObject obj = el.getAsJsonObject();
+                items.add(new InterfaceItem(
+                        obj.get("itemid").getAsString(),
+                        obj.get("name").getAsString(),
+                        obj.get("value_type").getAsInt()));
+            }
+            return items;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException e) {
+            log.warn("Zabbix item.get(hostId={}, search={}, key={}): {}", hostId, nameSearch, keyFilter, e.getMessage());
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * Returns the item's value at-or-before {@code timestamp} — the most recent history record
+     * with {@code clock <= timestamp}. This is a point-in-time snapshot, not a range query: it
+     * answers "what was this item reporting at instant T", regardless of how long ago the last
+     * change before T happened.
+     *
+     * @param item      item to read (carries the {@code value_type} needed to pick the right
+     *                  history table)
+     * @param timestamp unix epoch seconds
+     * @return the value, or empty when there is no history at or before that time
+     */
+    public Optional<Long> historyValueBefore(InterfaceItem item, long timestamp) {
+        return historyValue(item, "time_till", timestamp, "DESC");
+    }
+
+    /**
+     * Returns the item's value at-or-after {@code timestamp} — the earliest history record with
+     * {@code clock >= timestamp}. Mirrors {@link #historyValueBefore}, looking forward instead of
+     * back.
+     *
+     * @param item      item to read
+     * @param timestamp unix epoch seconds
+     * @return the value, or empty when there is no history at or after that time
+     */
+    public Optional<Long> historyValueAfter(InterfaceItem item, long timestamp) {
+        return historyValue(item, "time_from", timestamp, "ASC");
+    }
+
+    private Optional<Long> historyValue(InterfaceItem item, String timeParam, long timestamp, String sortOrder) {
+        try {
+            JsonObject params = new JsonObject();
+            params.addProperty("history", item.valueType());
+            params.add("itemids", GSON.toJsonTree(new String[]{item.itemId()}));
+            params.addProperty(timeParam, timestamp);
+            params.addProperty("sortfield", "clock");
+            params.addProperty("sortorder", sortOrder);
+            params.addProperty("limit", 1);
+            params.add("output", GSON.toJsonTree(new String[]{"clock", "value"}));
+
+            JsonArray result = apiCall("history.get", params, authToken).getAsJsonArray("result");
+            if (result == null || result.isEmpty()) {
+                return Optional.empty();
+            }
+            String raw = result.get(0).getAsJsonObject().get("value").getAsString();
+            // history values are stored as strings regardless of value_type; parse as a
+            // (possibly fractional, for float items) number and truncate — every value this
+            // client reads (interface status, uptime seconds) is conceptually an integer.
+            return Optional.of((long) Double.parseDouble(raw));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException | NumberFormatException e) {
+            log.warn("Zabbix history.get(itemId={}, {}={}): {}", item.itemId(), timeParam, timestamp, e.getMessage());
+        }
+        return Optional.empty();
     }
 
     /**
