@@ -195,8 +195,7 @@ public class PowerResilienceAuditor {
             verdict = "Усі відомі порти впали раніше за вузол — ймовірно, резервне живлення "
                     + "протримало довше за клієнтів.";
         } else if (totalKnown > 0 && alreadyDown == 0) {
-            verdict = "Жоден з відомих портів не впав раніше за вузол — вузол здався першим, "
-                    + "варто перевірити резервне живлення.";
+            verdict = "Жоден з відомих портів не впав раніше за вузол.";
         }
 
         Optional<Long> uptimeBefore = Optional.empty();
