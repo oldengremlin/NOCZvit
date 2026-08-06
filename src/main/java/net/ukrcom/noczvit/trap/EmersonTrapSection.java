@@ -104,9 +104,9 @@ public class EmersonTrapSection {
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
                     .append("<th style=\"width:30px\">№</th>")
-                    .append("<th style=\"width:155px\">Початок</th>")
-                    .append("<th style=\"width:155px\">Закінчення</th>")
-                    .append("<th style=\"width:100px\">Тривалість</th>")
+                    .append("<th class=\"nw\">Початок</th>")
+                    .append("<th class=\"nw\">Закінчення</th>")
+                    .append("<th class=\"nw\">Тривалість</th>")
                     .append("<th>Подія</th>")
                     .append("</tr></thead><tbody>\n");
 
@@ -133,9 +133,9 @@ public class EmersonTrapSection {
 
                 html.append("<tr>")
                         .append("<td>").append(n).append(".</td>")
-                        .append("<td>").append(startStr).append("</td>")
-                        .append("<td>").append(endStr).append("</td>")
-                        .append("<td>").append(durStr).append("</td>")
+                        .append("<td class=\"nw\">").append(startStr).append("</td>")
+                        .append("<td class=\"nw\">").append(endStr).append("</td>")
+                        .append("<td class=\"nw\">").append(durStr).append("</td>")
                         .append("<td>").append(descHtml).append("</td>")
                         .append("</tr>\n");
 
