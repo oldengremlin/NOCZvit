@@ -68,9 +68,15 @@ public class PowerResilienceAuditor {
      */
     private static final String RESTART_TRIGGER = "has been restarted";
 
-    /** Скільки інцидентів аудитуємо одночасно — менше за SNMP (10), бо кожен інцидент сам по
-     * собі робить кілька послідовних запитів до Zabbix (по одному-два на інтерфейс). */
+    /** Скільки інцидентів аудитуємо одночасно. */
     private static final int MAX_CONCURRENT_AUDITS = 5;
+
+    /**
+     * Скільки портів одного інциденту опитуємо одночасно. Реальна межа навантаження на Zabbix —
+     * добуток: {@code MAX_CONCURRENT_AUDITS × MAX_CONCURRENT_PORT_PROBES} = 20 одночасних
+     * запитів, тобто того ж порядку, що й SNMP-опитування (10).
+     */
+    private static final int MAX_CONCURRENT_PORT_PROBES = 4;
 
     /** UP-значення інтерфейсного item «Operational status» у цьому Zabbix-шаблоні (1 = UP). */
     private static final long OPERATIONAL_UP = 1L;
@@ -138,6 +144,39 @@ public class PowerResilienceAuditor {
     private static final Pattern IGNORED_PORT =
             Pattern.compile("\\(\\s*(?:--\\s*(?:free|unused)\\s*--)?\\s*\\)$", Pattern.CASE_INSENSITIVE);
 
+    /** Стан одного порту за двома знімками — рівно ті гілки, які раніше були в тілі циклу. */
+    private enum PortState {
+        NO_DATA_AT_FALL, ALREADY_DOWN, RECOVERED, STILL_DOWN, NO_DATA_AT_RECOVERY
+    }
+
+    /**
+     * @param state       до якої групи потрапив порт
+     * @param observation назва порту з міткою часу знімка; {@code null} там, де знімка немає
+     *                    ({@link PortState#NO_DATA_AT_FALL}, {@link PortState#NO_DATA_AT_RECOVERY})
+     */
+    private record PortProbe(PortState state, PowerResilienceResult.InterfaceObservation observation) {
+    }
+
+    /** Два знімки одного порту. Не має спільного стану — тому й опитується паралельно. */
+    private PortProbe probePort(Client.InterfaceItem item, long tDown, long tUp) {
+        Optional<Client.HistoryPoint> before = zabbix.historyValueBefore(item, tDown);
+        if (before.isEmpty()) {
+            return new PortProbe(PortState.NO_DATA_AT_FALL, null);
+        }
+        if (before.get().value() != OPERATIONAL_UP) {
+            return new PortProbe(PortState.ALREADY_DOWN,
+                    new PowerResilienceResult.InterfaceObservation(item.name(), before.get().clock()));
+        }
+
+        Optional<Client.HistoryPoint> after = zabbix.historyValueAfter(item, tUp);
+        if (after.isEmpty()) {
+            return new PortProbe(PortState.NO_DATA_AT_RECOVERY, null);
+        }
+        PortState state = after.get().value() == OPERATIONAL_UP ? PortState.RECOVERED : PortState.STILL_DOWN;
+        return new PortProbe(state,
+                new PowerResilienceResult.InterfaceObservation(item.name(), after.get().clock()));
+    }
+
     /**
      * Аудитує один інцидент. Повертає {@code null}, коли хост не має жодного інтерфейсного
      * SNMP-item — тобто просто нічого аналізувати (та сама умова, що і в оригінальному
@@ -171,34 +210,38 @@ public class PowerResilienceAuditor {
         List<PowerResilienceResult.InterfaceObservation> recoveredNames = new ArrayList<>();
         List<PowerResilienceResult.InterfaceObservation> stillDownNames = new ArrayList<>();
 
-        for (Client.InterfaceItem item : interfaces) {
-            Optional<Client.HistoryPoint> before = zabbix.historyValueBefore(item, tDown);
-            if (before.isEmpty()) {
-                // Знімка на момент падіння немає — порт не входить у totalKnown узагалі.
-                noDataAtFall++;
-                continue;
-            }
-            if (before.get().value() != OPERATIONAL_UP) {
-                alreadyDown++;
-                alreadyDownNames.add(new PowerResilienceResult.InterfaceObservation(
-                        item.name(), before.get().clock()));
-                continue;
-            }
-            stillUp++;
+        // Порти опитуються паралельно тим самим механізмом, що й інциденти: до цього на кожен
+        // порт ішло 1-2 послідовних HTTP-обходи, тож хост на 40 портів давав до 80 послідовних
+        // round-trip'ів. ConcurrentPoll зберігає порядок вхідного списку, тож переліки в звіті
+        // не змінюються. Агрегація — тут, у потоці-викликачі, тобто лічильники не діляться.
+        List<PortProbe> probes = ConcurrentPoll.run(
+                interfaces, item -> probePort(item, tDown, tUp), MAX_CONCURRENT_PORT_PROBES, "resilience-port");
 
-            Optional<Client.HistoryPoint> after = zabbix.historyValueAfter(item, tUp);
-            if (after.isEmpty()) {
-                // Порт уже порахований у stillUp і в totalKnown — бракує лише другого знімка,
-                // тож це зовсім інший випадок, ніж noDataAtFall.
-                noDataAtRecovery++;
-            } else if (after.get().value() == OPERATIONAL_UP) {
-                recovered++;
-                recoveredNames.add(new PowerResilienceResult.InterfaceObservation(
-                        item.name(), after.get().clock()));
-            } else {
-                stillDownAfter++;
-                stillDownNames.add(new PowerResilienceResult.InterfaceObservation(
-                        item.name(), after.get().clock()));
+        for (PortProbe probe : probes) {
+            switch (probe.state()) {
+                case NO_DATA_AT_FALL ->
+                    // Знімка на момент падіння немає — порт не входить у totalKnown узагалі.
+                    noDataAtFall++;
+                case ALREADY_DOWN -> {
+                    alreadyDown++;
+                    alreadyDownNames.add(probe.observation());
+                }
+                case NO_DATA_AT_RECOVERY -> {
+                    // Порт уже порахований у stillUp і в totalKnown — бракує лише другого
+                    // знімка, тож це зовсім інший випадок, ніж NO_DATA_AT_FALL.
+                    stillUp++;
+                    noDataAtRecovery++;
+                }
+                case RECOVERED -> {
+                    stillUp++;
+                    recovered++;
+                    recoveredNames.add(probe.observation());
+                }
+                case STILL_DOWN -> {
+                    stillUp++;
+                    stillDownAfter++;
+                    stillDownNames.add(probe.observation());
+                }
             }
         }
 
