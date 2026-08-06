@@ -108,11 +108,11 @@ public class IncidentSectionBuilder {
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
                     .append("<th style=\"width:30px\">№</th>")
-                    .append("<th>Початок</th>")
-                    .append("<th>Закінчення</th>")
-                    .append("<th>Тривалість</th>")
+                    .append("<th class=\"nw\">Початок</th>")
+                    .append("<th class=\"nw\">Закінчення</th>")
+                    .append("<th class=\"nw\">Тривалість</th>")
                     .append("<th>Інцидент</th>")
-                    .append("<th>Обладнання</th>")
+                    .append("<th class=\"nw\">Обладнання</th>")
                     .append("</tr></thead><tbody>\n");
 
             group.forEach(row -> html.append(buildRow(row, n)));
@@ -215,11 +215,11 @@ public class IncidentSectionBuilder {
         String device = StringEscapeUtils.escapeHtml4(row.device());
         return "<tr>"
                 + "<td>" + n.incrementAndGet() + ".</td>"
-                + "<td>" + startCell + "</td>"
-                + "<td>" + endCell + "</td>"
-                + "<td>" + durationCell + "</td>"
+                + "<td class=\"nw\">" + startCell + "</td>"
+                + "<td class=\"nw\">" + endCell + "</td>"
+                + "<td class=\"nw\">" + durationCell + "</td>"
                 + "<td>" + descHtml + "</td>"
-                + "<td>" + device + "</td>"
+                + "<td class=\"nw\">" + device + "</td>"
                 + "</tr>\n";
     }
 

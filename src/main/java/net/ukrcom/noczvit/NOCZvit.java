@@ -328,6 +328,11 @@ public class NOCZvit {
                     + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
                     + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
                     + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
+                    // Колонки зі сталим за довжиною вмістом (дата, тривалість, ім'я обладнання).
+                    // Дата у звіті завжди «05 серп 2026 13:37:15», тож заборона переносу дає цим
+                    // колонкам однакову ширину в усіх таблицях сама собою — без жорстких пікселів,
+                    // які в поштовому HTML ламаються на вузьких екранах.
+                    + "th.nw,td.nw{white-space:nowrap}"
                     + "tr:nth-child(even) td{background:#f5f7fa}"
                     + "tr.row-critical td{background:#fff0f0}"
                     + "tr.row-critical:nth-child(even) td{background:#f5e2e2}"

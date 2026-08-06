@@ -98,15 +98,19 @@ public class PowerResilienceSection {
                     .append(StringEscapeUtils.escapeHtml4(location)).append("</h3>\n")
                     .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                     .append("<thead><tr>")
-                    .append("<th>Обладнання</th>")
-                    .append("<th>Початок</th>")
-                    .append("<th>Закінчення</th>")
-                    .append("<th>Тривалість</th>")
+                    .append("<th style=\"width:30px\">№</th>")
+                    .append("<th class=\"nw\">Обладнання</th>")
+                    .append("<th class=\"nw\">Початок</th>")
+                    .append("<th class=\"nw\">Закінчення</th>")
+                    .append("<th class=\"nw\">Тривалість</th>")
                     .append("<th>Результат аудиту</th>")
                     .append("</tr></thead><tbody>\n");
 
+            // Нумерація своя в кожній таблиці — як у секції Emerson, де кожен пристрій має
+            // власну таблицю; тут «своя таблиця» на кожну локацію.
+            int n = 0;
             for (PowerResilienceResult r : group) {
-                html.append(buildRow(r));
+                html.append(buildRow(r, ++n));
                 plainText.append(buildPlainTextOne(location, r)).append("\n");
             }
 
@@ -150,12 +154,13 @@ public class PowerResilienceSection {
      * Один рядок таблиці: обладнання, час падіння й відновлення, тривалість — окремими колонками
      * (ті самі назви, що і в таблиці інцидентів), а весь розбір по портах — в останній комірці.
      */
-    private String buildRow(PowerResilienceResult r) {
+    private String buildRow(PowerResilienceResult r, int n) {
         StringBuilder html = new StringBuilder();
-        html.append("<tr><td>").append(StringEscapeUtils.escapeHtml4(r.host())).append("</td>")
-                .append("<td>").append(DateUtils.formatUa(r.fallInstant())).append("</td>")
-                .append("<td>").append(DateUtils.formatUa(r.recoveryInstant())).append("</td>")
-                .append("<td>").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant()))
+        html.append("<tr><td>").append(n).append(".</td>")
+                .append("<td class=\"nw\">").append(StringEscapeUtils.escapeHtml4(r.host())).append("</td>")
+                .append("<td class=\"nw\">").append(DateUtils.formatUa(r.fallInstant())).append("</td>")
+                .append("<td class=\"nw\">").append(DateUtils.formatUa(r.recoveryInstant())).append("</td>")
+                .append("<td class=\"nw\">").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant()))
                 .append("</td><td>\n");
 
         StringBuilder body = new StringBuilder();

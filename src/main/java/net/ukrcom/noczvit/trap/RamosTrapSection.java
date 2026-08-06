@@ -83,6 +83,10 @@ public class RamosTrapSection {
 
         StringBuilder plainText = new StringBuilder();
 
+        // Нумерація наскрізна через усі кімнати: таблиці тут ділять один потік подій одного
+        // контролера, тож окремий відлік у кожній кімнаті лише заважав би зіставляти події.
+        int n = 0;
+
         for (Map.Entry<String, List<RamosTrapEvent>> entry : byRoom.entrySet()) {
             String room = entry.getKey();
             List<RamosTrapEvent> roomEvents = entry.getValue();
@@ -91,8 +95,9 @@ public class RamosTrapSection {
                 .append("<h3 class=\"ramos-room\">").append(StringEscapeUtils.escapeHtml4(room)).append("</h3>\n")
                 .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
                 .append("<thead><tr>")
-                .append("<th>Час</th>")
-                .append("<th>Стан</th>")
+                .append("<th style=\"width:30px\">№</th>")
+                .append("<th class=\"nw\">Час</th>")
+                .append("<th class=\"nw\">Стан</th>")
                 .append("<th>Назва датчика</th>")
                 .append("<th>Тип датчика</th>")
                 .append("</tr></thead><tbody>\n");
@@ -101,8 +106,9 @@ public class RamosTrapSection {
                 boolean critical = RamosTrapEvent.CRITICAL_STATES.contains(ev.state());
 
                 html.append("<tr>")
-                    .append("<td>").append(DateUtils.formatUa(ev.timestamp())).append("</td>")
-                    .append("<td><b>").append(StringEscapeUtils.escapeHtml4(ev.state())).append("</b></td>")
+                    .append("<td>").append(++n).append(".</td>")
+                    .append("<td class=\"nw\">").append(DateUtils.formatUa(ev.timestamp())).append("</td>")
+                    .append("<td class=\"nw\"><b>").append(StringEscapeUtils.escapeHtml4(ev.state())).append("</b></td>")
                     .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorName())).append("</td>")
                     .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorType())).append("</td>")
                     .append("</tr>\n");
