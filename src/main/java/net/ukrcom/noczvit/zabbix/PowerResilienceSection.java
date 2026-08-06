@@ -93,17 +93,24 @@ public class PowerResilienceSection {
         for (Map.Entry<String, List<PowerResilienceResult>> entry : byLocation.entrySet()) {
             String location = entry.getKey();
             List<PowerResilienceResult> group = entry.getValue();
-            // Локацію не розпізнано (location == host саме для цього єдиного вузла) — вкладеність
-            // лише дублювала б однакову назву двічі, тож у цьому разі рівень один, а не два.
-            boolean grouped = group.size() > 1 || !location.equals(group.get(0).host());
-            if (grouped) {
-                html.append("<h3 class=\"resilience-location\">")
-                        .append(StringEscapeUtils.escapeHtml4(location)).append("</h3>\n");
-            }
+
+            html.append("<h3 class=\"resilience-location\">")
+                    .append(StringEscapeUtils.escapeHtml4(location)).append("</h3>\n")
+                    .append("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
+                    .append("<thead><tr>")
+                    .append("<th>Обладнання</th>")
+                    .append("<th>Початок</th>")
+                    .append("<th>Закінчення</th>")
+                    .append("<th>Тривалість</th>")
+                    .append("<th>Результат аудиту</th>")
+                    .append("</tr></thead><tbody>\n");
+
             for (PowerResilienceResult r : group) {
-                html.append(buildOne(r, grouped));
+                html.append(buildRow(r));
                 plainText.append(buildPlainTextOne(location, r)).append("\n");
             }
+
+            html.append("</tbody></table>\n");
         }
 
         html.append("</div>\n");
@@ -139,35 +146,30 @@ public class PowerResilienceSection {
         return sb.toString();
     }
 
-    private String buildOne(PowerResilienceResult r, boolean grouped) {
-        String tag = grouped ? "h4" : "h3";
-        String cssClass = grouped ? "resilience-host-sub" : "resilience-host";
-        String title = grouped
-                ? r.host()
-                : (r.location().equals(r.host()) ? r.host() : r.location() + " (" + r.host() + ")");
-
+    /**
+     * Один рядок таблиці: обладнання, час падіння й відновлення, тривалість — окремими колонками
+     * (ті самі назви, що і в таблиці інцидентів), а весь розбір по портах — в останній комірці.
+     */
+    private String buildRow(PowerResilienceResult r) {
         StringBuilder html = new StringBuilder();
-        html.append("<").append(tag).append(" class=\"").append(cssClass).append("\">")
-                .append(StringEscapeUtils.escapeHtml4(title)).append("</").append(tag).append(">\n");
+        html.append("<tr><td>").append(StringEscapeUtils.escapeHtml4(r.host())).append("</td>")
+                .append("<td>").append(DateUtils.formatUa(r.fallInstant())).append("</td>")
+                .append("<td>").append(DateUtils.formatUa(r.recoveryInstant())).append("</td>")
+                .append("<td>").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant()))
+                .append("</td><td>\n");
 
-        // Під згрупованим заголовком (вузол під локацією) тіло зсунуте вправо в окремому div —
-        // так вкладеність видно й у самому тексті, а не лише в заголовках.
         StringBuilder body = new StringBuilder();
-        body.append("<p>Падіння: <b>").append(DateUtils.formatUa(r.fallInstant())).append("</b>")
-                .append(" → Відновлення: <b>").append(DateUtils.formatUa(r.recoveryInstant())).append("</b>")
-                .append(" (тривалість: ").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant()))
-                .append(")</p>\n");
 
         int totalKnown = r.totalKnown();
         if (totalKnown == 0) {
             // Дві різні причини «нічого аналізувати» — не можна писати про відсутню історію,
             // коли насправді всі порти хоста виключені як службові чи вільні.
             body.append(r.noDataAtFall() == 0 && r.ignoredPorts() > 0
-                    ? "<p><i>Немає даних для аналізу — усі " + r.ignoredPorts()
-                      + " портів хоста без опису або позначені вільними.</i></p>\n"
-                    : "<p><i>Немає даних для аналізу — жоден інтерфейс не мав історії "
-                      + "на момент падіння вузла.</i></p>\n");
-            return html.append(wrapBody(body, grouped)).toString();
+                    ? "<i>Немає даних для аналізу — усі " + r.ignoredPorts()
+                      + " портів хоста без опису або позначені вільними.</i>\n"
+                    : "<i>Немає даних для аналізу — жоден інтерфейс не мав історії "
+                      + "на момент падіння вузла.</i>\n");
+            return html.append(body).append("</td></tr>\n").toString();
         }
 
         body.append("<p>На момент падіння вузла: <b>").append(r.alreadyDownAtFall())
@@ -232,13 +234,7 @@ public class PowerResilienceSection {
                             + "(<code>--free--</code>, <code>--unused--</code>).</i></p>\n");
         }
 
-        return html.append(wrapBody(body, grouped)).toString();
-    }
-
-    private String wrapBody(StringBuilder body, boolean grouped) {
-        return grouped
-                ? "<div class=\"resilience-host-body\">\n" + body + "</div>\n"
-                : body.toString();
+        return html.append(body).append("</td></tr>\n").toString();
     }
 
     private void appendNames(StringBuilder html, String label,
