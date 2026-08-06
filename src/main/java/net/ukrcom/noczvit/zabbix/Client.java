@@ -120,7 +120,9 @@ public class Client {
                         authToken.substring(0, Math.min(8, authToken.length())));
                 return true;
             }
-            log.warn("Zabbix API login failed: {}", resp);
+            // Лише поле error, а не вся відповідь: це WARN, тобто пишеться і в продакшні, а
+            // формат відповіді Zabbix може змінитися й почати нести зайве.
+            log.warn("Zabbix API login failed: {}", resp.get("error"));
         } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix API login error: {}", e.getMessage());
         }

@@ -219,8 +219,10 @@ public class Client {
                 if (response == null || response.getErrorStatus() != PDU.noError) {
                     String error = response != null ? response.getErrorStatusText() : "Timeout";
                     log.warn("SNMP ramos {}: {}", host, error);
-                    fragment.append("<tr><td colspan=\"3\"><i>").append(host)
-                            .append(" - не вдалося отримати доступ: ").append(error).append("</i></td></tr>\n");
+                    fragment.append("<tr><td colspan=\"3\"><i>")
+                            .append(StringEscapeUtils.escapeHtml4(host))
+                            .append(" - не вдалося отримати доступ: ")
+                            .append(StringEscapeUtils.escapeHtml4(error)).append("</i></td></tr>\n");
                     break;
                 }
 
@@ -305,8 +307,11 @@ public class Client {
             }
         } catch (IOException e) {
             log.warn("SNMP ramos {}: {}", host, e.getMessage());
-            fragment.append("<tr><td colspan=\"3\"><i>").append(host)
-                    .append(" - не вдалося отримати доступ: ").append(e.getMessage()).append("</i></td></tr>\n");
+            fragment.append("<tr><td colspan=\"3\"><i>")
+                    .append(StringEscapeUtils.escapeHtml4(host))
+                    .append(" - не вдалося отримати доступ: ")
+                    .append(StringEscapeUtils.escapeHtml4(String.valueOf(e.getMessage())))
+                    .append("</i></td></tr>\n");
         }
 
         fragment.append("</tbody></table>\n</div>\n");

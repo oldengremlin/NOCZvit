@@ -48,7 +48,10 @@ import lombok.extern.slf4j.Slf4j;
 // secrets are excluded so that any future log.debug("config={}", config) cannot leak them;
 // `properties` holds every key-value pair, i.e. all secrets a second time
 @ToString(includeFieldNames = true, exclude = {"properties", "zabbixPassword", "mailPassword",
-    "claudeApiKey", "accountMssqlPassword", "accequipmentMssqlPassword"})
+    "claudeApiKey", "accountMssqlPassword", "accequipmentMssqlPassword",
+    // SNMPv2c community — фактично пароль на читання всього обладнання, ще й ходить мережею
+    // відкритим текстом; без цього рядка гарантія «toString не вивалить секрети» була неповна
+    "snmpCommunity", "snmpCommunityCelsius", "snmpCommunityRamos"})
 @EqualsAndHashCode
 @Getter
 public class Config {
