@@ -15,7 +15,6 @@
 package net.ukrcom.noczvit.zabbix;
 
 import java.util.List;
-import java.util.stream.Collectors;
 import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
@@ -97,9 +96,12 @@ public class PowerResilienceSection {
 
         if (r.stillUpAtFall() > 0) {
             html.append("<p>З тих, що ще працювали: <b>").append(r.recoveredBeforeUs())
-                    .append("</b> піднялись раніше вузла або одночасно з ним, <b>")
-                    .append(r.stillDownAfterUs())
-                    .append("</b> лишались недоступні й після його відновлення.</p>\n");
+                    .append("</b> фіксувалися як активні на момент відновлення вузла");
+            if (r.stillDownAfterUs() > 0) {
+                html.append(", <b>").append(r.stillDownAfterUs())
+                        .append("</b> лишались недоступні й після його відновлення");
+            }
+            html.append(".</p>\n");
         }
 
         if (!r.verdict().isEmpty()) {
@@ -115,7 +117,7 @@ public class PowerResilienceSection {
         }
 
         appendNames(html, "Впали раніше вузла", r.alreadyDownNames());
-        appendNames(html, "Піднялись раніше вузла", r.recoveredNames());
+        appendNames(html, "Активні на момент відновлення вузла", r.recoveredNames());
         appendNames(html, "Лишались недоступні після відновлення вузла", r.stillDownNames());
 
         if (r.noData() > 0) {
@@ -130,8 +132,11 @@ public class PowerResilienceSection {
         if (names.isEmpty()) {
             return;
         }
-        html.append("<p><small>").append(label).append(": ")
-                .append(names.stream().map(StringEscapeUtils::escapeHtml4).collect(Collectors.joining("; ")))
-                .append("</small></p>\n");
+        html.append("<p><small>").append(label).append(":</small></p>\n")
+                .append("<ul class=\"resilience-list\">\n");
+        for (String name : names) {
+            html.append("<li>").append(StringEscapeUtils.escapeHtml4(name)).append("</li>\n");
+        }
+        html.append("</ul>\n");
     }
 }
