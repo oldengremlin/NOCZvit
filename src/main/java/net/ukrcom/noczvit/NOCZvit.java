@@ -297,6 +297,8 @@ public class NOCZvit {
                     + "h3.ramos-room{font-size:13px;color:#bf360c;background:#e8eaf0;border-left:4px solid #f38120;margin:12px 0 4px;padding:5px 10px}"
                     + "h2.resilience-title{font-size:16px;color:#4a148c;background:#e8eaf0;border-left:4px solid #7b1fa2;margin:16px 0 6px;padding:5px 10px}"
                     + "h3.resilience-host{font-size:13px;color:#4a148c;background:#e8eaf0;border-left:4px solid #7b1fa2;margin:12px 0 4px;padding:5px 10px}"
+                    + ".resilience-list{font-size:11px;color:#4a148c;background:#f3e5f5;padding:4px 8px 4px 28px;margin:0 0 4px;list-style:disc}"
+                    + ".resilience-list li{padding:1px 0}"
                     + "table{border-collapse:collapse;background:#fff;box-shadow:2px 2px 6px rgba(0,0,0,.2);margin-bottom:8px}"
                     + "th{background:#37474f;color:#fff;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #546e7a}"
                     + "td{padding:5px 10px;border:1px solid #cfd8dc;vertical-align:top;font-size:12px}"
@@ -333,6 +335,10 @@ public class NOCZvit {
                 message.append(ramosTrapResult.html());
             }
 
+            if (!resilienceResult.isEmpty()) {
+                message.append(resilienceResult.html());
+            }
+
             if (!nightShift) {
                 message.append(debtorsHtml);
             }
@@ -345,10 +351,6 @@ public class NOCZvit {
                 if (config.isRamosEnabled()) {
                     message.append(snmpClient.getRamos());
                 }
-            }
-
-            if (!resilienceResult.isEmpty()) {
-                message.append(resilienceResult.html());
             }
 
             if (!trapResult.unknownHtml().isBlank()) {
