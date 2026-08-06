@@ -396,15 +396,18 @@ public class Client {
             JsonObject params = new JsonObject();
             params.add("output", GSON.toJsonTree(new String[]{"itemid", "name", "value_type"}));
             params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
+            // status=0 (ITEM_STATUS_ACTIVE): вимкнені items свіжої історії не мають, тож без
+            // цього фільтра вони лише роздували б лічильник «немає даних».
+            JsonObject filter = new JsonObject();
+            filter.addProperty("status", 0);
             if (nameSearch != null) {
                 JsonObject search = new JsonObject();
                 search.addProperty("name", nameSearch);
                 params.add("search", search);
             } else {
-                JsonObject filter = new JsonObject();
                 filter.add("key_", GSON.toJsonTree(new String[]{keyFilter}));
-                params.add("filter", filter);
             }
+            params.add("filter", filter);
 
             JsonArray result = apiCall("item.get", params, authToken).getAsJsonArray("result");
             if (result == null) {

@@ -160,8 +160,13 @@ public class PowerResilienceSection {
 
         int totalKnown = r.totalKnown();
         if (totalKnown == 0) {
-            body.append("<p><i>Немає даних для аналізу — жоден інтерфейс не мав історії "
-                    + "на момент падіння вузла.</i></p>\n");
+            // Дві різні причини «нічого аналізувати» — не можна писати про відсутню історію,
+            // коли насправді всі порти хоста виключені як службові чи вільні.
+            body.append(r.noDataAtFall() == 0 && r.ignoredPorts() > 0
+                    ? "<p><i>Немає даних для аналізу — усі " + r.ignoredPorts()
+                      + " портів хоста без опису або позначені вільними.</i></p>\n"
+                    : "<p><i>Немає даних для аналізу — жоден інтерфейс не мав історії "
+                      + "на момент падіння вузла.</i></p>\n");
             return html.append(wrapBody(body, grouped)).toString();
         }
 
@@ -176,6 +181,12 @@ public class PowerResilienceSection {
             if (r.stillDownAfterUs() > 0) {
                 body.append(", <b>").append(r.stillDownAfterUs())
                         .append("</b> лишались недоступні й після його відновлення");
+            }
+            // Без цього доданку сума не сходилась зі stillUpAtFall, і читач не міг зрозуміти,
+            // куди подівся залишок.
+            if (r.noDataAtRecovery() > 0) {
+                body.append(", для <b>").append(r.noDataAtRecovery())
+                        .append("</b> немає знімка на момент відновлення");
             }
             body.append(".</p>\n");
         }
@@ -211,9 +222,14 @@ public class PowerResilienceSection {
         appendNames(body, "Активні на момент відновлення вузла", r.recoveredNames());
         appendNames(body, "Лишались недоступні після відновлення вузла", r.stillDownNames());
 
-        if (r.noData() > 0) {
-            body.append("<p><i>").append(r.noData())
-                    .append(" — немає даних для аналізу (відсутня історія на потрібний момент).</i></p>\n");
+        if (r.noDataAtFall() > 0) {
+            body.append("<p><i>").append(r.noDataAtFall())
+                    .append(" портів не враховано — не мали історії на момент падіння вузла.</i></p>\n");
+        }
+        if (r.ignoredPorts() > 0) {
+            body.append("<p><i>").append(r.ignoredPorts())
+                    .append(" портів не враховано — без опису або позначені вільними "
+                            + "(<code>--free--</code>, <code>--unused--</code>).</i></p>\n");
         }
 
         return html.append(wrapBody(body, grouped)).toString();

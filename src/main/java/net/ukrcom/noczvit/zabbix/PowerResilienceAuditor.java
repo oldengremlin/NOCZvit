@@ -126,9 +126,17 @@ public class PowerResilienceAuditor {
                 .map(p -> Instant.ofEpochSecond(p.clock()));
     }
 
-    /** Ознака порожнього опису порту — {@code "Interface 11()"}: такий порт нічого не каже про
-     * резервне живлення, тож ігнорується повністю, а не лише в переліку назв. */
-    private static final Pattern EMPTY_DESCRIPTION = Pattern.compile("\\(\\s*\\)$");
+    /**
+     * Порт, який нічого не каже про резервне живлення абонентів, тож виключається з підрахунку
+     * повністю, а не лише з переліку назв: порожній опис ({@code "Interface 11()"}) або явна
+     * позначка вільного порту ({@code "(--free--)"}, {@code "(--unused--)"}).
+     *
+     * <p>Вільні порти особливо шкідливі саме тут: вони завжди DOWN, тож завжди потрапляли б у
+     * «впали раніше вузла» і систематично зсували вердикт до «резервне живлення протримало
+     * довше» — тобто до сприятливого висновку без жодних підстав.
+     */
+    private static final Pattern IGNORED_PORT =
+            Pattern.compile("\\(\\s*(?:--\\s*(?:free|unused)\\s*--)?\\s*\\)$", Pattern.CASE_INSENSITIVE);
 
     /**
      * Аудитує один інцидент. Повертає {@code null}, коли хост не має жодного інтерфейсного
@@ -149,14 +157,16 @@ public class PowerResilienceAuditor {
             return null;
         }
         List<Client.InterfaceItem> interfaces = allInterfaces.stream()
-                .filter(i -> !EMPTY_DESCRIPTION.matcher(i.name()).find())
+                .filter(i -> !IGNORED_PORT.matcher(i.name()).find())
                 .toList();
+        int ignoredPorts = allInterfaces.size() - interfaces.size();
 
         int alreadyDown = 0;
         int stillUp = 0;
         int recovered = 0;
         int stillDownAfter = 0;
-        int noData = 0;
+        int noDataAtFall = 0;
+        int noDataAtRecovery = 0;
         List<PowerResilienceResult.InterfaceObservation> alreadyDownNames = new ArrayList<>();
         List<PowerResilienceResult.InterfaceObservation> recoveredNames = new ArrayList<>();
         List<PowerResilienceResult.InterfaceObservation> stillDownNames = new ArrayList<>();
@@ -164,7 +174,8 @@ public class PowerResilienceAuditor {
         for (Client.InterfaceItem item : interfaces) {
             Optional<Client.HistoryPoint> before = zabbix.historyValueBefore(item, tDown);
             if (before.isEmpty()) {
-                noData++;
+                // Знімка на момент падіння немає — порт не входить у totalKnown узагалі.
+                noDataAtFall++;
                 continue;
             }
             if (before.get().value() != OPERATIONAL_UP) {
@@ -177,7 +188,9 @@ public class PowerResilienceAuditor {
 
             Optional<Client.HistoryPoint> after = zabbix.historyValueAfter(item, tUp);
             if (after.isEmpty()) {
-                noData++;
+                // Порт уже порахований у stillUp і в totalKnown — бракує лише другого знімка,
+                // тож це зовсім інший випадок, ніж noDataAtFall.
+                noDataAtRecovery++;
             } else if (after.get().value() == OPERATIONAL_UP) {
                 recovered++;
                 recoveredNames.add(new PowerResilienceResult.InterfaceObservation(
@@ -213,7 +226,8 @@ public class PowerResilienceAuditor {
         return new PowerResilienceResult(
                 host, location,
                 Instant.ofEpochSecond(tDown), Instant.ofEpochSecond(tUp),
-                alreadyDown, stillUp, recovered, stillDownAfter, noData,
+                alreadyDown, stillUp, recovered, stillDownAfter,
+                noDataAtFall, noDataAtRecovery, ignoredPorts,
                 List.copyOf(alreadyDownNames), List.copyOf(recoveredNames), List.copyOf(stillDownNames),
                 uptimeBefore, uptimeAfter, restartDetectedAt, verdict);
     }
