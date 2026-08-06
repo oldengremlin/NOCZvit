@@ -32,6 +32,11 @@ import org.apache.commons.text.StringEscapeUtils;
  * лише сирі цифри до/після, а факт про лічильник uptime — тільки в цій неоднозначній середині,
  * за явним правилом, що ця нотатка належить саме до випадку «решта», а не поруч із уже чітким
  * вердиктом.
+ *
+ * <p>Виняток — {@link PowerResilienceResult#restartDetectedAt()}: це вже готовий висновок самого
+ * Zabbix (окрема подія «has been restarted»), а не наш здогад над сирим лічильником, тож
+ * показується завжди, коли знайдений, незалежно від вердикту чи неоднозначності. Коли він
+ * присутній, замінює собою слабший, залежний-від-uptime факт нижче.
  */
 public class PowerResilienceSection {
 
@@ -124,6 +129,10 @@ public class PowerResilienceSection {
         } else {
             sb.append(" Однозначного висновку немає — вирішує інженер.");
         }
+        if (r.restartDetectedAt().isPresent()) {
+            sb.append(" Zabbix підтвердив перезавантаження обладнання о ")
+                    .append(DateUtils.formatUa(r.restartDetectedAt().get())).append(".");
+        }
         return sb.toString();
     }
 
@@ -170,10 +179,22 @@ public class PowerResilienceSection {
 
         if (!r.verdict().isEmpty()) {
             body.append("<p><b>").append(StringEscapeUtils.escapeHtml4(r.verdict())).append("</b></p>\n");
-        } else if (r.uptimeDecreased()) {
-            // Uptime fact belongs only here — in the ambiguous middle where the port pattern
-            // alone gives no verdict. At the two clear edges the pattern already speaks for
-            // itself, and this would just be noise alongside it.
+        }
+
+        if (r.restartDetectedAt().isPresent()) {
+            // Готовий висновок самого Zabbix (окремий тригер «has been restarted»), тому — на
+            // відміну від сирого лічильника uptime — показується завжди, коли знайдений, а не
+            // лише в неоднозначній середині.
+            body.append("<p><i>Zabbix додатково зафіксував подію «")
+                    .append(StringEscapeUtils.escapeHtml4(r.host())).append(" has been restarted» о ")
+                    .append(DateUtils.formatUa(r.restartDetectedAt().get()))
+                    .append(" — окремий тригер перезавантаження, не пов'язаний з лічильником uptime; "
+                            + "самостійне підтвердження, що обладнання дійсно перезавантажилось "
+                            + "під час цього виносу.</i></p>\n");
+        } else if (r.verdict().isEmpty() && r.uptimeDecreased()) {
+            // Uptime fact belongs only here — in the ambiguous middle where neither the port
+            // pattern nor a restart event gives a clearer answer. At the two clear edges (or with
+            // a confirmed restart above) this would just be noise alongside a stronger signal.
             body.append("<p><i>Zabbix зафіксував зменшення лічильника uptime з ")
                     .append(r.uptimeBefore().get()).append(" на ").append(r.uptimeAfter().get())
                     .append(" с. Лічильник може переповнюватись і без реального перезавантаження — "
