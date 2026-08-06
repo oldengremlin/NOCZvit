@@ -24,11 +24,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
-import java.util.function.Function;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
@@ -37,6 +32,7 @@ import org.snmp4j.smi.VariableBinding;
 import org.apache.commons.text.StringEscapeUtils;
 import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
+import net.ukrcom.noczvit.ConcurrentPoll;
 import net.ukrcom.noczvit.imap.DateUtils;
 
 /**
@@ -92,8 +88,8 @@ public class Client {
         List<String> hostnames = new ArrayList<>(config.getHosts().keySet());
         Collections.sort(hostnames);
 
-        List<CelsiusResult> results = pollConcurrently(hostnames,
-                hostname -> queryHostCelsius(hostname, from, to, zabbix), "celsius");
+        List<CelsiusResult> results = ConcurrentPoll.run(hostnames,
+                hostname -> queryHostCelsius(hostname, from, to, zabbix), MAX_CONCURRENT_SNMP, "celsius");
 
         int n = 0;
         for (CelsiusResult result : results) {
@@ -180,53 +176,9 @@ public class Client {
         List<String> hosts = new ArrayList<>(config.getRamos().keySet());
         Collections.sort(hosts);
 
-        pollConcurrently(hosts, this::queryHostRamos, "ramos").forEach(html::append);
+        ConcurrentPoll.run(hosts, this::queryHostRamos, MAX_CONCURRENT_SNMP, "ramos").forEach(html::append);
 
         return html.toString();
-    }
-
-    /**
-     * Runs {@code query} for every key on its own virtual thread, bounded to
-     * {@value #MAX_CONCURRENT_SNMP} in flight, and returns the results in input order.
-     *
-     * <p>Failed queries are logged and dropped rather than aborting the section — one
-     * unreachable device must not cost the whole report. The semaphore and the result list are
-     * per-call locals, so concurrent callers never share bounding state; results are collected on
-     * the calling thread after the executor's try-with-resources has joined every task.
-     *
-     * @param keys      hostnames or IPs to poll
-     * @param query     per-key SNMP query
-     * @param logLabel  label used in the failure log line
-     * @return successful results, in the order of {@code keys}
-     */
-    private <T> List<T> pollConcurrently(List<String> keys, Function<String, T> query, String logLabel) {
-        Semaphore sem = new Semaphore(MAX_CONCURRENT_SNMP);
-        List<Future<T>> futures = new ArrayList<>(keys.size());
-
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (String key : keys) {
-                futures.add(executor.submit(() -> {
-                    sem.acquire();
-                    try {
-                        return query.apply(key);
-                    } finally {
-                        sem.release();
-                    }
-                }));
-            }
-        }
-
-        List<T> results = new ArrayList<>(futures.size());
-        for (Future<T> future : futures) {
-            try {
-                results.add(future.get());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException e) {
-                log.error("SNMP {} query failed: {}", logLabel, e.getCause().getMessage());
-            }
-        }
-        return results;
     }
 
     /**

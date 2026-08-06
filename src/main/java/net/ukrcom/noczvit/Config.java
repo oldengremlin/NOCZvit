@@ -62,6 +62,7 @@ public class Config {
     private boolean temperatureEnabled;
     private boolean ramosEnabled;
     private boolean zabbixEnabled;
+    private boolean resilienceAuditEnabled;
     private String zabbixApi;
     private String zabbixUrl;
     private String zabbixUsername;
@@ -265,6 +266,10 @@ public class Config {
                     zabbixEnabled = true;
                 case "--no-zabbix" ->
                     zabbixEnabled = false;
+                case "--resilience-audit" ->
+                    resilienceAuditEnabled = true;
+                case "--no-resilience-audit" ->
+                    resilienceAuditEnabled = false;
                 case "--debug" ->
                     debug = true;
                 case "--no-debug" ->
@@ -307,6 +312,10 @@ public class Config {
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
         zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
+        // Opt-in like ramos/zabbix, not on-by-default like incidents/temperature — new feature,
+        // depends on Zabbix history/item.get behavior that needs verifying against a real
+        // instance before it runs unattended in production.
+        resilienceAuditEnabled = Boolean.parseBoolean(properties.getProperty("resilienceaudit", "false"));
         String claudeProp = properties.getProperty("claude");
         if (claudeProp != null) {
             claudeExplicit = Boolean.valueOf(claudeProp);
