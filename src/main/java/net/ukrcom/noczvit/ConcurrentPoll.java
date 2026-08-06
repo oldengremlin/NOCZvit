@@ -24,13 +24,13 @@ import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Bounded-concurrency fan-out on virtual threads, shared by every part of the report that polls
- * many independent keys (SNMP hosts, Zabbix API queries, ...) and wants a hard cap on how many
- * run at once without hand-rolling a semaphore each time.
+ * Обмежений паралельний fan-out на віртуальних потоках — спільний для всіх частин звіту, що
+ * опитують багато незалежних ключів (SNMP-хости, Zabbix API-запити, ...) і потребують жорсткого
+ * обмеження на кількість одночасних викликів без ручного `Semaphore` щоразу.
  *
- * <p>Originally lived as a private method on {@code snmp.Client}; moved here once a second
- * caller ({@code zabbix.PowerResilienceAuditor}) needed the exact same shape — per the project
- * rule of extracting shared code rather than copying a private method across packages.
+ * <p>Раніше був приватним методом у {@code snmp.Client}; винесений сюди, коли той самий
+ * механізм знадобився другому викликачу ({@code zabbix.PowerResilienceAuditor}) — за правилом
+ * проєкту виносити спільний код у спільне місце, а не копіювати приватний метод між пакетами.
  */
 @Slf4j
 public final class ConcurrentPoll {
@@ -39,19 +39,21 @@ public final class ConcurrentPoll {
     }
 
     /**
-     * Runs {@code query} for every key on its own virtual thread, bounded to
-     * {@code maxConcurrent} in flight, and returns the successful results in input order.
+     * Виконує {@code query} для кожного ключа на власному віртуальному потоці, обмежено
+     * {@code maxConcurrent} одночасних викликів, і повертає успішні результати в порядку вхідних
+     * ключів.
      *
-     * <p>Failed queries are logged and dropped rather than aborting the batch — one bad key
-     * must not cost every other result. The semaphore and the result list are per-call locals,
-     * so concurrent callers never share bounding state; results are collected on the calling
-     * thread after the executor's try-with-resources has joined every task.
+     * <p>Невдалі запити логуються й відкидаються, а не переривають весь пакет — один поганий
+     * ключ не повинен коштувати всіх інших результатів. Semaphore і список результатів —
+     * локальні для кожного виклику, тож паралельні виклики ніколи не ділять стан обмеження;
+     * результати збираються в потоці виклику вже після того, як executor у try-with-resources
+     * дочекався завершення всіх задач.
      *
-     * @param keys          keys to query (hostnames, item IDs, incident records, ...)
-     * @param query         per-key query; exceptions are caught and logged, not rethrown
-     * @param maxConcurrent upper bound on simultaneously in-flight queries
-     * @param logLabel      label used in the failure log line
-     * @return successful results, in the order of {@code keys}
+     * @param keys          ключі для опитування (hostname, item ID, записи інцидентів, ...)
+     * @param query         запит на кожен ключ; винятки перехоплюються й логуються, не прокидаються далі
+     * @param maxConcurrent верхня межа кількості одночасних запитів
+     * @param logLabel      мітка для рядка логу про помилку
+     * @return успішні результати, у порядку {@code keys}
      */
     public static <K, T> List<T> run(List<K> keys, Function<K, T> query, int maxConcurrent, String logLabel) {
         Semaphore sem = new Semaphore(maxConcurrent);

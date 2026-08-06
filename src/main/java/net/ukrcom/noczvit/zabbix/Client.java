@@ -30,6 +30,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -333,28 +334,28 @@ public class Client {
     }
 
     /**
-     * One Zabbix item this client can read history for — an interface's Operational status, or a
-     * host's {@code system.uptime} counter.
+     * Один Zabbix-item, з якого цей клієнт уміє читати історію — «Operational status» інтерфейсу
+     * або лічильник {@code system.uptime} хоста.
      *
-     * @param itemId    Zabbix item ID
-     * @param name      item name ({@code "Interface 11(...) Operational status"}) or, for
-     *                  interface items, the trailing {@code " Operational status"} suffix already
-     *                  stripped by {@link #getInterfaceItems}
-     * @param valueType Zabbix {@code value_type} (0-4), passed back into {@code history.get} —
-     *                  read from the item definition rather than assumed, since it determines
-     *                  which history table the value lives in
+     * @param itemId    ID item у Zabbix
+     * @param name      назва item ({@code "Interface 11(...) Operational status"}) або, для
+     *                  інтерфейсних items, з уже відрізаним {@link #getInterfaceItems} суфіксом
+     *                  {@code " Operational status"}
+     * @param valueType Zabbix {@code value_type} (0-4), передається назад у {@code history.get} —
+     *                  зчитується з визначення item, а не припускається, бо визначає, у якій
+     *                  таблиці історії лежить значення
      */
     public record InterfaceItem(String itemId, String name, int valueType) {
     }
 
     /**
-     * Finds every "Operational status" SNMP item on a host — one per monitored interface.
-     * Empty when the host has no such items (not SNMP-monitored, or a template without
-     * interface-level items), which is the signal callers use to skip a host entirely.
+     * Знаходить усі SNMP-items «Operational status» на хості — по одному на кожен моніторований
+     * інтерфейс. Порожній список, якщо таких items у хоста немає (не SNMP-моніторований, або
+     * шаблон без інтерфейсних items) — це сигнал для викликача пропустити хост повністю.
      *
-     * @param hostname short Zabbix hostname
-     * @return interface items with the {@code " Operational status"} suffix stripped from their
-     *         names; empty list on no match or any API error
+     * @param hostname короткий hostname у Zabbix
+     * @return інтерфейсні items з відрізаним суфіксом {@code " Operational status"} у назвах;
+     *         порожній список при відсутності збігів чи будь-якій помилці API
      */
     public List<InterfaceItem> getInterfaceItems(String hostname) {
         String hostId = resolveHostId(hostname);
@@ -369,11 +370,11 @@ public class Client {
     }
 
     /**
-     * Finds the host's {@code system.uptime} item (Template Module Generic SNMPv2: Device
-     * uptime), used for the resilience-audit's counter-decrease fact.
+     * Знаходить item {@code system.uptime} хоста (Template Module Generic SNMPv2: Device
+     * uptime) — використовується для факту про зменшення лічильника в аудиті резервного живлення.
      *
-     * @param hostname short Zabbix hostname
-     * @return the uptime item, or empty when the host doesn't have one or on any API error
+     * @param hostname короткий hostname у Zabbix
+     * @return item uptime, або порожньо, якщо у хоста його немає чи сталася помилка API
      */
     public Optional<InterfaceItem> getUptimeItem(String hostname) {
         String hostId = resolveHostId(hostname);
@@ -385,8 +386,8 @@ public class Client {
     }
 
     /**
-     * Runs {@code item.get} for a host, either by name substring ({@code nameSearch}) or by exact
-     * item key ({@code keyFilter}) — exactly one of the two must be non-null.
+     * Виконує {@code item.get} для хоста — або за підрядком назви ({@code nameSearch}), або за
+     * точним ключем item ({@code keyFilter}); саме один з двох має бути непорожнім.
      */
     private List<InterfaceItem> searchItems(String hostId, String nameSearch, String keyFilter) {
         try {
@@ -425,34 +426,45 @@ public class Client {
     }
 
     /**
-     * Returns the item's value at-or-before {@code timestamp} — the most recent history record
-     * with {@code clock <= timestamp}. This is a point-in-time snapshot, not a range query: it
-     * answers "what was this item reporting at instant T", regardless of how long ago the last
-     * change before T happened.
+     * Один запис історії: саме значення плюс мить, коли Zabbix фактично його зафіксував. Мітка
+     * часу тут важлива не менше за значення — знімок може бути набагато старшим за мить самого
+     * запиту, якщо на цьому item довкола нічого не змінювалось, і звіт аудиту резервного
+     * живлення показує її, щоб читач міг оцінити, наскільки «свіжий» той чи інший відомий стан.
      *
-     * @param item      item to read (carries the {@code value_type} needed to pick the right
-     *                  history table)
-     * @param timestamp unix epoch seconds
-     * @return the value, or empty when there is no history at or before that time
+     * @param clock коли це значення зафіксовано
+     * @param value зафіксоване значення (стан інтерфейсу, секунди uptime)
      */
-    public Optional<Long> historyValueBefore(InterfaceItem item, long timestamp) {
+    public record HistoryPoint(Instant clock, long value) {
+    }
+
+    /**
+     * Повертає значення item на або до {@code timestamp} — найновіший запис історії з
+     * {@code clock <= timestamp}. Це точковий знімок, а не запит діапазону: відповідає на «що
+     * показував цей item у мить T», незалежно від того, як давно до T відбулась остання зміна.
+     *
+     * @param item      item для читання (несе {@code value_type}, потрібний для вибору правильної
+     *                  таблиці історії)
+     * @param timestamp unix-час у секундах
+     * @return значення разом із власною міткою часу, або порожньо, якщо немає історії на або до цього моменту
+     */
+    public Optional<HistoryPoint> historyValueBefore(InterfaceItem item, long timestamp) {
         return historyValue(item, "time_till", timestamp, "DESC");
     }
 
     /**
-     * Returns the item's value at-or-after {@code timestamp} — the earliest history record with
-     * {@code clock >= timestamp}. Mirrors {@link #historyValueBefore}, looking forward instead of
-     * back.
+     * Повертає значення item на або після {@code timestamp} — найраніший запис історії з
+     * {@code clock >= timestamp}. Дзеркальний до {@link #historyValueBefore}, дивиться вперед
+     * замість назад.
      *
-     * @param item      item to read
-     * @param timestamp unix epoch seconds
-     * @return the value, or empty when there is no history at or after that time
+     * @param item      item для читання
+     * @param timestamp unix-час у секундах
+     * @return значення разом із власною міткою часу, або порожньо, якщо немає історії на або після цього моменту
      */
-    public Optional<Long> historyValueAfter(InterfaceItem item, long timestamp) {
+    public Optional<HistoryPoint> historyValueAfter(InterfaceItem item, long timestamp) {
         return historyValue(item, "time_from", timestamp, "ASC");
     }
 
-    private Optional<Long> historyValue(InterfaceItem item, String timeParam, long timestamp, String sortOrder) {
+    private Optional<HistoryPoint> historyValue(InterfaceItem item, String timeParam, long timestamp, String sortOrder) {
         try {
             JsonObject params = new JsonObject();
             params.addProperty("history", item.valueType());
@@ -467,11 +479,13 @@ public class Client {
             if (result == null || result.isEmpty()) {
                 return Optional.empty();
             }
-            String raw = result.get(0).getAsJsonObject().get("value").getAsString();
-            // history values are stored as strings regardless of value_type; parse as a
-            // (possibly fractional, for float items) number and truncate — every value this
-            // client reads (interface status, uptime seconds) is conceptually an integer.
-            return Optional.of((long) Double.parseDouble(raw));
+            JsonObject entry = result.get(0).getAsJsonObject();
+            long clock = entry.get("clock").getAsLong();
+            String raw = entry.get("value").getAsString();
+            // значення історії завжди зберігаються як рядки, незалежно від value_type; парсимо
+            // як число (можливо дробове, для float-items) і відкидаємо дробову частину — кожне
+            // значення, яке тут читається (стан інтерфейсу, секунди uptime), концептуально ціле.
+            return Optional.of(new HistoryPoint(Instant.ofEpochSecond(clock), (long) Double.parseDouble(raw)));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (IOException | NumberFormatException e) {
