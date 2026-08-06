@@ -186,8 +186,13 @@ public class IncidentSectionBuilder {
         Incident primary = row.start() != null ? row.start() : row.end();
 
 
-        String startCell = row.start() != null ? row.start().messageDateStr() : "—";
-        String endCell = row.end() != null ? row.end().messageDateStr() : "—";
+        // messageDateStr — це сирий заголовок Date: листа, тобто недовірене джерело нарівні з
+        // темою й тілом: строгий парсер на ньому падає, але fallback на getSentDate() пропускає
+        // лист далі разом із будь-яким хвостом після зони. Екрануємо так само, як сусідні комірки.
+        String startCell = row.start() != null
+                ? StringEscapeUtils.escapeHtml4(row.start().messageDateStr()) : "—";
+        String endCell = row.end() != null
+                ? StringEscapeUtils.escapeHtml4(row.end().messageDateStr()) : "—";
         String durationCell = paired
                 ? DurationFormat.humanize(row.end().messageTs() - row.start().messageTs())
                 : "—";

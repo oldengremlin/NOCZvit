@@ -75,6 +75,10 @@ public class Client {
 
     private final ConcurrentHashMap<String, String> hostIdCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> graphIdCache = new ConcurrentHashMap<>();
+    // Один хост нерідко падає кілька разів за зміну, і кожен такий інцидент аудитується окремо —
+    // без кешу список items перезапитувався б щоразу заново.
+    private final ConcurrentHashMap<String, List<InterfaceItem>> interfaceItemsCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Optional<InterfaceItem>> uptimeItemCache = new ConcurrentHashMap<>();
 
     /**
      * Creates the Zabbix client. The HTTP client is configured with a shared cookie store so
@@ -120,7 +124,9 @@ public class Client {
                         authToken.substring(0, Math.min(8, authToken.length())));
                 return true;
             }
-            log.warn("Zabbix API login failed: {}", resp);
+            // Лише поле error, а не вся відповідь: це WARN, тобто пишеться і в продакшні, а
+            // формат відповіді Zabbix може змінитися й почати нести зайве.
+            log.warn("Zabbix API login failed: {}", resp.get("error"));
         } catch (IOException | InterruptedException | RuntimeException e) {
             log.warn("Zabbix API login error: {}", e.getMessage());
         }
@@ -358,15 +364,21 @@ public class Client {
      *         порожній список при відсутності збігів чи будь-якій помилці API
      */
     public List<InterfaceItem> getInterfaceItems(String hostname) {
+        List<InterfaceItem> cached = interfaceItemsCache.get(hostname);
+        if (cached != null) {
+            return cached;
+        }
         String hostId = resolveHostId(hostname);
         if (hostId == null) {
             return Collections.emptyList();
         }
-        return searchItems(hostId, "Operational status", null).stream()
+        List<InterfaceItem> items = searchItems(hostId, "Operational status", null).stream()
                 .map(i -> new InterfaceItem(i.itemId(),
                         i.name().replaceAll("(?i):?\\s*Operational status.*$", ""),
                         i.valueType()))
                 .toList();
+        interfaceItemsCache.putIfAbsent(hostname, items);
+        return items;
     }
 
     /**
@@ -377,12 +389,18 @@ public class Client {
      * @return item uptime, або порожньо, якщо у хоста його немає чи сталася помилка API
      */
     public Optional<InterfaceItem> getUptimeItem(String hostname) {
+        Optional<InterfaceItem> cached = uptimeItemCache.get(hostname);
+        if (cached != null) {
+            return cached;
+        }
         String hostId = resolveHostId(hostname);
         if (hostId == null) {
             return Optional.empty();
         }
         List<InterfaceItem> found = searchItems(hostId, null, "system.uptime");
-        return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
+        Optional<InterfaceItem> item = found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
+        uptimeItemCache.putIfAbsent(hostname, item);
+        return item;
     }
 
     /**
@@ -394,15 +412,18 @@ public class Client {
             JsonObject params = new JsonObject();
             params.add("output", GSON.toJsonTree(new String[]{"itemid", "name", "value_type"}));
             params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
+            // status=0 (ITEM_STATUS_ACTIVE): вимкнені items свіжої історії не мають, тож без
+            // цього фільтра вони лише роздували б лічильник «немає даних».
+            JsonObject filter = new JsonObject();
+            filter.addProperty("status", 0);
             if (nameSearch != null) {
                 JsonObject search = new JsonObject();
                 search.addProperty("name", nameSearch);
                 params.add("search", search);
             } else {
-                JsonObject filter = new JsonObject();
                 filter.add("key_", GSON.toJsonTree(new String[]{keyFilter}));
-                params.add("filter", filter);
             }
+            params.add("filter", filter);
 
             JsonArray result = apiCall("item.get", params, authToken).getAsJsonArray("result");
             if (result == null) {
@@ -419,7 +440,10 @@ public class Client {
             return items;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException — нарівні з IOException, як уже робить getProblems: Zabbix може
+            // віддати HTTP 200 з HTML-заглушкою reverse-proxy замість JSON, і без цього
+            // барʼєра JsonSyntaxException тихо викидав би цілий інцидент зі звіту.
             log.warn("Zabbix item.get(hostId={}, search={}, key={}): {}", hostId, nameSearch, keyFilter, e.getMessage());
         }
         return Collections.emptyList();
@@ -488,7 +512,9 @@ public class Client {
             return Optional.of(new HistoryPoint(Instant.ofEpochSecond(clock), (long) Double.parseDouble(raw)));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (IOException | NumberFormatException e) {
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException покриває і NumberFormatException, і відсутнє поле «value» в
+            // відповіді (NPE), і не-JSON тіло — жодне з них не має коштувати цілого інциденту.
             log.warn("Zabbix history.get(itemId={}, {}={}): {}", item.itemId(), timeParam, timestamp, e.getMessage());
         }
         return Optional.empty();
@@ -552,65 +578,78 @@ public class Client {
     }
 
     /**
-     * Resolves a short hostname to its Zabbix {@code hostid} via {@code host.get},
-     * caching the result for subsequent calls.
+     * Розвʼязує короткий hostname у Zabbix {@code hostid} через {@code host.get}, кешуючи
+     * результат.
+     *
+     * <p>Навмисно не {@code computeIfAbsent}: той виконує mapping-функцію під {@code synchronized}
+     * на вузлі корзини, тобто монітор утримувався б увесь HTTP round-trip (до 30 с). На Java 21
+     * блокування всередині {@code synchronized} ще й пришпилює віртуальний потік до несучого
+     * (JEP 491 прибрав це лише в JDK 24) — тобто обмежений fan-out перетворювався б на стільки ж
+     * заблокованих платформних потоків. Тут же I/O відбувається поза будь-яким монітором, а ціна
+     * — лише можливий повторний запит для того самого ключа, що ідемпотентний.
      */
     private String resolveHostId(String shortName) {
-        return hostIdCache.computeIfAbsent(shortName, (var k) -> {
-            try {
-                JsonObject params = new JsonObject();
-                params.add("output", GSON.toJsonTree(new String[]{"hostid", "host"}));
-                JsonObject filter = new JsonObject();
-                filter.add("host", GSON.toJsonTree(new String[]{shortName}));
-                params.add("filter", filter);
+        String cached = hostIdCache.get(shortName);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            JsonObject params = new JsonObject();
+            params.add("output", GSON.toJsonTree(new String[]{"hostid", "host"}));
+            JsonObject filter = new JsonObject();
+            filter.add("host", GSON.toJsonTree(new String[]{shortName}));
+            params.add("filter", filter);
 
-                JsonArray result = apiCall("host.get", params, authToken).getAsJsonArray("result");
-                if (result != null && !result.isEmpty()) {
-                    String hostId = result.get(0).getAsJsonObject().get("hostid").getAsString();
-                    log.debug("Zabbix host.get: {} → hostId={}", shortName, hostId);
-                    return hostId;
-                }
-                log.debug("Zabbix host.get: host not found: {}", shortName);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (IOException e) {
-                log.warn("Zabbix host.get({}): {}", shortName, e.getMessage());
+            JsonArray result = apiCall("host.get", params, authToken).getAsJsonArray("result");
+            if (result != null && !result.isEmpty()) {
+                String hostId = result.get(0).getAsJsonObject().get("hostid").getAsString();
+                log.debug("Zabbix host.get: {} → hostId={}", shortName, hostId);
+                hostIdCache.putIfAbsent(shortName, hostId);
+                return hostId;
             }
-            return null;
-        });
+            log.debug("Zabbix host.get: host not found: {}", shortName);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException | RuntimeException e) {
+            log.warn("Zabbix host.get({}): {}", shortName, e.getMessage());
+        }
+        return null;
     }
 
     /**
-     * Resolves a graph name to its Zabbix {@code graphid} for the given host via
-     * {@code graph.get}, caching the result for subsequent calls.
+     * Розвʼязує назву графіка в Zabbix {@code graphid} для даного хоста через {@code graph.get},
+     * кешуючи результат. I/O поза монітором — з тієї ж причини, що й у {@link #resolveHostId}.
      */
     private String resolveGraphId(String hostId, String graphName) {
         String cacheKey = hostId + "\0" + graphName;
-        return graphIdCache.computeIfAbsent(cacheKey, k -> {
-            try {
-                JsonObject params = new JsonObject();
-                params.add("output", GSON.toJsonTree(new String[]{"graphid", "name"}));
-                params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
-                JsonObject search = new JsonObject();
-                search.addProperty("name", graphName);
-                params.add("search", search);
+        String cached = graphIdCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            JsonObject params = new JsonObject();
+            params.add("output", GSON.toJsonTree(new String[]{"graphid", "name"}));
+            params.add("hostids", GSON.toJsonTree(new String[]{hostId}));
+            JsonObject search = new JsonObject();
+            search.addProperty("name", graphName);
+            params.add("search", search);
 
-                JsonArray result = apiCall("graph.get", params, authToken).getAsJsonArray("result");
-                if (result != null && !result.isEmpty()) {
-                    String graphId = result.get(0).getAsJsonObject().get("graphid").getAsString();
-                    String foundName = result.get(0).getAsJsonObject().get("name").getAsString();
-                    log.debug("Zabbix graph.get: hostId={} search='{}' → graphId={} name='{}'",
-                            hostId, graphName, graphId, foundName);
-                    return graphId;
-                }
-                log.debug("Zabbix graph.get: no graph found for hostId={} search='{}'", hostId, graphName);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (IOException e) {
-                log.warn("Zabbix graph.get(hostId={}, graphName={}): {}", hostId, graphName, e.getMessage());
+            JsonArray result = apiCall("graph.get", params, authToken).getAsJsonArray("result");
+            if (result != null && !result.isEmpty()) {
+                String graphId = result.get(0).getAsJsonObject().get("graphid").getAsString();
+                String foundName = result.get(0).getAsJsonObject().get("name").getAsString();
+                log.debug("Zabbix graph.get: hostId={} search='{}' → graphId={} name='{}'",
+                        hostId, graphName, graphId, foundName);
+                graphIdCache.putIfAbsent(cacheKey, graphId);
+                return graphId;
             }
-            return null;
-        });
+            log.debug("Zabbix graph.get: no graph found for hostId={} search='{}'", hostId, graphName);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException | RuntimeException e) {
+            log.warn("Zabbix graph.get(hostId={}, graphName={}): {}", hostId, graphName, e.getMessage());
+        }
+        return null;
     }
 
     /**

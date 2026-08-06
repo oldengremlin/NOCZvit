@@ -37,9 +37,14 @@ import java.util.Optional;
  *                             відновлення хоста
  * @param stillDownAfterUs    з {@code stillUpAtFall} — скільки лишались DOWN на момент
  *                             відновлення хоста — тобто у гіршому стані, ніж сам хост
- * @param noData              інтерфейси, для яких знімок узагалі не вдалося прочитати (немає
- *                             історії на потрібну мить); виключені з усіх співвідношень вище,
- *                             показуються окремо
+ * @param noDataAtFall        інтерфейси без знімка на момент падіння — не входять у
+ *                             {@link #totalKnown()} узагалі
+ * @param noDataAtRecovery    інтерфейси з {@code stillUpAtFall}, для яких не вдалося прочитати
+ *                             знімок на момент відновлення. На відміну від {@code noDataAtFall},
+ *                             ці порти **вже** враховані в {@code stillUpAtFall} і
+ *                             {@link #totalKnown()} — бракує лише другого знімка
+ * @param ignoredPorts        порти, виключені ще до аналізу: порожній опис або явна позначка
+ *                             вільного порту ({@code --free--}, {@code --unused--})
  * @param alreadyDownNames    інтерфейси з {@code alreadyDownAtFall}, кожен із міткою часу, коли
  *                             його стан DOWN фактично зафіксовано
  * @param recoveredNames      інтерфейси з {@code recoveredBeforeUs}, кожен із міткою часу, коли
@@ -66,7 +71,9 @@ public record PowerResilienceResult(
         int stillUpAtFall,
         int recoveredBeforeUs,
         int stillDownAfterUs,
-        int noData,
+        int noDataAtFall,
+        int noDataAtRecovery,
+        int ignoredPorts,
         List<InterfaceObservation> alreadyDownNames,
         List<InterfaceObservation> recoveredNames,
         List<InterfaceObservation> stillDownNames,

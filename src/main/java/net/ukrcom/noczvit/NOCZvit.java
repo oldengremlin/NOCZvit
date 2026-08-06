@@ -128,7 +128,13 @@ public class NOCZvit {
             RamosTrapSection.SectionResult ramosTrapResult = new RamosTrapSection.SectionResult("", "");
             PowerResilienceSection.SectionResult resilienceResult = new PowerResilienceSection.SectionResult("", "");
 
-            try (var ioExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+            // Навмисно не try-with-resources: close() робить shutdown() + awaitTermination(1 доба)
+            // БЕЗ переривання задач, а orTimeout нижче задачу не скасовує — лише завершує обгортку.
+            // Тобто на аварійному шляху штатний close() чекав би на зависле до доби, знецінюючи
+            // сам запобіжник. Тому на цьому шляху — shutdownNow(), який задачі перериває.
+            var ioExecutor = Executors.newVirtualThreadPerTaskExecutor();
+            boolean initCompleted = false;
+            try {
 
                 CompletableFuture<List<Incident>> imapFuture;
                 if (config.isIncidentsEnabled()) {
@@ -227,6 +233,13 @@ public class NOCZvit {
                     ramosTrapFuture = CompletableFuture.completedFuture(new RamosTrapSection.SectionResult("", ""));
                 }
 
+                // Аудит живиться з zabbixProblemsFuture, а той порожній без інцидентів — без
+                // цього попередження комбінація мовчки не робила нічого.
+                if (config.isResilienceAuditEnabled() && !config.isIncidentsEnabled()) {
+                    log.warn("Resilience audit is on, but incidents are off: no Zabbix problems "
+                            + "are fetched, so the audit has nothing to analyse");
+                }
+
                 CompletableFuture<List<PowerResilienceResult>> resilienceFuture;
                 if (config.isZabbixEnabled() && config.isResilienceAuditEnabled()) {
                     resilienceFuture = zabbixProblemsFuture.thenCombineAsync(zabbixFuture,
@@ -241,8 +254,12 @@ public class NOCZvit {
                 try {
                     // Safety net: per-protocol timeouts are set in each client, but a bug there
                     // would otherwise hang the cron run forever (executor.close() waits 1 day).
-                    CompletableFuture.allOf(imapFuture, zabbixProblemsFuture, debtorsFuture,
-                            trapFuture, ramosTrapFuture, resilienceFuture)
+                    // zabbixFuture перелічено явно: транзитивно його покривають лише
+                    // zabbixProblemsFuture і resilienceFuture, а обидва вимикаються своїми
+                    // прапорцями. При «--zabbix --no-incidents» (звіт лише з температурою та
+                    // графіками) він інакше лишався б поза таймаутом і поза обробкою помилок.
+                    CompletableFuture.allOf(imapFuture, zabbixFuture, zabbixProblemsFuture,
+                            debtorsFuture, trapFuture, ramosTrapFuture, resilienceFuture)
                             .orTimeout(INIT_TIMEOUT_MINUTES, TimeUnit.MINUTES).join();
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause();
@@ -255,7 +272,9 @@ public class NOCZvit {
                     if (cause instanceof MessagingException me) {
                         throw me;
                     }
-                    throw new IOException("Initialization failed: " + cause.getMessage(), cause);
+                    // cause, а не cause.getMessage(): у TimeoutException повідомлення порожнє,
+                    // і в лог ішло безпорадне «Initialization failed: null».
+                    throw new IOException("Initialization failed: " + cause, cause);
                 }
 
                 incidents = imapFuture.join();
@@ -265,6 +284,13 @@ public class NOCZvit {
                 trapResult = trapFuture.join();
                 ramosTrapResult = ramosTrapFuture.join();
                 resilienceResult = new PowerResilienceSection().build(resilienceFuture.join());
+                initCompleted = true;
+            } finally {
+                if (initCompleted) {
+                    ioExecutor.close();
+                } else {
+                    ioExecutor.shutdownNow();
+                }
             }
 
             // Конвертуємо відфільтровані Zabbix-події в Incident і зливаємо з IMAP-інцидентами.
