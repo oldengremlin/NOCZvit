@@ -188,13 +188,17 @@ public class Dictionary {
     }
 
     /**
-     * Translates a Zabbix hostname to a Ukrainian device-type word used in incident
-     * descriptions (e.g. {@code "маршрутизаторі "}). Unlike {@link #lookupPD} and
-     * {@link #lookupSDH}, falls back to {@code ""} (no word) rather than the original key
-     * when no pattern matches. Results are cached for repeated lookups.
+     * Перекладає Zabbix-hostname в українське слово типу пристрою для опису інциденту
+     * (наприклад {@code "маршрутизаторі"}). На відміну від {@link #lookupPD} і
+     * {@link #lookupSDH}, при відсутності збігу повертає {@code ""} (без слова), а не
+     * сам ключ. Результати кешуються для повторних викликів.
      *
-     * @param host raw hostname (e.g. {@code r234-1})
-     * @return resolved device-type word with trailing space, or {@code ""} when not found
+     * <p>Значення завантажується через {@code .trim()} ({@link #loadDictionary}), тож кінцевий
+     * пробіл ніколи не зберігається, навіть якщо він є у файлі словника — його додає сам
+     * викликач ({@code ZabbixIncidentConverter}) після непорожнього слова.
+     *
+     * @param host сирий hostname (наприклад {@code r234-1})
+     * @return слово типу пристрою без кінцевого пробілу, або {@code ""}, якщо не знайдено
      */
     public String lookupDeviceWord(String host) {
         return deviceWordCache.computeIfAbsent(host, k -> firstMatch(deviceWordDictionary, k, ""));

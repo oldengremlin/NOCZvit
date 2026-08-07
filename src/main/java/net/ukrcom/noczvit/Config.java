@@ -22,6 +22,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -66,6 +67,8 @@ public class Config {
     private boolean ramosEnabled;
     private boolean zabbixEnabled;
     private boolean resilienceAuditEnabled;
+    @NonNull
+    private List<String> resilienceIgnoredInterfacePrefixes;
     private String zabbixApi;
     private String zabbixUrl;
     private String zabbixUsername;
@@ -197,6 +200,7 @@ public class Config {
         snmpTrapDedupSeconds = 30;
         snmpTrapColdstartLinkMinutes = 5;
         ramosTrapFolder = "";
+        resilienceIgnoredInterfacePrefixes = Collections.emptyList();
     }
 
     /**
@@ -323,6 +327,13 @@ public class Config {
         // depends on Zabbix history/item.get behavior that needs verifying against a real
         // instance before it runs unattended in production.
         resilienceAuditEnabled = Boolean.parseBoolean(properties.getProperty("resilienceaudit", "false"));
+        // Zabbix бачить лише текстове ім'я інтерфейсу (ifDescr/ifName), не ifType — типи на
+        // кшталт MikroTik wireguard/sstp/l2tp/pptp нічим не позначені в SNMP-даних, які тут
+        // доступні, а самі імена користувач може перейменувати як завгодно. Тому єдиний
+        // робочий варіант без додаткових SNMP-запитів — порівняння префікса імені зі списком,
+        // який задає сам адміністратор (порожньо за замовчуванням — нічого не виключається).
+        resilienceIgnoredInterfacePrefixes = parseCommaList(
+                properties.getProperty("resilienceaudit.ignoreinterfaceprefixes", ""));
         String claudeProp = properties.getProperty("claude");
         if (claudeProp != null) {
             claudeExplicit = Boolean.valueOf(claudeProp);
@@ -407,6 +418,22 @@ public class Config {
         } catch (NumberFormatException e) {
             return defaultValue;
         }
+    }
+
+    /**
+     * Розбирає властивість виду {@code "a, B,, c"} на список непорожніх, обрізаних від пробілів,
+     * приведених до нижнього регістру записів ({@code ["a", "b", "c"]}). Порожні елементи (в
+     * т.ч. від подвійної коми) пропускаються. Порожній чи відсутній рядок дає порожній список.
+     */
+    private static List<String> parseCommaList(String value) {
+        if (value == null || value.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(String::toLowerCase)
+                .toList();
     }
 
     /** Reads MSSQL credentials for both the account DB and accequipment DB. */

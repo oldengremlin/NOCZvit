@@ -245,7 +245,8 @@ public class NOCZvit {
                     resilienceFuture = zabbixProblemsFuture.thenCombineAsync(zabbixFuture,
                             (problems, zc) -> zc == null
                                     ? Collections.<PowerResilienceResult>emptyList()
-                                    : new PowerResilienceAuditor(zc, dictionary).audit(problems),
+                                    : new PowerResilienceAuditor(zc, dictionary,
+                                            config.getResilienceIgnoredInterfacePrefixes()).audit(problems),
                             ioExecutor);
                 } else {
                     resilienceFuture = CompletableFuture.completedFuture(Collections.emptyList());

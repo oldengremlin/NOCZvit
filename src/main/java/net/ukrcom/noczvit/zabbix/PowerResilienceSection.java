@@ -171,7 +171,8 @@ public class PowerResilienceSection {
             // коли насправді всі порти хоста виключені як службові чи вільні.
             body.append(r.noDataAtFall() == 0 && r.ignoredPorts() > 0
                     ? "<i>Немає даних для аналізу — усі " + r.ignoredPorts()
-                      + " портів хоста без опису або позначені вільними.</i>\n"
+                      + " портів хоста без опису, позначені вільними, або виключеного типу "
+                      + "(налаштування).</i>\n"
                     : "<i>Немає даних для аналізу — жоден інтерфейс не мав історії "
                       + "на момент падіння вузла.</i>\n");
             return html.append(body).append("</td></tr>\n").toString();
@@ -235,8 +236,9 @@ public class PowerResilienceSection {
         }
         if (r.ignoredPorts() > 0) {
             body.append("<p><i>").append(r.ignoredPorts())
-                    .append(" портів не враховано — без опису або позначені вільними "
-                            + "(<code>--free--</code>, <code>--unused--</code>).</i></p>\n");
+                    .append(" портів не враховано — без опису, позначені вільними "
+                            + "(<code>--free--</code>, <code>--unused--</code>), "
+                            + "або виключеного типу (налаштування).</i></p>\n");
         }
 
         return html.append(body).append("</td></tr>\n").toString();

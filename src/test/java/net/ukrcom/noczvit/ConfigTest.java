@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -213,6 +214,26 @@ class ConfigTest {
 
         Config config = new Config(new String[]{"--config=" + p});
         assertEquals(800, config.getZabbixGraphWidth());
+    }
+
+    // ---- parseCommaList (приватний, перевіряємо через resilienceaudit.ignoreinterfaceprefixes) ----
+
+    @Test
+    @DisplayName("resilienceaudit.ignoreinterfaceprefixes: відсутня властивість -> порожній список")
+    void resilienceIgnoredInterfacePrefixes_absent_isEmpty() throws IOException {
+        Config config = TestFixtures.config();
+        assertTrue(config.getResilienceIgnoredInterfacePrefixes().isEmpty());
+    }
+
+    @Test
+    @DisplayName("resilienceaudit.ignoreinterfaceprefixes: розбирається на trim+lowercase, порожні елементи (подвійна кома) відкидаються")
+    void resilienceIgnoredInterfacePrefixes_parsedTrimmedLowercasedNoBlanks(@TempDir Path tempDir) throws IOException {
+        Path p = tempDir.resolve("custom.properties");
+        Files.writeString(p, baseProperties()
+                + "\nresilienceaudit.ignoreinterfaceprefixes= WireGuard , sstp ,, L2TP\n", StandardCharsets.UTF_8);
+
+        Config config = new Config(new String[]{"--config=" + p});
+        assertEquals(List.of("wireguard", "sstp", "l2tp"), config.getResilienceIgnoredInterfacePrefixes());
     }
 
     // ---- stripInlineComment ----

@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -83,10 +84,24 @@ public class PowerResilienceAuditor {
 
     private final Client zabbix;
     private final Dictionary dictionary;
+    private final List<String> ignoredInterfacePrefixes;
 
-    public PowerResilienceAuditor(Client zabbix, Dictionary dictionary) {
+    /**
+     * @param ignoredInterfacePrefixes технічні імена інтерфейсів (частина назви item до дужки з
+     *                                 описом — напр. {@code "wireguard"} для
+     *                                 {@code "Interface wireguard2(...)"}), які виключаються з
+     *                                 аудиту повністю, як і {@link #IGNORED_PORT}. Нижній
+     *                                 регістр, порівняння через {@code startsWith}; порожній
+     *                                 список — нічого не виключається. Це евристика за іменем:
+     *                                 Zabbix не бачить {@code ifType}, а MikroTik дозволяє
+     *                                 перейменувати інтерфейс як завгодно, тож 100%-ї гарантії
+     *                                 немає — список задає сам адміністратор
+     *                                 ({@code resilienceaudit.ignoreinterfaceprefixes}).
+     */
+    public PowerResilienceAuditor(Client zabbix, Dictionary dictionary, List<String> ignoredInterfacePrefixes) {
         this.zabbix = zabbix;
         this.dictionary = dictionary;
+        this.ignoredInterfacePrefixes = ignoredInterfacePrefixes;
     }
 
     /**
@@ -144,6 +159,27 @@ public class PowerResilienceAuditor {
     private static final Pattern IGNORED_PORT =
             Pattern.compile("\\(\\s*(?:--\\s*(?:free|unused)\\s*--)?\\s*\\)$", Pattern.CASE_INSENSITIVE);
 
+    /** Технічне ім'я інтерфейсу — частина назви item до дужки з описом, напр. {@code "wireguard2"}
+     * у {@code "Interface wireguard2(...)"}. Не знаходить збігу — не наша справа судити, чому. */
+    private static final Pattern INTERFACE_TECHNICAL_NAME = Pattern.compile("^Interface\\s+(\\S+?)\\(");
+
+    /**
+     * {@code true}, коли технічне ім'я порту починається з одного з {@link #ignoredInterfacePrefixes}
+     * (порівняння без урахування регістру). Див. Javadoc конструктора — це евристика за іменем,
+     * не за {@code ifType}, якого Zabbix тут просто не бачить.
+     */
+    private boolean isIgnoredInterfaceType(String name) {
+        if (ignoredInterfacePrefixes.isEmpty()) {
+            return false;
+        }
+        Matcher m = INTERFACE_TECHNICAL_NAME.matcher(name);
+        if (!m.find()) {
+            return false;
+        }
+        String technicalName = m.group(1).toLowerCase();
+        return ignoredInterfacePrefixes.stream().anyMatch(technicalName::startsWith);
+    }
+
     /** Стан одного порту за двома знімками — рівно ті гілки, які раніше були в тілі циклу. */
     private enum PortState {
         NO_DATA_AT_FALL, ALREADY_DOWN, RECOVERED, STILL_DOWN, NO_DATA_AT_RECOVERY
@@ -197,6 +233,7 @@ public class PowerResilienceAuditor {
         }
         List<Client.InterfaceItem> interfaces = allInterfaces.stream()
                 .filter(i -> !IGNORED_PORT.matcher(i.name()).find())
+                .filter(i -> !isIgnoredInterfaceType(i.name()))
                 .toList();
         int ignoredPorts = allInterfaces.size() - interfaces.size();
 

@@ -69,6 +69,12 @@ public class AdlinkIncidentParser {
         String lineKey = Dictionary.lineKey(device, matcher.group(2), matcher.group(3), line);
 
         Dictionary.Resolution location = dictionary.resolvePD(device);
+        // ВІДОМА ОСОБЛИВІСТЬ (свідомо не виправлено — додавання нових ліній adlink контрольований
+        // процес): «голий» запис пристрою в словнику (^adlink-hoh15-1=Локація, без card:port:line)
+        // — це регекс без прив'язки до кінця рядка, тож він збігається як префікс з БУДЬ-яким
+        // composite-ключем цього ж пристрою. Немаплена лінія (наприклад line 2, коли задані лише
+        // 0 і 1) підхопить локацію пристрою замість "потребує коригування назви" — резолвиться
+        // мовчки, без review. Ризикує лише тоді, коли з'явиться нова лінія без окремого запису.
         Dictionary.Resolution event = dictionary.resolvePD(lineKey);
 
         String eventDesc = event.needsReview()

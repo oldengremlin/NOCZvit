@@ -7,6 +7,11 @@ debug=false
 # Power-resilience audit section (optional). Requires zabbix=true, and also incidents=true —
 # the audit reads the same Zabbix problem list, which is only fetched when incidents are on.
 resilienceaudit=false
+# Interface name prefixes (comma-separated, case-insensitive, matched against the technical
+# name segment before the "(" in "Interface <name>(<description>)") to exclude from the audit
+# entirely — e.g. MikroTik virtual/tunnel interfaces (wireguard, sstp, l2tp, pptp) that Zabbix
+# can only see as a plain name, not by ifType. Empty by default — nothing extra excluded.
+# resilienceaudit.ignoreinterfaceprefixes=wireguard,sstp
 # Claude AI summary (optional — requires API key from console.anthropic.com)
 # Default behaviour (when omitted): enabled in normal mode, disabled in --debug mode.
 # Set claude=false to disable always; claude=true to enable even in --debug mode.

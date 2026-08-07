@@ -69,6 +69,13 @@ public class PdIncidentParser {
             }
             String[] fromParts = from.split(":");
             String fromName = fromParts[0];
+            // ВІДОМА ОСОБЛИВІСТЬ (свідомо не виправлено): якщо fromObject після цього зняття
+            // сам починається з r/s/p чи ies*/alca- (напр. "ssks-2" → "sks-2"), Dictionary.resolvePD
+            // знову зніме префікс і суфікс — подвійне зняття. У наявному словнику це рятує
+            // fallback-прохід lookupPD по оригінальному ключу (сам збігається за коротшим
+            // префіксом), тож на реальних даних хибного результату не спостерігалось. Ризик
+            // теоретичний: спрацював би, лише якби подвійно-зрізаний залишок випадково збігався
+            // з ІНШИМ записом словника (тоді fallback узагалі не викликається).
             String fromObject = fromName.matches(".*-\\d+$")
                                 ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "")
                                 : fromName;
