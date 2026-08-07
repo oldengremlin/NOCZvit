@@ -158,6 +158,9 @@ public class Client {
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             log.debug("Zabbix web login response: HTTP {}, final URI: {}", resp.statusCode(), resp.uri());
 
+            // Optional.map тут не перетворює значення, а обчислює ознаку "чи є потрібна cookie":
+            // приводимо cookieHandler до CookieManager і одразу шукаємо серед його cookie ту, чиє
+            // ім'я починається з "zbx_session"; відсутній cookieHandler трактуємо як "немає cookie".
             boolean hasCookie = http.cookieHandler()
                     .map(ch -> ch instanceof CookieManager cm
                     && cm.getCookieStore().getCookies().stream()

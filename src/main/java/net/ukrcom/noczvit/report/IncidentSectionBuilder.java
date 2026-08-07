@@ -96,10 +96,14 @@ public class IncidentSectionBuilder {
             return html.toString();
         }
 
+        // Групуємо вже спарені рядки за локацією; явний LinkedHashMap як фабрика мапи зберігає
+        // порядок першої появи локації серед інцидентів, а не алфавітний чи хеш-порядок.
         Map<String, List<IncidentRow>> byLocation = pairIncidents(incidents).stream()
                 .collect(Collectors.groupingBy(IncidentRow::location, LinkedHashMap::new, Collectors.toList()));
 
         AtomicInteger n = new AtomicInteger(0);
+        // Для кожної локації рендеримо окрему HTML-секцію: заголовок з таблицею, рядки
+        // інцидентів, опційні графіки Ping (якщо задано zabbix), і закриваємо таблицю/секцію.
         byLocation.forEach((location, group) -> {
             html.append("<div class=\"section\">\n")
                     .append("<h2>Зареєстровані інциденти на виносі ")

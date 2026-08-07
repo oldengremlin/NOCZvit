@@ -164,6 +164,7 @@ public class EmersonTrapSection {
      * Будує HTML PS-розділу зі списком нерозпізнаних типів трапів, згрупованих за хостнеймом.
      */
     private String buildUnknownHtml(List<TrapEvent> unknownTraps) {
+        // Групуємо нерозпізнані трапи за хостнеймом, зберігаючи порядок надходження хостів
         Map<String, List<TrapEvent>> byHost = unknownTraps.stream()
                 .collect(Collectors.groupingBy(TrapEvent::hostname, LinkedHashMap::new, Collectors.toList()));
 
@@ -171,6 +172,7 @@ public class EmersonTrapSection {
         html.append("<div class=\"section\">\n")
                 .append("<h2 class=\"trap-ps-title\">ps: нерозпізнані типи подій по ДБЖ та кондиціонерах Emerson:</h2>\n");
 
+        // Для кожного хоста рендеримо заголовок і маркований список усіх його нерозпізнаних подій
         byHost.forEach((hostname, evs) -> {
             TrapEvent first = evs.get(0);
             html.append("<h3 class=\"trap-ps-device\">")

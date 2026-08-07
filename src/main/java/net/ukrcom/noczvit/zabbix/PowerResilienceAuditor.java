@@ -127,6 +127,9 @@ public class PowerResilienceAuditor {
                 .filter(p -> p.name().contains(RESTART_TRIGGER))
                 .collect(Collectors.groupingBy(ZabbixProblem::host));
 
+        // Перший (зовнішній) рівень паралелізму: інциденти аудитуються незалежно один від
+        // одного; другий рівень — порти всередині auditOne/probePort. auditOne повертає null
+        // для хостів без інтерфейсних SNMP-items, тому такі результати відсіюються тут.
         return ConcurrentPoll.run(qualifying, p -> auditOne(p, restartsByHost), MAX_CONCURRENT_AUDITS, "resilience")
                 .stream()
                 .filter(Objects::nonNull)

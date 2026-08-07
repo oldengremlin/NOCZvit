@@ -186,6 +186,10 @@ public class NOCZvit {
                 final java.time.Instant trapFrom = java.time.Instant.ofEpochSecond(fromEpoch);
                 final java.time.Instant trapTo   = java.time.Instant.ofEpochSecond(toEpoch);
 
+                // В одній задачі послідовно: читаємо сирі SNMP-трапи з IMAP, парсимо їх у події,
+                // звужуємо за фактичною міткою часу з тіла повідомлення (а не датою листа),
+                // дедублюємо повтори й корелюємо у інциденти для секції звіту. IMAP-помилка тут
+                // не валить всю ініціалізацію — повертається порожній SectionResult.
                 CompletableFuture<EmersonTrapSection.SectionResult> trapFuture;
                 if (config.isTrapEnabled()) {
                     trapFuture = CompletableFuture.supplyAsync(() -> {
@@ -211,6 +215,9 @@ public class NOCZvit {
                     trapFuture = CompletableFuture.completedFuture(new EmersonTrapSection.SectionResult("", "", ""));
                 }
 
+                // Той самий підхід, що й для trapFuture, але для окремої IMAP-теки RAMOS: читаємо,
+                // парсимо, звужуємо за міткою часу з тіла й одразу будуємо секцію (без дедуплікації
+                // й кореляції — вони RAMOS-подіям не потрібні). IMAP-помилка також не фатальна.
                 CompletableFuture<RamosTrapSection.SectionResult> ramosTrapFuture;
                 if (config.isRamosTrapEnabled()) {
                     ramosTrapFuture = CompletableFuture.supplyAsync(() -> {

@@ -190,6 +190,8 @@ public class SummaryClient {
                     .build();
 
             Message response = client.messages().create(params);
+            // Блоки контенту відповіді можуть бути не лише текстовими; flatMap над
+            // Optional-потоком block.text() відфільтровує саме текстові блоки й склеює їх у рядок.
             String summary = response.content().stream()
                     .flatMap(block -> block.text().stream())
                     .map(t -> t.text())

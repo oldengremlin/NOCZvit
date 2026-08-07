@@ -75,6 +75,8 @@ public class Debtors {
 
         if (config.isDebtorsEnabled()) {
             try {
+                // AtomicInteger замість звичайного int — лямбді потрібна effectively final
+                // змінна для наскрізної нумерації рядків під час формування HTML-таблиці
                 AtomicInteger n = new AtomicInteger(0);
                 returnMessage.append(fetchDebtors().stream()
                         .map(debtor -> "<tr><td>" + n.incrementAndGet() + ".</td>"
