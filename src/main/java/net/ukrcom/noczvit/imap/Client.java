@@ -128,7 +128,9 @@ public class Client {
      * cross-boundary duplicates (e.g. 07:59:59 and 08:00:03) are correctly
      * collapsed into the earlier shift.
      */
-    private List<RawMessage> deduplicateAdlink(List<RawMessage> messages) {
+    // Package-private (not private): unit-tested directly from ClientTest in this package,
+    // per CLAUDE.md's rule to widen visibility for tests rather than duplicate the logic.
+    List<RawMessage> deduplicateAdlink(List<RawMessage> messages) {
         List<RawMessage> sorted = new ArrayList<>(messages);
         sorted.sort(Comparator.comparingLong(RawMessage::unixDate));
 
@@ -154,17 +156,17 @@ public class Client {
     }
 
     /** Returns {@code true} for ICMP-ping or device-restart alert subjects handled by {@link PdIncidentParser}. */
-    private boolean isPdMessage(String subject) {
+    boolean isPdMessage(String subject) {
         return subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*");
     }
 
     /** Returns {@code true} for OSPF neighbour state-change alert subjects handled by {@link OspfIncidentParser}. */
-    private boolean isOspfMessage(String subject) {
+    boolean isOspfMessage(String subject) {
         return subject.contains("ospfNbrStateChange");
     }
 
     /** Returns {@code true} for Zabbix dry-contact (adlink) alert subjects handled by {@link AdlinkIncidentParser}. */
-    private boolean isAdlinkMessage(String subject) {
+    boolean isAdlinkMessage(String subject) {
         return subject.contains("adlink") && subject.contains("- Fault");
     }
 
@@ -172,7 +174,7 @@ public class Client {
      * Returns {@code true} for SDH/OSM power-loss or STM circuit alert subjects handled by
      * {@link OsmIncidentParser}. In debug mode STM-1 alerts are also included.
      */
-    private boolean isOsmMessage(String subject) {
+    boolean isOsmMessage(String subject) {
         String stmPattern = "2-9";
         if (config.isDebug()) {
             stmPattern = "1-9";

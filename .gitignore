@@ -7,6 +7,10 @@ source.txt
 # vocabulary, not deployment-specific data like dictionary_pd/dictionary_sdh) — commit it
 !src/main/resources/dictionary_device_word.txt
 
+# Test fixtures under src/test/resources are synthetic (invented hostnames/locations, no real
+# deployment data or secrets) — commit them despite the *.properties/*.txt rules above.
+!src/test/resources/**
+
 # Compiled class file
 *.class
 

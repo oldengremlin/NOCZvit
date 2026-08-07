@@ -37,12 +37,19 @@ public record RamosTrapEvent(
 ) {
 
     /**
-     * States severe enough to highlight in the report and forward to the AI prompt — the
-     * narrowest tier. A strict subset of {@link #REPORTABLE_STATES}; both sets are kept here so
-     * a spelling change lands in one place instead of drifting between parser and renderer.
+     * States forwarded to the Claude prompt — deliberately not just "the Critical tier".
+     *
+     * <p>Rising and falling temperature are not symmetric risks in a datacenter: falling
+     * temperature ({@code Low Warning}/{@code Low Critical}) is rarely a problem worth an
+     * engineer's attention, since everything else in the room tends to run hot — so both are
+     * excluded even at the Critical level. Rising temperature ({@code High Warning}/
+     * {@code High Critical}) is the opposite: worth watching from the first warning, before it
+     * becomes critical. Plain {@code Critical}/{@code Warning} (no High/Low prefix) belong to
+     * non-directional sensors — water detectors, dry contacts — where the state alone is already
+     * informative regardless of direction.
      */
-    public static final Set<String> CRITICAL_STATES =
-            Set.of("Critical", "High Critical", "Low Critical");
+    public static final Set<String> CLAUDE_STATES =
+            Set.of("Critical", "High Critical", "Warning", "High Warning");
 
     /** States worth parsing at all; everything else is normal operation and is dropped. */
     public static final Set<String> REPORTABLE_STATES = Set.of(

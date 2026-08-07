@@ -30,9 +30,8 @@ import org.apache.commons.text.StringEscapeUtils;
  *
  * <p>Events are grouped by room (Room1–Room4, then «Інші») and sorted by timestamp within
  * each group. All rows use the neutral alternating background shared by every report table.
- * The plain-text output includes only
- * Critical-level events (Critical, High Critical, Low Critical) to avoid flooding the Claude
- * token budget.
+ * The plain-text output includes only {@link RamosTrapEvent#CLAUDE_STATES} — see there for why
+ * that set isn't simply "Critical" (falling vs. rising temperature aren't symmetric risks).
  *
  * <p>Brand colour: {@code #f38120} (RAMOS/CONTEG dark orange) — applied to heading borders
  * via CSS classes defined in the main NOCZvit CSS block.
@@ -44,7 +43,8 @@ public class RamosTrapSection {
      * Rendered output for one RAMOS trap section.
      *
      * @param html      full HTML fragment (empty string when there are no events)
-     * @param plainText plain-text block with only Critical-level events for Claude; empty when none
+     * @param plainText plain-text block with only {@link RamosTrapEvent#CLAUDE_STATES} events for
+     *                  Claude; empty when none
      */
     public record SectionResult(String html, String plainText) {
         /** {@code true} when there are no events to render. */
@@ -103,7 +103,7 @@ public class RamosTrapSection {
                 .append("</tr></thead><tbody>\n");
 
             for (RamosTrapEvent ev : roomEvents) {
-                boolean critical = RamosTrapEvent.CRITICAL_STATES.contains(ev.state());
+                boolean forwardToClaude = RamosTrapEvent.CLAUDE_STATES.contains(ev.state());
 
                 html.append("<tr>")
                     .append("<td>").append(++n).append(".</td>")
@@ -113,7 +113,7 @@ public class RamosTrapSection {
                     .append("<td>").append(StringEscapeUtils.escapeHtml4(ev.sensorType())).append("</td>")
                     .append("</tr>\n");
 
-                if (critical) {
+                if (forwardToClaude) {
                     plainText.append(DateUtils.formatUa(ev.timestamp()))
                              .append(" ").append(ev.state())
                              .append(" / ").append(ev.sensorName())
@@ -124,8 +124,10 @@ public class RamosTrapSection {
             html.append("</tbody></table>\n</div>\n");
         }
 
+        // Не "критичні події": з 1.26.0 сюди потрапляє й Warning-рівень для зростання
+        // температури (High Warning) — див. RamosTrapEvent.CLAUDE_STATES.
         String plainResult = plainText.isEmpty() ? ""
-                : "Ramos критичні події:\n" + plainText;
+                : "Ramos події, що потребують уваги:\n" + plainText;
 
         log.info("RamosTrapSection: {} event(s) rendered across {} room(s)",
                 events.size(), byRoom.size());
