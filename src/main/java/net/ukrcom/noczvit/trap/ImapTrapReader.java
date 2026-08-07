@@ -47,7 +47,7 @@ public class ImapTrapReader {
 
     /**
      * Створює рідер, прив'язаний до заданої конфігурації.
-     * @param config
+     * @param config джерело налаштувань IMAP-з'єднання
      */
     public ImapTrapReader(Config config) {
         this.config = config;

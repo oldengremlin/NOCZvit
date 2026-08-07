@@ -43,8 +43,8 @@ public class PdIncidentParser {
     /**
      * Повертає Incident, якщо повідомлення є валідним алертом PD, інакше empty.
      *
-     * @param msg
-     * @return
+     * @param msg сире email-повідомлення
+     * @return розпізнаний інцидент, або {@link Optional#empty()}, якщо тема не відповідає формату
      */
     public Optional<Incident> parse(RawMessage msg) {
         String subject = msg.subject();

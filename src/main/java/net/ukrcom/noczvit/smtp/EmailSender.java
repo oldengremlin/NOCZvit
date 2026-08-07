@@ -30,7 +30,6 @@ import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.util.Properties;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -55,7 +54,7 @@ public class EmailSender {
      * Створює відправник і зчитує версію проекту з вбудованого ресурсу
      * {@code version.properties} (підставляється фільтрацією ресурсів Maven).
      *
-     * @param config
+     * @param config джерело налаштувань SMTP-з'єднання
      * @throws IOException якщо {@code version.properties} відсутній у classpath
      */
     public EmailSender(Config config) throws IOException {
