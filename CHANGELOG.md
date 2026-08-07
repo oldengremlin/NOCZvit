@@ -6,6 +6,18 @@
 
 ---
 
+## [1.27.0] — 2026-08-07
+
+### Додано
+- **Тестова інфраструктура проєкту.** JUnit 5.11.4 (test-scope), `maven-surefire-plugin` явно закріплений на 3.2.5. Спільний хелпер `TestFixtures` (`src/test/java/net/ukrcom/noczvit/TestFixtures.java`) будує `Config` із синтетичного `src/test/resources/test-noczvit.properties` (безпечні тестові значення, жодних реальних credentials — файл названо не `noczvit.properties`, щоб виключити будь-яку двозначність із реальним, гітігнорованим конфігом розробника) і `Dictionary` з ad-hoc entries, які пише в тимчасові файли (`@TempDir`) — кожен тест декларує лише ті словникові записи, що йому насправді потрібні, без одного спільного зростаючого фікстур-файлу.
+
+  Перший блок тестів: `DateUtils`, `DurationFormat`, `TrapMailFormat`, `ConcurrentPoll` — 58 тестів, усі проходять
+
+### Виправлено
+- **`--dictionarydeviceword=` вбивав процес.** `Config.parseFlagArgs` пропускає (skip-list) `--config=`/`--dictionarypd=`/`--dictionarysdh=` як шляхові аргументи, уже розібрані окремим проходом (`parsePathArgs`) — але `--dictionarydeviceword=` до цього списку не потрапив. Будь-який реальний запуск із цим прапорцем падав у гілку "Unknown argument" і завершував процес через `System.exit(1)`. Знайдено під час побудови тестової інфраструктури — спроба сконструювати `Config` із цим прапорцем в тестовому JVM убивала весь testsuite незрозумілим крахом форкнутого Surefire-процесу («terminated without properly saying goodbye»)
+
+---
+
 ## [1.26.0] — 2026-08-06
 
 ### Змінено

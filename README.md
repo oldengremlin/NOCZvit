@@ -500,6 +500,18 @@ mvn clean package
 
 Результат — `target/NOCZvit-1.16.0.jar` (uber-JAR з усіма залежностями).
 
+## Тестування
+
+```bash
+mvn test
+```
+
+JUnit 5, без Mockito — «чужі» залежності (Zabbix API, IMAP, SNMP) підмінюються підкласами з перевизначеними `public`-методами (жоден клас, чиї методи так підміняються, не `final`), а не мок-бібліотекою.
+
+Спільний хелпер `TestFixtures` (`src/test/java/net/ukrcom/noczvit/TestFixtures.java`) будує `Config` із синтетичного `src/test/resources/test-noczvit.properties` (безпечні тестові значення, жодних реальних credentials — навмисно не `noczvit.properties`, щоб виключити двозначність із реальним, гітігнорованим конфігом розробника) і `Dictionary` з ad-hoc записів, які тест сам пише у тимчасові файли (`@TempDir`) — кожен тест декларує лише ті словникові записи, що йому справді потрібні, без одного спільного зростаючого фікстур-файлу.
+
+Кілька приватних методів навмисно звужені до package-private (не `public`) саме для прямого виклику з тесту в тому самому пакеті — без рефлексії. Перший приклад — `imap/Client.deduplicateAdlink`/`isPdMessage`/`isOspfMessage`/`isAdlinkMessage`/`isOsmMessage`.
+
 ## Запуск
 
 ```bash

@@ -249,7 +249,11 @@ public class Config {
      */
     private void parseFlagArgs(String[] args) {
         for (String arg : args) {
-            if (arg.startsWith("--config=") || arg.startsWith("--dictionarypd=") || arg.startsWith("--dictionarysdh=")) {
+            // --dictionarydeviceword= was missing here even though parsePathArgs() already
+            // handles it — every real invocation with that flag hit the "Unknown argument"
+            // branch below and killed the process via System.exit(1).
+            if (arg.startsWith("--config=") || arg.startsWith("--dictionarypd=")
+                    || arg.startsWith("--dictionarysdh=") || arg.startsWith("--dictionarydeviceword=")) {
                 continue;
             }
             switch (arg) {
