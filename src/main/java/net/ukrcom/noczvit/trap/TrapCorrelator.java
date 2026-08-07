@@ -27,36 +27,37 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.trap.TrapIncident.Severity;
 
 /**
- * Correlates raw {@link TrapEvent} objects into logical {@link TrapIncident} records.
+ * Корелює «сирі» об'єкти {@link TrapEvent} у логічні записи {@link TrapIncident}.
  *
- * <h2>PDC state machine</h2>
+ * <h2>Автомат станів PDC</h2>
  * <ol>
- *   <li>Power outage chain: {@code Active:Alarm:Loss of Mains} is the root event.
- *       Secondary traps ({@code Battery Discharging}, {@code MMS On Battery},
- *       {@code Bypass Not Available}, etc.) that arrive while the root is open are
- *       attached as details. The chain closes when {@code Cleared:Alarm:Loss of Mains} arrives
- *       or when {@code System Return to Normal} arrives on the same device.
- *   <li>Standalone alarms: any other Active/Cleared pair for which no outage chain is open.
+ *   <li>Ланцюжок відключення живлення: {@code Active:Alarm:Loss of Mains} — кореневa подія.
+ *       Вторинні трапи ({@code Battery Discharging}, {@code MMS On Battery},
+ *       {@code Bypass Not Available} тощо), що надходять, поки корінь відкритий,
+ *       приєднуються як деталі. Ланцюжок закривається, коли надходить
+ *       {@code Cleared:Alarm:Loss of Mains} або {@code System Return to Normal} на тому ж пристрої.
+ *   <li>Окремі (standalone) тривоги: будь-яка інша пара Active/Cleared, для якої не відкрито
+ *       ланцюжка відключення живлення.
  * </ol>
  *
- * <h2>ADC state machine</h2>
- * <p>All ADC events are standalone Active/Cleared pairs. A {@code System Return to Normal}
- * acts as a "clear all open alarms" signal for that device.
+ * <h2>Автомат станів ADC</h2>
+ * <p>Усі події ADC — окремі пари Active/Cleared. {@code System Return to Normal} діє як
+ * сигнал «закрити всі відкриті тривоги» для цього пристрою.
  *
- * <h2>Cold Start linking</h2>
- * <p>An ADC Cold Start that arrives within {@code coldstartLinkMinutes} after a PDC in the
- * same room has its power restored is annotated as being related to the power restoration.
+ * <h2>Прив'язка Cold Start</h2>
+ * <p>Cold Start на ADC, що надходить протягом {@code coldstartLinkMinutes} після відновлення
+ * живлення на PDC у тій самій кімнаті, позначається як пов'язаний із цим відновленням.
  *
- * <h2>Ignored traps</h2>
+ * <h2>Ігноровані трапи</h2>
  * <p>{@code Active:Alarm:Unit On Standby}, {@code Cleared:Alarm:Unit On Standby},
- * {@code Active:Alarm:Unit On}, {@code Cleared:Alarm:Unit On} are normal operational
- * transitions and are never included in the output.
+ * {@code Active:Alarm:Unit On}, {@code Cleared:Alarm:Unit On} — нормальні експлуатаційні
+ * переходи, вони ніколи не потрапляють у вивід.
  */
 @Slf4j
 public class TrapCorrelator {
 
-    // Traps for which "До кінця зміни не відновлено." is not appended when unclosed —
-    // they describe an ongoing process, not a fault condition requiring resolution.
+    // Трапи, для яких при незакритті НЕ додається "До кінця зміни не відновлено." —
+    // вони описують процес, що триває, а не несправність, яка потребує усунення.
     private static final Set<String> NO_UNRESOLVED_SUFFIX = Set.of(
             "Active:Alarm:Battery Discharging",
             "Active:Alarm:MMS On Battery",
@@ -64,31 +65,32 @@ public class TrapCorrelator {
             "Active:Alarm:Compressor Low Suction Pressure"
     );
 
-    // Point-in-time detection events: Active fires once to signal a detected condition,
-    // there is no meaningful "end". Treated like Cold Start — clearedAt = activatedAt.
-    // Any subsequent Cleared for these is silently ignored.
+    // Миттєві (point-in-time) події виявлення: Active спрацьовує один раз, щоб
+    // сигналізувати про виявлену умову, — змістовного "кінця" немає. Обробляються
+    // як Cold Start — clearedAt = activatedAt. Будь-який подальший Cleared для них
+    // мовчки ігнорується.
     private static final Set<String> SELF_CLOSING_ACTIVE = Set.of(
             "Active:Alarm:Compressor Short Cycle"
     );
 
-    // Alternative descriptions for when an incident IS closed (completed action, past tense).
-    // Used instead of TRAP_DESCRIPTIONS when clearedAt != null.
+    // Альтернативні описи для випадку, коли інцидент ЗАКРИТО (завершена дія, минулий час).
+    // Використовуються замість TRAP_DESCRIPTIONS, коли clearedAt != null.
     private static final Map<String, String> TRAP_DESCRIPTIONS_CLOSED = Map.of(
             "Active:Alarm:Battery Discharging", "ДБЖ перейшов на живлення від батарей."
     );
 
-    // Traps that represent normal operational transitions — suppress entirely
+    // Трапи, що є нормальними експлуатаційними переходами, — повністю пригнічуємо
     private static final Set<String> IGNORE_TRAPS = Set.of(
             "Active:Alarm:Unit On Standby",
             "Cleared:Alarm:Unit On Standby",
-            "Active:Alarm:Unit Standby",      // Room4 firmware variant
-            "Cleared:Alarm:Unit Standby",     // Room4 firmware variant
+            "Active:Alarm:Unit Standby",      // варіант прошивки Room4
+            "Cleared:Alarm:Unit Standby",     // варіант прошивки Room4
             "Active:Alarm:Unit On",
             "Cleared:Alarm:Unit On"
     );
 
-    // PDC root power-outage traps — multiple firmware variants open the same chain
-    // r1/r2 send "Loss of Mains"; r3/r4 send "System Input Power Problem"
+    // Кореневі трапи відключення живлення PDC — різні варіанти прошивки відкривають
+    // той самий ланцюжок: r1/r2 надсилають "Loss of Mains"; r3/r4 — "System Input Power Problem"
     private static final Set<String> CHAIN_ROOT_ACTIVE = Set.of(
             "Active:Alarm:Loss of Mains",
             "Active:Alarm:System Input Power Problem"
@@ -98,7 +100,7 @@ public class TrapCorrelator {
             "Cleared:Alarm:System Input Power Problem"
     );
 
-    // PDC secondary traps that accompany a power outage (attached as details)
+    // Вторинні трапи PDC, що супроводжують відключення живлення (приєднуються як деталі)
     private static final Set<String> PDC_POWER_OUTAGE_SECONDARIES = Set.of(
             "Active:Alarm:Battery Discharging",
             "Cleared:Alarm:Battery Discharging",
@@ -112,10 +114,10 @@ public class TrapCorrelator {
             "Cleared:Alarm:Low Battery"
     );
 
-    // System Return to Normal — closes all open alarms on the device
+    // System Return to Normal — закриває всі відкриті тривоги на пристрої
     private static final String SYSTEM_RETURN_TO_NORMAL = "System Return to Normal";
 
-    // Maps Active trap type → its Cleared counterpart
+    // Відображення типу трапу Active → відповідний йому Cleared
     private static final Map<String, String> ACTIVE_TO_CLEARED = new HashMap<>();
     static {
         ACTIVE_TO_CLEARED.put("Active:Alarm:Loss of Mains",          "Cleared:Alarm:Loss of Mains");
@@ -150,14 +152,14 @@ public class TrapCorrelator {
         ACTIVE_TO_CLEARED.put("Active:Alarm:Condensate Pump High Water",       "Cleared:Alarm:Condensate Pump High Water");
     }
 
-    // Maps Cleared trap type → its Active counterpart (reverse of ACTIVE_TO_CLEARED)
+    // Відображення типу трапу Cleared → відповідний йому Active (обернене до ACTIVE_TO_CLEARED)
     private static final Map<String, String> CLEARED_TO_ACTIVE;
     static {
         CLEARED_TO_ACTIVE = new HashMap<>();
         ACTIVE_TO_CLEARED.forEach((active, cleared) -> CLEARED_TO_ACTIVE.put(cleared, active));
     }
 
-    // Severity by active trap type
+    // Рівень серйозності за типом активного трапу
     private static final Map<String, Severity> TRAP_SEVERITY = new HashMap<>();
     static {
         TRAP_SEVERITY.put("Active:Alarm:Loss of Mains",               Severity.ALARM);
@@ -191,7 +193,7 @@ public class TrapCorrelator {
         TRAP_SEVERITY.put("Active:Alarm:Condensate Pump High Water",       Severity.WARNING);
     }
 
-    // Ukrainian descriptions for active trap types
+    // Українські описи для типів активних трапів
     private static final Map<String, String> TRAP_DESCRIPTIONS = new HashMap<>();
     static {
         // «Немібні» трапи (назви з email-тіла, прямих відповідників у MIB немає — переклад довільний):
@@ -262,27 +264,28 @@ public class TrapCorrelator {
     private final int coldstartLinkSeconds;
 
     /**
-     * @param coldstartLinkMinutes  time window (minutes) within which an ADC Cold Start after a PDC
-     *                              power restoration is considered related
+     * @param coldstartLinkMinutes  часове вікно (у хвилинах), протягом якого ADC Cold Start
+     *                              після відновлення живлення на PDC вважається пов'язаним
      */
     public TrapCorrelator(int coldstartLinkMinutes) {
         this.coldstartLinkSeconds = coldstartLinkMinutes * 60;
     }
 
-    /** Holds the output of {@link #correlate}: correlated incidents plus raw events that hit the catch-all. */
+    /** Містить результат {@link #correlate}: скорельовані інциденти плюс сирі події, що потрапили в catch-all. */
     public record CorrelationResult(List<TrapIncident> incidents, List<TrapEvent> unknownTraps) {}
 
     /**
-     * Correlates trap events into logical incidents.
+     * Корелює trap-події у логічні інциденти.
      *
-     * <p>PDC devices are processed first (to populate the power-restoration timeline used for
-     * Cold Start linking on ADC devices), then ADC devices.
+     * <p>Спершу обробляються пристрої PDC (щоб заповнити часову шкалу відновлень живлення,
+     * яку використовує прив'язка Cold Start для ADC), потім — пристрої ADC.
      *
-     * @param events input trap events (any order)
-     * @return {@link CorrelationResult} with incidents sorted by {@code activatedAt} and raw unknown events
+     * @param events вхідні trap-події (у довільному порядку)
+     * @return {@link CorrelationResult} з інцидентами, відсортованими за {@code activatedAt},
+     *         та сирими невідомими подіями
      */
     public CorrelationResult correlate(List<TrapEvent> events) {
-        // Group events by (deviceClass, hostname, ip)
+        // Групуємо події за (deviceClass, hostname, ip)
         Map<String, List<TrapEvent>> byHostname = events.stream()
                 .sorted(Comparator.comparing(TrapEvent::timestamp))
                 .collect(Collectors.groupingBy(
@@ -290,13 +293,13 @@ public class TrapCorrelator {
                         LinkedHashMap::new,
                         Collectors.toList()));
 
-        // PDC power restorations: room → list of restoration instants (for Cold Start linking)
+        // Відновлення живлення PDC: кімната → список моментів відновлення (для прив'язки Cold Start)
         Map<String, List<Instant>> pdcRestorations = new HashMap<>();
 
         List<TrapIncident> result = new ArrayList<>();
         List<TrapEvent> unknownTraps = new ArrayList<>();
 
-        // Pass 1: PDC
+        // Прохід 1: PDC
         byHostname.forEach((key, devEvents) -> {
             TrapEvent first = devEvents.get(0);
             if (!TrapEvent.CLASS_PDC.equals(first.deviceClass())) {
@@ -306,7 +309,7 @@ public class TrapCorrelator {
             result.addAll(correlatePdc(first.hostname(), first.ip(), devEvents, pdcRestorations, room, unknownTraps));
         });
 
-        // Pass 2: ADC
+        // Прохід 2: ADC
         byHostname.forEach((key, devEvents) -> {
             TrapEvent first = devEvents.get(0);
             if (!TrapEvent.CLASS_ADC.equals(first.deviceClass())) {
@@ -321,6 +324,10 @@ public class TrapCorrelator {
         return new CorrelationResult(result, unknownTraps);
     }
 
+    /**
+     * Корелює події одного пристрою PDC: веде ланцюжок відключення живлення та окремі
+     * (standalone) тривоги, повертає готові інциденти для цього пристрою.
+     */
     private List<TrapIncident> correlatePdc(String hostname, String ip,
                                              List<TrapEvent> events,
                                              Map<String, List<Instant>> pdcRestorations,
@@ -328,11 +335,11 @@ public class TrapCorrelator {
                                              List<TrapEvent> unknownTraps) {
         List<TrapIncident> incidents = new ArrayList<>();
 
-        // State for power outage chain
+        // Стан ланцюжка відключення живлення
         TrapEvent openOutageRoot = null;
         List<TrapEvent> openOutageSecondaries = new ArrayList<>();
 
-        // State for standalone alarms: activeTrapType → start event
+        // Стан окремих тривог: activeTrapType → початкова подія
         Map<String, TrapEvent> openStandalones = new LinkedHashMap<>();
 
         for (TrapEvent ev : events) {
@@ -360,7 +367,7 @@ public class TrapCorrelator {
             }
 
             if (SYSTEM_RETURN_TO_NORMAL.equals(trap)) {
-                // Close power outage chain if open
+                // Закриваємо ланцюжок відключення живлення, якщо він відкритий
                 if (openOutageRoot != null) {
                     incidents.add(buildPowerOutageIncident(hostname, ip, openOutageRoot,
                             openOutageSecondaries, ev.timestamp()));
@@ -368,7 +375,7 @@ public class TrapCorrelator {
                     openOutageRoot = null;
                     openOutageSecondaries.clear();
                 }
-                // Close all open standalones
+                // Закриваємо всі відкриті окремі тривоги
                 openStandalones.forEach((activeType, startEv) ->
                         incidents.add(buildStandaloneIncident(hostname, ip, activeType, startEv, ev.timestamp())));
                 openStandalones.clear();
@@ -394,19 +401,19 @@ public class TrapCorrelator {
                 continue;
             }
 
-            // Secondary power-outage traps
+            // Вторинні трапи відключення живлення
             if (openOutageRoot != null && PDC_POWER_OUTAGE_SECONDARIES.contains(trap)) {
                 openOutageSecondaries.add(ev);
                 continue;
             }
 
-            // Self-closing point-in-time events: no meaningful end, clearedAt = activatedAt
+            // Самозакривні миттєві події: змістовного кінця немає, clearedAt = activatedAt
             if (SELF_CLOSING_ACTIVE.contains(trap)) {
                 incidents.add(buildStandaloneIncident(hostname, ip, trap, ev, ev.timestamp()));
                 continue;
             }
 
-            // Standalone active trap
+            // Окремий активний трап
             if (ACTIVE_TO_CLEARED.containsKey(trap)) {
                 // MMS On Battery is the second step of the same battery-switch process as
                 // MMS On Battery is the final step of the same battery-switch process.
@@ -426,7 +433,7 @@ public class TrapCorrelator {
                 continue;
             }
 
-            // Standalone cleared trap
+            // Окремий трап очищення (Cleared)
             if (CLEARED_TO_ACTIVE.containsKey(trap)) {
                 String activeType = CLEARED_TO_ACTIVE.get(trap);
                 TrapEvent startEv = openStandalones.remove(activeType);
@@ -438,14 +445,14 @@ public class TrapCorrelator {
                 continue;
             }
 
-            // Catch-all: any Active:Alarm:X not in known maps → generic standalone
+            // Catch-all: будь-який Active:Alarm:X, якого немає у відомих мапах → загальна окрема тривога
             if (trap.startsWith("Active:Alarm:")) {
                 log.debug("TrapCorrelator PDC {}: unknown type «{}» — queued as generic standalone", hostname, ev.trapType());
                 openStandalones.put(trap, ev);
                 unknownTraps.add(ev);
                 continue;
             }
-            // Catch-all: Cleared:Alarm:X closes the matching generic Active
+            // Catch-all: Cleared:Alarm:X закриває відповідний загальний Active
             if (trap.startsWith("Cleared:Alarm:")) {
                 String activeType = "Active:Alarm:" + trap.substring("Cleared:Alarm:".length());
                 TrapEvent startEv = openStandalones.remove(activeType);
@@ -459,18 +466,22 @@ public class TrapCorrelator {
             log.debug("TrapCorrelator PDC {}: truly unhandled trap «{}»", hostname, trap);
         }
 
-        // Unclosed power outage chain
+        // Незакритий ланцюжок відключення живлення
         if (openOutageRoot != null) {
             incidents.add(buildPowerOutageIncident(hostname, ip, openOutageRoot, openOutageSecondaries, null));
         }
 
-        // Unclosed standalone alarms
+        // Незакриті окремі тривоги
         openStandalones.forEach((activeType, startEv) ->
                 incidents.add(buildStandaloneIncident(hostname, ip, activeType, startEv, null)));
 
         return incidents;
     }
 
+    /**
+     * Корелює події одного пристрою ADC: лише окремі (standalone) тривоги плюс
+     * прив'язка Cold Start до відновлень живлення PDC у тій самій кімнаті.
+     */
     private List<TrapIncident> correlateAdc(String hostname, String ip,
                                              List<TrapEvent> events,
                                              List<Instant> pdcRestorationTimes,
@@ -502,7 +513,7 @@ public class TrapCorrelator {
 
             if (TrapDeduplicator.COLD_START.equalsIgnoreCase(trap)) {
                 String desc = TRAP_DESCRIPTIONS.get("Cold Start");
-                // Check if this Cold Start is linked to a PDC power restoration in the same room
+                // Перевіряємо, чи пов'язаний цей Cold Start із відновленням живлення PDC у тій самій кімнаті
                 boolean linked = pdcRestorationTimes.stream()
                         .anyMatch(restoration ->
                                 !ev.timestamp().isBefore(restoration)
@@ -515,7 +526,7 @@ public class TrapCorrelator {
                 continue;
             }
 
-            // Self-closing point-in-time events: no meaningful end, clearedAt = activatedAt
+            // Самозакривні миттєві події: змістовного кінця немає, clearedAt = activatedAt
             if (SELF_CLOSING_ACTIVE.contains(trap)) {
                 incidents.add(buildStandaloneIncident(hostname, ip, trap, ev, ev.timestamp()));
                 continue;
@@ -537,14 +548,14 @@ public class TrapCorrelator {
                 continue;
             }
 
-            // Catch-all: any Active:Alarm:X not in known maps → generic standalone
+            // Catch-all: будь-який Active:Alarm:X, якого немає у відомих мапах → загальна окрема тривога
             if (trap.startsWith("Active:Alarm:")) {
                 log.debug("TrapCorrelator ADC {}: unknown type «{}» — queued as generic standalone", hostname, ev.trapType());
                 openStandalones.put(trap, ev);
                 unknownTraps.add(ev);
                 continue;
             }
-            // Catch-all: Cleared:Alarm:X closes the matching generic Active
+            // Catch-all: Cleared:Alarm:X закриває відповідний загальний Active
             if (trap.startsWith("Cleared:Alarm:")) {
                 String activeType = "Active:Alarm:" + trap.substring("Cleared:Alarm:".length());
                 TrapEvent startEv = openStandalones.remove(activeType);
@@ -558,13 +569,17 @@ public class TrapCorrelator {
             log.debug("TrapCorrelator ADC {}: truly unhandled trap «{}»", hostname, trap);
         }
 
-        // Unclosed standalone alarms
+        // Незакриті окремі тривоги
         openStandalones.forEach((activeType, startEv) ->
                 incidents.add(buildStandaloneIncident(hostname, ip, activeType, startEv, null)));
 
         return incidents;
     }
 
+    /**
+     * Будує інцидент відключення живлення з кореневої події ланцюжка та її вторинних
+     * трапів, формуючи опис і список деталей.
+     */
     private TrapIncident buildPowerOutageIncident(String hostname, String ip,
                                                    TrapEvent root,
                                                    List<TrapEvent> secondaries,
@@ -586,7 +601,7 @@ public class TrapCorrelator {
         for (TrapEvent sec : secondaries) {
             String activeType = sec.trapType();
             if (CLEARED_TO_ACTIVE.containsKey(activeType)) {
-                continue; // skip clear events in secondaries list
+                continue; // пропускаємо події очищення (clear) у списку вторинних
             }
             // Battery Discharging + MMS On Battery are one process; already in main description
             if ("Active:Alarm:Battery Discharging".equals(activeType)
@@ -601,6 +616,10 @@ public class TrapCorrelator {
                 Severity.ALARM, root.timestamp(), clearedAt, desc.toString(), details);
     }
 
+    /**
+     * Будує окремий (standalone) інцидент з однієї активної події та (за наявності) події
+     * закриття, підбираючи серйозність і опис за типом трапу.
+     */
     private TrapIncident buildStandaloneIncident(String hostname, String ip,
                                                   String activeTrapType,
                                                   TrapEvent startEvent,
@@ -610,7 +629,7 @@ public class TrapCorrelator {
         if (clearedAt != null && TRAP_DESCRIPTIONS_CLOSED.containsKey(activeTrapType)) {
             desc = TRAP_DESCRIPTIONS_CLOSED.get(activeTrapType);
         } else {
-            // For unknown types, strip "Active:Alarm:" prefix for a cleaner display
+            // Для невідомих типів прибираємо префікс "Active:Alarm:" заради охайнішого відображення
             String fallback = activeTrapType.startsWith("Active:Alarm:")
                     ? activeTrapType.substring("Active:Alarm:".length())
                     : activeTrapType;
@@ -625,7 +644,7 @@ public class TrapCorrelator {
     }
 
     /**
-     * Normalises Room4 firmware trap-type categories to the canonical {@code Alarm:} form.
+     * Нормалізує категорії типів трапів прошивки Room4 до канонічної форми {@code Alarm:}.
      * <ul>
      *   <li>{@code Active:Message:X}  → {@code Active:Alarm:X}
      *   <li>{@code Active:Warning:X}  → {@code Active:Alarm:X}
@@ -636,11 +655,11 @@ public class TrapCorrelator {
      */
     static String normalizeCategory(String trap) {
         if (trap.startsWith("Active:Message:") || trap.startsWith("Active:Warning:")) {
-            // "Active:" = 7 chars; find the ':' after the category word
+            // "Active:" = 7 символів; шукаємо ':' після слова категорії
             return "Active:Alarm:" + trap.substring(trap.indexOf(':', 7) + 1);
         }
         if (trap.startsWith("Cleared:Message:") || trap.startsWith("Cleared:Warning:")) {
-            // "Cleared:" = 8 chars
+            // "Cleared:" = 8 символів
             return "Cleared:Alarm:" + trap.substring(trap.indexOf(':', 8) + 1);
         }
         if (trap.startsWith("Message:")) {
@@ -649,6 +668,7 @@ public class TrapCorrelator {
         return trap;
     }
 
+    /** Витягує ідентифікатор кімнати з другого сегмента hostname (формат {@code class-room-...}). */
     static String extractRoom(String hostname) {
         String[] parts = hostname.split("-");
         return parts.length >= 2 ? parts[1] : "";

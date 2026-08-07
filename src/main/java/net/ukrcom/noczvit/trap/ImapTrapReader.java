@@ -30,14 +30,14 @@ import net.ukrcom.noczvit.imap.MailMessageSupport;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
- * Reads SNMP trap emails from one or more IMAP folders (supports wildcard patterns
- * like {@code DC-Room*}) and returns them as {@link RawMessage} objects.
+ * Читає листи SNMP-трапів з однієї чи кількох IMAP-тек (підтримує шаблони з {@code *},
+ * наприклад {@code DC-Room*}) і повертає їх у вигляді об'єктів {@link RawMessage}.
  *
- * <p>The folder pattern in {@code snmp.trap.folder} may be a literal folder path or
- * may end with {@code *} to match multiple sibling folders.
+ * <p>Шаблон теки в {@code snmp.trap.folder} може бути буквальним шляхом до теки або
+ * закінчуватись на {@code *}, щоб збігатись з кількома сусідніми теками.
  *
- * <p>Connection setup and message conversion are shared with {@link ImapReader} via
- * {@link MailMessageSupport}; only folder-wildcard resolution is specific to this reader.
+ * <p>Налаштування з'єднання та конвертація повідомлень спільні з {@link ImapReader} через
+ * {@link MailMessageSupport}; специфічним для цього рідера є лише розв'язання шаблонів тек.
  */
 @Slf4j
 public class ImapTrapReader {
@@ -45,20 +45,20 @@ public class ImapTrapReader {
     private final Config config;
 
     /**
-     * Creates a reader bound to the given configuration.
+     * Створює рідер, прив'язаний до заданої конфігурації.
      */
     public ImapTrapReader(Config config) {
         this.config = config;
     }
 
     /**
-     * Reads trap emails from all folders matching the configured {@code snmp.trap.folder} pattern.
+     * Читає листи трапів з усіх тек, що відповідають налаштованому шаблону {@code snmp.trap.folder}.
      *
-     * @param fetchAll  when true, retrieves all messages regardless of date
-     * @param fromEpoch unix epoch lower bound (inclusive) for date filtering
-     * @param toEpoch   unix epoch upper bound (inclusive) for date filtering
-     * @return list of raw messages; never null
-     * @throws MessagingException on IMAP errors
+     * @param fetchAll  якщо true, отримує всі повідомлення незалежно від дати
+     * @param fromEpoch нижня межа (включно) unix epoch для фільтрації за датою
+     * @param toEpoch   верхня межа (включно) unix epoch для фільтрації за датою
+     * @return список сирих повідомлень; ніколи не null
+     * @throws MessagingException при помилках IMAP
      */
     public List<RawMessage> readTraps(boolean fetchAll, long fromEpoch, long toEpoch)
             throws MessagingException {
@@ -66,17 +66,17 @@ public class ImapTrapReader {
     }
 
     /**
-     * Reads trap emails from all folders matching the given {@code folderPattern}.
+     * Читає листи трапів з усіх тек, що відповідають заданому {@code folderPattern}.
      *
-     * <p>The pattern may be a literal folder path or may end with {@code *} to match multiple
-     * sibling folders (e.g. {@code INBOX/Internal/SNMP Traps/DC-Room*}).
+     * <p>Шаблон може бути буквальним шляхом до теки або закінчуватись на {@code *}, щоб
+     * збігатись з кількома сусідніми теками (напр. {@code INBOX/Internal/SNMP Traps/DC-Room*}).
      *
-     * @param fetchAll      when true, retrieves all messages regardless of date
-     * @param fromEpoch     unix epoch lower bound (inclusive) for date filtering
-     * @param toEpoch       unix epoch upper bound (inclusive) for date filtering
-     * @param folderPattern IMAP folder path or wildcard pattern to read from
-     * @return list of raw messages; never null
-     * @throws MessagingException on IMAP errors
+     * @param fetchAll      якщо true, отримує всі повідомлення незалежно від дати
+     * @param fromEpoch     нижня межа (включно) unix epoch для фільтрації за датою
+     * @param toEpoch       верхня межа (включно) unix epoch для фільтрації за датою
+     * @param folderPattern шлях IMAP-теки або шаблон з {@code *}, з якого читати
+     * @return список сирих повідомлень; ніколи не null
+     * @throws MessagingException при помилках IMAP
      */
     public List<RawMessage> readTrapsFromFolder(boolean fetchAll, long fromEpoch, long toEpoch,
                                                 String folderPattern) throws MessagingException {
@@ -109,13 +109,13 @@ public class ImapTrapReader {
                     if (fetchAll) {
                         messages = imapFolder.getMessages();
                     } else {
-                        // Server-side SEARCH; see ImapReader.dateRangeTerm for why an anonymous
-                        // SearchTerm must not be used here (it downloads the entire folder).
+                        // SEARCH на боці сервера; див. ImapReader.dateRangeTerm — чому анонімний
+                        // SearchTerm тут використовувати не можна (він завантажує всю теку).
                         messages = imapFolder.search(ImapReader.dateRangeTerm(fromEpoch, toEpoch));
                     }
 
                     for (Message msg : messages) {
-                        // Trap mails carry no In-Reply-To pairing — pass false to store an empty key
+                        // Листи трапів не мають пари In-Reply-To — передаємо false, щоб зберегти порожній ключ
                         MailMessageSupport.parseRawMessage(msg, false, "ImapTrapReader")
                                 .ifPresent(result::add);
                     }
@@ -128,19 +128,20 @@ public class ImapTrapReader {
     }
 
     /**
-     * Resolves folders from the store that match {@code pattern}.
+     * Розв'язує теки зі сховища, що відповідають {@code pattern}.
      *
-     * <p>If the pattern contains a {@code *} character, the path is split at the last separator
-     * before the wildcard and {@link Folder#list(String)} is called on the parent. Otherwise
-     * the folder is opened directly.
+     * <p>Якщо шаблон містить символ {@code *}, шлях розбивається за останнім роздільником
+     * перед шаблоном, і на батьківській теці викликається {@link Folder#list(String)}. Інакше
+     * тека відкривається напряму.
      */
     private List<Folder> resolveFolders(IMAPStore store, String pattern) throws MessagingException {
         List<Folder> result = new ArrayList<>();
 
         char sep = store.getDefaultFolder().getSeparator();
 
-        // Normalize: accept '/' as universal separator regardless of what the server uses.
-        // Replace '/' with the server separator so store.getFolder() receives a valid path.
+        // Нормалізація: приймаємо '/' як універсальний роздільник незалежно від того, що
+        // фактично використовує сервер. Замінюємо '/' на роздільник сервера, щоб
+        // store.getFolder() отримав коректний шлях.
         String normalizedPattern = (sep != '/') ? pattern.replace('/', sep) : pattern;
 
         if (!normalizedPattern.contains("*")) {

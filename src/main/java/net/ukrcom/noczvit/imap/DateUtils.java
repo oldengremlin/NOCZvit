@@ -24,14 +24,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Utilities for date string localisation and zone-safe timestamp conversion. The sole source
- * of Ukrainian month names in the project — every {@code Incident} source (IMAP-based and the
- * Zabbix API) formats its display date through {@link #convertMonthNumToMnemo} or
- * {@link #formatUa} so all incident tables render identically regardless of source.
+ * Утиліти для локалізації рядків дат і безпечного щодо часової зони перетворення міток часу.
+ * Єдине джерело українських назв місяців у проєкті — кожне джерело {@code Incident} (на основі
+ * IMAP і Zabbix API) форматує дату для відображення через {@link #convertMonthNumToMnemo} або
+ * {@link #formatUa}, тому всі таблиці інцидентів рендеряться однаково незалежно від джерела.
  */
 public class DateUtils {
 
-    // English month abbreviation → Ukrainian; translates raw IMAP Date: header text in convertMonthNumToMnemo.
+    // Англійське скорочення місяця → українське; перекладає сирий текст заголовка Date: IMAP у convertMonthNumToMnemo.
     private static final Pattern MONTH_PATTERN = Pattern.compile("\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b");
     private static final Map<String, String> MONTH_MAP = Map.ofEntries(
             Map.entry("Jan", "січ"), Map.entry("Feb", "лют"), Map.entry("Mar", "бер"), Map.entry("Apr", "квіт"),
@@ -39,8 +39,8 @@ public class DateUtils {
             Map.entry("Sep", "вер"), Map.entry("Oct", "жовт"), Map.entry("Nov", "лист"), Map.entry("Dec", "груд")
     );
 
-    // Month number (1-12, matching LocalDateTime.getMonthValue()) → Ukrainian abbreviation; used
-    // by formatUa. Index 0 is unused padding. Same spellings as MONTH_MAP above — keep in sync.
+    // Номер місяця (1-12, відповідає LocalDateTime.getMonthValue()) → українське скорочення;
+    // використовується у formatUa. Індекс 0 — невикористаний заповнювач. Ті самі написання, що й у MONTH_MAP вище — тримати синхронізованими.
     private static final String[] UA_MONTHS = {
         "", "січ", "лют", "бер", "квіт", "трав", "черв",
         "лип", "серп", "вер", "жовт", "лист", "груд"
@@ -50,17 +50,17 @@ public class DateUtils {
     }
 
     /**
-     * Replaces English month abbreviations in an IMAP date string with Ukrainian equivalents,
-     * strips the leading day-of-week prefix and trailing timezone offset, and zero-pads a
-     * single-digit day.
+     * Замінює англійські скорочення місяців у рядку дати IMAP на українські відповідники,
+     * знімає провідний префікс дня тижня й кінцевий зсув часової зони, доповнює нулем
+     * односимвольний день.
      *
-     * <p>The padding matters: RFC 2822 permits both {@code "04 Aug"} and {@code "4 Aug"}, and
-     * senders differ — Zabbix pads, the trap registrator does not. Without normalising here, the
-     * emitted day format would depend on whoever sent the mail and would not match
-     * {@link #formatUa}, putting two shapes in one table.
+     * <p>Доповнення має значення: RFC 2822 допускає і {@code "04 Aug"}, і {@code "4 Aug"}, а
+     * відправники відрізняються — Zabbix доповнює нулем, реєстратор трапів — ні. Без нормалізації
+     * тут формат дня залежав би від того, хто надіслав листа, і не збігався б із
+     * {@link #formatUa}, даючи дві різні форми в одній таблиці.
      *
-     * @param dt raw date string (e.g. {@code "Mon, 1 Jan 2025 08:00:00 +0200"})
-     * @return localised date string (e.g. {@code "01 січ 2025 08:00:00"})
+     * @param dt сирий рядок дати (напр. {@code "Mon, 1 Jan 2025 08:00:00 +0200"})
+     * @return локалізований рядок дати (напр. {@code "01 січ 2025 08:00:00"})
      */
     public static String convertMonthNumToMnemo(String dt) {
         dt = dt.replaceAll("^\\w{3},\\s+", "")
@@ -76,10 +76,10 @@ public class DateUtils {
     }
 
     /**
-     * Formats a {@link LocalDateTime} as a Ukrainian-locale date-time string
-     * ({@code "dd mmm yyyy HH:mm:ss"}, e.g. {@code "01 січ 2025 08:00:00"}) — the same format
-     * {@link #convertMonthNumToMnemo} produces from a raw IMAP header, for sources (e.g. the
-     * Zabbix API) that already have a parsed {@link LocalDateTime} instead of a header string.
+     * Форматує {@link LocalDateTime} як рядок дати-часу в українській локалі
+     * ({@code "dd mmm yyyy HH:mm:ss"}, напр. {@code "01 січ 2025 08:00:00"}) — той самий формат,
+     * що дає {@link #convertMonthNumToMnemo} із сирого заголовка IMAP, для джерел (напр.
+     * Zabbix API), які вже мають розібраний {@link LocalDateTime} замість рядка заголовка.
      */
     public static String formatUa(LocalDateTime dt) {
         return String.format("%02d %s %d %02d:%02d:%02d",
@@ -88,29 +88,30 @@ public class DateUtils {
     }
 
     /**
-     * Formats an {@link Instant} in the system time zone using {@link #formatUa(LocalDateTime)} —
-     * the single display format for every date shown in the report.
+     * Форматує {@link Instant} у системній часовій зоні за допомогою {@link #formatUa(LocalDateTime)} —
+     * єдиний формат відображення для кожної дати в звіті.
      *
-     * @param instant point in time (trap timestamps are carried as instants)
-     * @return localised date-time string (e.g. {@code "05 серп 2026 13:37:15"})
+     * @param instant момент часу (мітки часу трапів передаються як instant)
+     * @return локалізований рядок дати-часу (напр. {@code "05 серп 2026 13:37:15"})
      */
     public static String formatUa(Instant instant) {
         return formatUa(LocalDateTime.ofInstant(instant, ZoneId.systemDefault()));
     }
 
     /**
-     * Converts a device-reported local timestamp to an {@link Instant}, using the offset that was
-     * in effect when the carrying email was sent to disambiguate.
+     * Перетворює мітку часу, повідомлену пристроєм у місцевому часі, на {@link Instant},
+     * використовуючи для однозначності зсув, чинний на момент відправлення листа-носія.
      *
-     * <p>RAMOS and Emerson traps report wall-clock time without a zone. During the autumn DST
-     * overlap the same wall-clock hour occurs twice, and {@code atZone()} always picks the first
-     * (summer) one — putting events from the second pass an hour in the past, which can drop them
-     * out of the report window or order a Cleared trap before its Active. The email {@code Date:}
-     * header carries a real offset stamped moments later, so it identifies the correct pass.
+     * <p>Трапи RAMOS та Emerson повідомляють час за настінним годинником без зони. Під час
+     * осіннього перекриття DST одна й та сама година настінного часу трапляється двічі, а
+     * {@code atZone()} завжди обирає першу (літню) — це зсуває події з другого проходу на
+     * годину в минуле, що може викинути їх з вікна звіту або поставити трап Cleared перед
+     * його Active. Заголовок листа {@code Date:} несе справжній зсув, проставлений трохи
+     * пізніше, тому саме за ним визначається правильний прохід.
      *
-     * @param local             wall-clock timestamp reported by the device
-     * @param referenceEpochSec epoch seconds of the carrying email ({@code RawMessage.unixDate()})
-     * @return resolved instant; for gap (spring-forward) times java.time shifts forward as usual
+     * @param local             мітка настінного часу, повідомлена пристроєм
+     * @param referenceEpochSec епоха в секундах листа-носія ({@code RawMessage.unixDate()})
+     * @return розв'язаний instant; для прогалин (перехід на літній час) java.time зсуває вперед як зазвичай
      */
     public static Instant toInstant(LocalDateTime local, long referenceEpochSec) {
         ZoneId zone = ZoneId.systemDefault();

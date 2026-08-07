@@ -56,9 +56,9 @@ public class SummaryClient {
     private final boolean debug;
 
     public SummaryClient(Config config) {
-        // SDK defaults to a 10-minute request timeout plus retries; the call is synchronous
-        // on the main thread after all parallel branches are done, so a stalled API would
-        // delay the report by tens of minutes. Summary already degrades to "" on failure.
+        // SDK за замовчуванням дає 10-хвилинний таймаут запиту плюс повтори; виклик синхронний
+        // в основному потоці після завершення всіх паралельних гілок, тож зависання API затримало б
+        // формування звіту на десятки хвилин. При помилці резюме й так деградує до "".
         this.client = AnthropicOkHttpClient.builder()
                 .apiKey(config.getClaudeApiKey())
                 .timeout(Duration.ofSeconds(90))
@@ -73,12 +73,12 @@ public class SummaryClient {
     }
 
     /**
-     * Opens the SQLite history store at the given JDBC URL.
+     * Відкриває сховище історії SQLite за вказаним JDBC URL.
      *
-     * @param url JDBC URL such as {@code jdbc:sqlite:/var/lib/noczvit/history.db};
-     *            blank or null disables cross-shift memory
-     * @return initialised {@link ResumeHistory}, or {@code null} when the URL is blank or the DB
-     *         cannot be opened
+     * @param url JDBC URL, наприклад {@code jdbc:sqlite:/var/lib/noczvit/history.db};
+     *            порожній рядок чи null вимикає пам'ять між змінами
+     * @return ініціалізований {@link ResumeHistory}, або {@code null}, якщо URL порожній чи БД
+     *         не вдалося відкрити
      */
     private ResumeHistory initResumeHistory(String url) {
         if (url == null || url.isBlank()) {
@@ -230,24 +230,25 @@ public class SummaryClient {
     }
 
     /**
-     * Assembles the full Claude prompt: period metadata, a numbered incident list, pre-computed
-     * unclosed-incident count, an optional previous-period summary for cross-shift context, an
-     * optional datacenter equipment event block, and the system instruction block.
+     * Формує повний промпт для Claude: метадані періоду, пронумерований список інцидентів,
+     * попередньо обчислену кількість незакритих інцидентів, опційне резюме попереднього періоду
+     * для контексту між змінами, опційний блок подій обладнання датацентру та блок системних
+     * інструкцій.
      *
-     * @param incidents     filtered incidents for the current reporting period
-     * @param from          start of the reporting period
-     * @param to            end of the reporting period
-     * @param previous            summary from the immediately preceding period, or {@code null}
-     * @param trapPlainText       plain-text Emerson trap block (with isolation markers); blank to omit
-     * @param resiliencePlainText plain-text power-resilience-audit block; blank to omit
+     * @param incidents     відфільтровані інциденти поточного звітного періоду
+     * @param from          початок звітного періоду
+     * @param to            кінець звітного періоду
+     * @param previous            резюме безпосередньо попереднього періоду, або {@code null}
+     * @param trapPlainText       plain-text блок трапів Emerson (з маркерами ізоляції); порожній рядок, щоб опустити
+     * @param resiliencePlainText plain-text блок аудиту резервного живлення; порожній рядок, щоб опустити
      */
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
                                ResumeRecord previous, String trapPlainText, String resiliencePlainText) {
         StringBuilder sb = new StringBuilder();
-        // Count unique incident threads: each distinct inReplyTo key = 1 thread; incidents
-        // without a key each count as 1. This partitions on the same key IncidentSectionBuilder
-        // pairs on, so the count matches its row count — but it is only the grouping step, not
-        // the pairing itself (no START/END selection, no NONE-status handling, no ordering).
+        // Підрахунок унікальних тредів інцидентів: кожен окремий ключ inReplyTo = 1 тред; інциденти
+        // без ключа рахуються по 1. Це розбиття за тим самим ключем, за яким IncidentSectionBuilder
+        // групує пари, тож кількість збігається з кількістю рядків у нього — але це лише крок
+        // групування, не сама пара (без вибору START/END, без обробки статусу NONE, без сортування).
         long uniqueCount = incidents.stream()
                 .filter(i -> i.inReplyTo() != null && !i.inReplyTo().isBlank())
                 .map(Incident::inReplyTo).distinct().count()
@@ -300,8 +301,8 @@ public class SummaryClient {
             sb.append("\n").append(resiliencePlainText).append("\n");
         }
 
-        // Closing reminder when DC events are present — placed last so Claude reads it
-        // immediately before generating the response
+        // Завершальне нагадування за наявності подій датацентру — розміщене останнім, щоб Claude
+        // прочитав його безпосередньо перед формуванням відповіді
         String trapReminder = (trapPlainText != null && !trapPlainText.isBlank())
                 ? "\nНАГАДУВАННЯ: у даних вище є блок ПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ — обов'язково включи ці події у резюме.\nПОДІЇ ОБЛАДНАННЯ ДАТАЦЕНТРУ подай ОКРЕМИМ АБЗАЦЕМ.\n"
                 : "";
@@ -344,10 +345,11 @@ public class SummaryClient {
     }
 
     /**
-     * Groups incidents by {@code (location, device)} and counts START vs END events per group.
+     * Групує інциденти за {@code (location, device)} і рахує кількість подій START проти END
+     * у кожній групі.
      *
-     * @return human-readable Ukrainian string listing groups where START count exceeds END count,
-     *         or {@code "немає"} when all incidents are closed
+     * @return зручний для читання рядок українською зі списком груп, де кількість START
+     *         перевищує кількість END, або {@code "немає"}, якщо всі інциденти закриті
      */
     private String computeUnclosed(List<Incident> incidents) {
         record GroupKey(String location, String device) {
@@ -383,20 +385,20 @@ public class SummaryClient {
     }
 
     /**
-     * Replaces known Russian-language words that slip through the prompt filter.
-     * Uses negative Cyrillic lookahead/lookbehind as word boundaries since \b
-     * does not match Cyrillic characters in Java.
+     * Замінює відомі російськомовні слова, що прослизають повз фільтр у промпті.
+     * Використовує заперечний кириличний lookahead/lookbehind як межі слова, оскільки \b
+     * не розпізнає кириличні символи в Java.
      */
-    // (?i) alone does not fold Cyrillic case in Java — (?iu) is required
+    // Саме (?i) не складає регістр кирилиці в Java — потрібен (?iu)
     private static final String CYR = "[а-яА-ЯіІїЇєЄёЁ]";
     private static String fixRussianisms(String text) {
-        // "события/собитія" → "події/подій/подіях"; longer forms first, otherwise "событиях"
-        // is eaten by the "…ия" rule and yields "подіїх". Stem soб[ыи]т[иі] covers all three
-        // spellings seen from the model: событи-, собити-, собиті-.
+        // "события/собитія" → "події/подій/подіях"; довші форми першими, інакше "событиях"
+        // з'їдається правилом "…ия" і дає "подіїх". Основа soб[ыи]т[иі] покриває всі три
+        // варіанти написання, що трапляються в моделі: событи-, собити-, собиті-.
         text = text.replaceAll("(?iu)соб[ыи]т[иі][яa]х", "подіях");
         text = text.replaceAll("(?iu)соб[ыи]т[иі][йi]", "подій");
         text = text.replaceAll("(?iu)соб[ыи]т[иі][яьa]", "події");
-        // "смена" (shift) → "зміна"; longer forms first to avoid partial matches
+        // "смена" (зміна робочого складу) → "зміна"; довші форми першими, щоб уникнути часткових збігів
         text = text.replaceAll("(?iu)(?<!" + CYR + ")сменою(?!" + CYR + ")", "зміною");
         text = text.replaceAll("(?iu)(?<!" + CYR + ")смен[иы](?!" + CYR + ")", "зміни");
         text = text.replaceAll("(?iu)(?<!" + CYR + ")смену(?!" + CYR + ")", "зміну");
@@ -414,8 +416,9 @@ public class SummaryClient {
     }
 
     /**
-     * Logs a warning if the summary contains Cyrillic letters that exist in Russian but not in
-     * Ukrainian (ы ъ э ё). This catches Russianisms without maintaining a word list.
+     * Записує попередження в лог, якщо резюме містить кириличні літери, що існують у
+     * російській, але не в українській мові (ы ъ э ё). Це виявляє русизми без потреби
+     * підтримувати список слів.
      */
     private static void warnIfRussian(String text) {
         if (text.chars().anyMatch(c -> "ыъэёЫЪЭЁ".indexOf(c) >= 0)) {
@@ -425,11 +428,11 @@ public class SummaryClient {
     }
 
     /**
-     * Wraps the plain-text Claude summary in an HTML card with an appropriate title.
+     * Обгортає plain-text резюме від Claude у HTML-картку з відповідним заголовком.
      *
-     * <p>Title selection: "Резюме зміни" for day shifts (08:00–19:59), "Резюме за звітний
-     * період" for night periods (20:00–07:59) where monitoring runs unattended.
-     * Light Markdown remnants (headings, bold) are converted to safe HTML before injection.
+     * <p>Вибір заголовка: "Резюме зміни" для денних змін (08:00–19:59), "Резюме за звітний
+     * період" для нічних періодів (20:00–07:59), коли моніторинг працює без людини.
+     * Легкі залишки Markdown (заголовки, жирний текст) конвертуються в безпечний HTML перед вставкою.
      */
     private String buildHtml(String summary, LocalDateTime from, String model, long totalTokens) {
         // День: 08:00–19:59; ніч: 20:00–07:59

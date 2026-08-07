@@ -15,13 +15,13 @@
 package net.ukrcom.noczvit.imap;
 
 /**
- * Raw IMAP message as read from the server — infrastructure DTO, no business logic.
+ * Сире IMAP-повідомлення, зчитане з сервера — інфраструктурний DTO, без бізнес-логіки.
  *
- * @param dateStr    original {@code Date:} header value from the IMAP message
- * @param unixDate   unix epoch derived from {@code dateStr}
- * @param subject    message subject line (never null when constructed via {@link ImapReader})
- * @param body       plain-text body; empty string when no {@code text/plain} part found
- * @param inReplyTo  value of the {@code In-Reply-To:} header; empty string when absent
+ * @param dateStr    оригінальне значення заголовка {@code Date:} з IMAP-повідомлення
+ * @param unixDate   unix-епоха, обчислена з {@code dateStr}
+ * @param subject    рядок теми повідомлення (ніколи не null при створенні через {@link ImapReader})
+ * @param body       текстове тіло; порожній рядок, якщо частину {@code text/plain} не знайдено
+ * @param inReplyTo  значення заголовка {@code In-Reply-To:}; порожній рядок, якщо відсутній
  */
 public record RawMessage(String dateStr, long unixDate, String subject, String body, String inReplyTo) {
 

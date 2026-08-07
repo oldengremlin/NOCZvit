@@ -25,46 +25,46 @@ import net.ukrcom.noczvit.imap.DateUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
- * Renders {@link RamosTrapEvent} objects into an HTML report section and a Claude-ready
- * plain-text block.
+ * Рендерить об'єкти {@link RamosTrapEvent} у секцію HTML-звіту та готовий для Claude
+ * блок звичайного тексту.
  *
- * <p>Events are grouped by room (Room1–Room4, then «Інші») and sorted by timestamp within
- * each group. All rows use the neutral alternating background shared by every report table.
- * The plain-text output includes only {@link RamosTrapEvent#CLAUDE_STATES} — see there for why
- * that set isn't simply "Critical" (falling vs. rising temperature aren't symmetric risks).
+ * <p>Події групуються за залом (Room1–Room4, потім «Інші») і сортуються за timestamp у межах
+ * кожної групи. Усі рядки використовують нейтральний почерговий фон, спільний для всіх таблиць
+ * звіту. Текстовий вивід містить лише події з {@link RamosTrapEvent#CLAUDE_STATES} — див. там,
+ * чому цей набір не просто "Critical" (падіння й зростання температури — не симетричні ризики).
  *
- * <p>Brand colour: {@code #f38120} (RAMOS/CONTEG dark orange) — applied to heading borders
- * via CSS classes defined in the main NOCZvit CSS block.
+ * <p>Фірмовий колір: {@code #f38120} (темно-помаранчевий RAMOS/CONTEG) — застосовується до
+ * рамок заголовків через CSS-класи, визначені в основному CSS-блоці NOCZvit.
  */
 @Slf4j
 public class RamosTrapSection {
 
     /**
-     * Rendered output for one RAMOS trap section.
+     * Результат рендеру однієї секції трапів RAMOS.
      *
-     * @param html      full HTML fragment (empty string when there are no events)
-     * @param plainText plain-text block with only {@link RamosTrapEvent#CLAUDE_STATES} events for
-     *                  Claude; empty when none
+     * @param html      повний HTML-фрагмент (порожній рядок, якщо подій немає)
+     * @param plainText текстовий блок лише з подіями {@link RamosTrapEvent#CLAUDE_STATES} для
+     *                  Claude; порожній, якщо таких немає
      */
     public record SectionResult(String html, String plainText) {
-        /** {@code true} when there are no events to render. */
+        /** {@code true}, якщо рендерити нічого — подій немає. */
         public boolean isEmpty() {
             return html.isBlank();
         }
     }
 
     /**
-     * Builds the HTML section and Claude plain-text block from the given event list.
+     * Будує HTML-секцію та текстовий блок для Claude з переданого списку подій.
      *
-     * @param events list of RAMOS events (may be empty; must not be null)
-     * @return result with both html and plainText populated; empty result when list is empty
+     * @param events список подій RAMOS (може бути порожнім; не повинен бути null)
+     * @return результат із заповненими html і plainText; порожній результат, якщо список порожній
      */
     public SectionResult build(List<RamosTrapEvent> events) {
         if (events.isEmpty()) {
             return new SectionResult("", "");
         }
 
-        // Group by room; "Інші" always last, rooms in alphabetical order otherwise.
+        // Групуємо за залом; "Інші" завжди останні, решта залів — в алфавітному порядку.
         Map<String, List<RamosTrapEvent>> byRoom = events.stream()
                 .sorted(Comparator.comparing(RamosTrapEvent::timestamp))
                 .collect(Collectors.groupingBy(

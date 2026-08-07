@@ -18,16 +18,16 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * A correlated trap incident representing a single logical event on one device.
+ * Скорельований інцидент трапів, що представляє одну логічну подію на одному пристрої.
  *
- * @param deviceClass  {@link TrapEvent#CLASS_ADC} or {@link TrapEvent#CLASS_PDC}
- * @param hostname     device hostname
- * @param ip           device IP address
- * @param severity     event severity
- * @param activatedAt  when the event started
- * @param clearedAt    when the event ended; {@code null} if still open at end of shift
- * @param description  Ukrainian description of the event
- * @param details      optional additional detail lines (e.g. secondary traps that fired)
+ * @param deviceClass  {@link TrapEvent#CLASS_ADC} або {@link TrapEvent#CLASS_PDC}
+ * @param hostname     hostname пристрою
+ * @param ip           IP-адреса пристрою
+ * @param severity     важливість події
+ * @param activatedAt  коли подія почалась
+ * @param clearedAt    коли подія завершилась; {@code null}, якщо досі відкрита наприкінці зміни
+ * @param description  україномовний опис події
+ * @param details      опціональні додаткові рядки деталей (наприклад, супутні трапи, що спрацювали)
  */
 public record TrapIncident(
         String deviceClass,
@@ -47,7 +47,7 @@ public record TrapIncident(
         return clearedAt != null;
     }
 
-    /** Extracts the room identifier from a hostname like {@code adc-r1-1} → {@code r1}. */
+    /** Витягує ідентифікатор залу з hostname на кшталт {@code adc-r1-1} → {@code r1}. */
     public String roomId() {
         String[] parts = hostname.split("-");
         return parts.length >= 2 ? parts[1] : "";

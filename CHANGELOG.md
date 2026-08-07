@@ -6,6 +6,17 @@
 
 ---
 
+## [1.29.1] — 2026-08-07
+
+### Змінено
+- **Усі англомовні коментарі та Javadoc у `src/main/java`, що передували вимозі «спілкуємося українською», перекладено українською.** Усталені англомовні технічні терміни та ідентифікатори лишились без змін, як і текст `log.*`-викликів (свідомо англійською, за конвенцією проекту), дослівні цитати з MIB (`LIEBERT_GP_COND-MIB`) у `TrapCorrelator`, ліцензійні заголовки Apache 2.0. Логіку `UPS Battery Discharging`/`MMS On Battery` у `TrapCorrelator` — і коментарі безпосередньо навколо неї — не чіпали.
+- Заодно кільком раніше недокументованим непублічним методам (`RamosTrapParser.parseBody/expandAbbreviations/extractRoom`, `EmersonTrapParser.parse(RawMessage)/classifyHostname`, `EmersonTrapSection.buildUnknownHtml`, `zabbix.Client.historyValue`, `TrapCorrelator.correlatePdc/correlateAdc/buildPowerOutageIncident/buildStandaloneIncident/extractRoom`, `report.IncidentSectionBuilder.mergedReviewNames`, `PowerResilienceSection.buildPlainTextOne/appendNames`) додано короткий Javadoc — за новим правилом CLAUDE.md (коментар пишеться навіть для непублічних методів)
+
+### Додано
+- **CLAUDE.md: нове правило** — складні (багаторівневі, вкладені) конструкції у функціональному стилі (stream з кількома проміжними операціями, вкладені лямбди, нетривіальні `Collectors`, ланцюжки `CompletableFuture` з обробкою помилок) супроводжувати коротким коментарем, що пояснює логіку блоку в цілому
+
+---
+
 ## [1.29.0] — 2026-08-07
 
 ### Додано

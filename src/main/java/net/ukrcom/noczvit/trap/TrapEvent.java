@@ -17,13 +17,13 @@ package net.ukrcom.noczvit.trap;
 import java.time.Instant;
 
 /**
- * A single normalized SNMP trap event as parsed from an IMAP email.
+ * Одна нормалізована подія SNMP-трапу, розібрана з IMAP-листа.
  *
- * @param timestamp   when the trap was received (from the email {@code Date:} header)
- * @param ip          source IP address as reported in the email body
- * @param hostname    device hostname extracted from the email subject
- * @param trapType    normalized trap type string (quotes stripped, {@code ": "} → {@code ":"})
- * @param deviceClass {@link #CLASS_ADC} or {@link #CLASS_PDC}
+ * @param timestamp   коли трап було отримано (з заголовка листа {@code Date:})
+ * @param ip          IP-адреса джерела, як зазначено в тілі листа
+ * @param hostname    hostname пристрою, витягнутий з теми листа
+ * @param trapType    нормалізований рядок типу трапу (лапки прибрано, {@code ": "} → {@code ":"})
+ * @param deviceClass {@link #CLASS_ADC} або {@link #CLASS_PDC}
  */
 public record TrapEvent(Instant timestamp, String ip, String hostname, String trapType, String deviceClass) {
 

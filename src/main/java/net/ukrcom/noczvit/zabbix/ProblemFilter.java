@@ -64,8 +64,8 @@ public class ProblemFilter {
     }
 
     /**
-     * Returns {@code true} when an IMAP incident for the same device exists within
-     * {@value #DEDUP_TOLERANCE_SEC} seconds of the Zabbix problem's start time.
+     * Повертає {@code true}, якщо для того самого пристрою існує IMAP-інцидент у межах
+     * {@value #DEDUP_TOLERANCE_SEC} секунд від часу початку проблеми Zabbix.
      */
     private static boolean isDuplicateOfImap(ZabbixProblem problem, List<Incident> imapIncidents) {
         return imapIncidents.stream().anyMatch(inc

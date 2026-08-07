@@ -92,9 +92,9 @@ public class ZabbixIncidentConverter {
     }
 
     /**
-     * For adlink hosts resolves "Trap card N, port N, line N" to a human-readable
-     * description via the PD dictionary (key: host:card:port:line).
-     * Falls back to the raw Zabbix problem name when no dictionary entry exists.
+     * Для adlink-хостів перетворює «Trap card N, port N, line N» на людськочитабельний
+     * опис через PD-словник (ключ: host:card:port:line).
+     * Якщо в словнику запису немає — повертає сирий рядок назви Zabbix-проблеми як є.
      */
     private String resolveEventDesc(String host, String name) {
         if (!host.startsWith("adlink")) {
@@ -110,7 +110,7 @@ public class ZabbixIncidentConverter {
     }
 
     /**
-     * Constructs a single {@link Incident} from a Zabbix event timestamp and pre-resolved fields.
+     * Будує один {@link Incident} з мітки часу Zabbix-події та вже розв'язаних полів.
      */
     private Incident buildIncident(long epochSec, String location, String host,
                                    String description, Status status, List<String> reviewNames,

@@ -54,11 +54,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
 /**
- * Entry point for the NOC automated report generator.
+ * Точка входу генератора автоматизованих NOC-звітів.
  *
- * <p>Collects incidents from three sources in parallel (IMAP, Zabbix API, Debtors DB),
- * merges them into a unified incident list, builds an HTML report, and sends it by email.
- * Claude AI summary is generated from the merged incident list when enabled.
+ * <p>Паралельно збирає інциденти з трьох джерел (IMAP, Zabbix API, БД боржників),
+ * зливає їх в єдиний список інцидентів, будує HTML-звіт і надсилає його поштою.
+ * Якщо увімкнено, зі зведеного списку інцидентів генерується резюме Claude AI.
  *
  * @author olden
  */
@@ -66,28 +66,28 @@ import org.slf4j.LoggerFactory;
 public class NOCZvit {
 
     /**
-     * ISO pattern used only to <em>parse</em> the duty-period boundaries below. Everything the
-     * report displays goes through {@link DateUtils#formatUa} instead, so all dates read the
-     * same regardless of source.
+     * ISO-шаблон, що використовується лише для <em>парсингу</em> меж чергувань нижче. Усе, що
+     * показує звіт, натомість проходить через {@link DateUtils#formatUa}, тож усі дати виглядають
+     * однаково незалежно від джерела.
      */
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    /** Upper bound for the whole parallel init phase; well above any healthy run. */
+    /** Верхня межа тривалості всієї паралельної фази ініціалізації; з великим запасом понад будь-який штатний запуск. */
     private static final int INIT_TIMEOUT_MINUTES = 10;
 
     /**
-     * Application entry point.
+     * Точка входу застосунку.
      *
-     * <p>Parses CLI arguments, initialises configuration, fetches IMAP incidents and Zabbix
-     * events in parallel, converts and merges them, builds the HTML report sections, and
-     * sends the result via sendmail (or SMTP in debug mode).
+     * <p>Розбирає аргументи CLI, ініціалізує конфігурацію, паралельно отримує IMAP-інциденти та
+     * Zabbix-події, конвертує та зливає їх, будує розділи HTML-звіту й надсилає результат через
+     * sendmail (або SMTP у режимі debug).
      *
-     * @param args CLI arguments (see {@code help.txt} for the full list)
-     * @throws MessagingException if a fatal IMAP or SMTP error occurs
-     * @throws IOException        if configuration or dictionary files cannot be read
+     * @param args аргументи CLI (повний перелік — у {@code help.txt})
+     * @throws MessagingException якщо стається фатальна помилка IMAP чи SMTP
+     * @throws IOException        якщо не вдається прочитати конфігурацію чи файли словника
      */
     public static void main(String[] args) throws MessagingException, IOException {
-        // Set log level to DEBUG before Config is instantiated so all initialization is visible
+        // Виставляємо рівень логування DEBUG до створення Config, щоб уся ініціалізація була видимою
         if (Arrays.asList(args).contains("--debug")) {
             LoggerContext ctx = (LoggerContext) LoggerFactory.getILoggerFactory();
             ctx.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).setLevel(Level.DEBUG);
@@ -193,7 +193,7 @@ public class NOCZvit {
                             ImapTrapReader reader = new ImapTrapReader(config);
                             List<TrapEvent> events = EmersonTrapParser.parse(
                                     reader.readTraps(isInteractive, fromEpoch, toEpoch));
-                            // Filter by body timestamp — works in both fetchAll and date modes
+                            // Фільтруємо за часовою міткою в тілі повідомлення — працює і в режимі fetchAll, і в режимі за датами
                             events = events.stream()
                                     .filter(e -> !e.timestamp().isBefore(trapFrom)
                                               && !e.timestamp().isAfter(trapTo))
@@ -253,8 +253,8 @@ public class NOCZvit {
                 }
 
                 try {
-                    // Safety net: per-protocol timeouts are set in each client, but a bug there
-                    // would otherwise hang the cron run forever (executor.close() waits 1 day).
+                    // Запобіжник: у кожному клієнті виставлені таймаути для свого протоколу, але
+                    // помилка там інакше підвісила б cron-запуск назавжди (executor.close() чекає 1 добу).
                     // zabbixFuture перелічено явно: транзитивно його покривають лише
                     // zabbixProblemsFuture і resilienceFuture, а обидва вимикаються своїми
                     // прапорцями. При «--zabbix --no-incidents» (звіт лише з температурою та
@@ -348,8 +348,8 @@ public class NOCZvit {
             String allTrapPlainText = trapResult.plainText()
                     + (ramosTrapResult.plainText().isBlank() ? "" : "\n" + ramosTrapResult.plainText());
 
-            // reportFrom/reportTo already resolve the night/day period (see above) — the two
-            // branches differed only in which duty pair they passed on.
+            // reportFrom/reportTo вже визначають нічний/денний період (див. вище) — раніше ці
+            // дві гілки відрізнялися лише тим, яку пару меж чергування вони передавали.
             subject = "Автоматизований звіт за період з " + DateUtils.formatUa(reportFrom)
                     + " по " + DateUtils.formatUa(reportTo);
             if (config.isIncidentsEnabled() && incidents != null) {
@@ -394,7 +394,7 @@ public class NOCZvit {
             new EmailSender(config).sendReport(subject, message.toString());
 
         } catch (MessagingException | IOException e) {
-            // full stack trace: a wrapped NPE used to print "Fatal error: null" with no context
+            // повний stack trace: загорнутий NPE раніше друкував «Fatal error: null» без жодного контексту
             log.error("Fatal error", e);
             System.exit(1);
         }

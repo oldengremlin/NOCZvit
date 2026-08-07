@@ -36,13 +36,13 @@ import net.ukrcom.noczvit.ConcurrentPoll;
 import net.ukrcom.noczvit.imap.DateUtils;
 
 /**
- * Polls SNMP-capable devices for temperature data (Celsius section) and Ramos environmental
- * sensors, then renders the results as HTML report sections.
+ * Опитує SNMP-пристрої щодо температурних даних (розділ Celsius) та датчики середовища
+ * Ramos, після чого формує результати у вигляді HTML-секцій звіту.
  *
- * <p>All host queries run concurrently via virtual threads, bounded by a semaphore of
- * {@value #MAX_CONCURRENT_SNMP} to avoid overwhelming the network. Zabbix temperature graphs
- * are optionally embedded as inline PNG images when a {@link net.ukrcom.noczvit.zabbix.Client}
- * is provided.
+ * <p>Опитування всіх хостів виконується паралельно через віртуальні потоки, обмежене
+ * семафором на {@value #MAX_CONCURRENT_SNMP}, щоб не перевантажувати мережу. Графіки
+ * температури Zabbix опційно вбудовуються як inline PNG-зображення, якщо переданий
+ * {@link net.ukrcom.noczvit.zabbix.Client}.
  */
 @Slf4j
 public class Client {
@@ -50,27 +50,27 @@ public class Client {
     private static final int MAX_CONCURRENT_SNMP = 10;
 
     /**
-     * Intermediate result for one Celsius host query.
+     * Проміжний результат опитування одного хоста Celsius.
      *
-     * @param cells    one or more {@code <td>} fragments for the table row
-     * @param graphRow optional {@code <tr>} row containing the embedded temperature graph
+     * @param cells    один або декілька фрагментів {@code <td>} для рядка таблиці
+     * @param graphRow опційний рядок {@code <tr>} із вбудованим графіком температури
      */
     private record CelsiusResult(String cells, String graphRow) { }
 
     private final Config config;
 
-    /** Creates the SNMP client bound to the given configuration. */
+    /** Створює SNMP-клієнт, прив'язаний до заданої конфігурації. */
     public Client(Config config) {
         this.config = config;
     }
 
     /**
-     * Polls all configured SNMP hosts for temperature data and returns an HTML section.
+     * Опитує всі налаштовані SNMP-хости щодо температурних даних і повертає HTML-секцію.
      *
-     * @param from   report period start (passed through to Zabbix for graph time range)
-     * @param to     report period end
-     * @param zabbix Zabbix client for temperature graphs; {@code null} to skip graphs
-     * @return HTML fragment containing the temperature table (never null)
+     * @param from   початок періоду звіту (передається в Zabbix для визначення діапазону графіка)
+     * @param to     кінець періоду звіту
+     * @param zabbix Zabbix-клієнт для графіків температури; {@code null}, щоб пропустити графіки
+     * @return HTML-фрагмент із таблицею температур (ніколи не null)
      */
     public String getCelsius(LocalDateTime from, LocalDateTime to, net.ukrcom.noczvit.zabbix.Client zabbix) {
         StringBuilder html = new StringBuilder();
@@ -104,8 +104,9 @@ public class Client {
     }
 
     /**
-     * Performs a single SNMPv2c GET for one host, returning the component description, temperature
-     * value, and an optional Zabbix graph row. Returns an error row on any failure.
+     * Виконує один SNMPv2c GET-запит для хоста, повертаючи опис компонента, значення
+     * температури та опційний рядок графіка Zabbix. У разі будь-якої помилки повертає
+     * рядок з описом помилки.
      */
     private CelsiusResult queryHostCelsius(String hostname, LocalDateTime from, LocalDateTime to, net.ukrcom.noczvit.zabbix.Client zabbix) {
         String host = hostname.split(" ")[0];
@@ -162,10 +163,11 @@ public class Client {
     }
 
     /**
-     * Polls all configured Ramos environmental sensors via SNMPv2c GETNEXT walk and returns
-     * an HTML section with per-sensor temperature readings and warning/critical colour coding.
+     * Опитує всі налаштовані датчики середовища Ramos через обхід SNMPv2c GETNEXT і повертає
+     * HTML-секцію з показаннями температури по кожному датчику та кольоровим кодуванням
+     * попереджувальних/критичних значень.
      *
-     * @return HTML fragment containing Ramos sensor tables (never null)
+     * @return HTML-фрагмент із таблицями датчиків Ramos (ніколи не null)
      */
     public String getRamos() {
         StringBuilder html = new StringBuilder();
@@ -182,8 +184,9 @@ public class Client {
     }
 
     /**
-     * Walks the Ramos temperature-sensor MIB subtree for one host using GETNEXT and assembles
-     * an HTML table section with sensor descriptions and colour-coded readings.
+     * Обходить піддерево MIB температурних датчиків Ramos для одного хоста за допомогою
+     * GETNEXT і формує секцію HTML-таблиці з описами датчиків та кольоровим кодуванням
+     * показань.
      */
     private String queryHostRamos(String host) {
         StringBuilder fragment = new StringBuilder();
@@ -265,7 +268,7 @@ public class Client {
                 log.debug("{} = {} : desc={}, unit={}, value={}, lw={}, hw={}, lc={}, hc={}",
                         oid, sensorIndex, desc, unit, value, lw, hw, lc, hc);
 
-                // escape before injecting <font> markers, otherwise they would be escaped too
+                // екрануємо перед вставкою маркерів <font>, інакше вони теж будуть заекрановані
                 if (desc != null) {
                     desc = StringEscapeUtils.escapeHtml4(desc)
                             .replaceAll("(?i)(hot\\s*zone)", "<font color=darkred>$1</font>")
@@ -319,8 +322,9 @@ public class Client {
     }
 
     /**
-     * Safely extracts a string value for {@code oid} from a PDU response.
-     * Returns {@code null} on error response, missing variable, or SNMP "noSuchObject" / "noSuchInstance".
+     * Безпечно видобуває строкове значення для {@code oid} із відповіді PDU.
+     * Повертає {@code null} у разі помилкової відповіді, відсутньої змінної, або
+     * SNMP "noSuchObject" / "noSuchInstance".
      */
     private String extractValue(PDU response, OID oid) {
         if (response == null || response.getErrorStatus() != PDU.noError) {

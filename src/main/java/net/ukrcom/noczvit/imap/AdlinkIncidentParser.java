@@ -27,15 +27,15 @@ import net.ukrcom.noczvit.model.Incident.Status;
 import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
- * Domain: parses Zabbix dry-contact (adlink) alert emails into {@link Incident}
- * objects. Subject format: "[±] Problem/Resolved: <device>: card N, port N,
+ * Домен: парсить листи-алерти Zabbix про сухі контакти (adlink) в об'єкти
+ * {@link Incident}. Формат теми: "[±] Problem/Resolved: <device>: card N, port N,
  * line N - Fault"
  *
- * Dictionary (dictionary_pd.txt) controls semantics:
+ * Семантику визначає словник (dictionary_pd.txt):
  * ^adlink-hoh15-1:0:0:0=зникнення живлення на кондиціонери (лінія 0)
- * ^adlink-hoh15-1=Г.Джонса 15 The line-key lookup returns the event
- * description; device lookup returns the location. Unknown keys fall back to a
- * generic description and are added to reviewNames.
+ * ^adlink-hoh15-1=Г.Джонса 15 Пошук за ключем лінії повертає опис
+ * події; пошук за пристроєм повертає локацію. Невідомі ключі отримують
+ * загальний опис і додаються до reviewNames.
  */
 @Slf4j
 public class AdlinkIncidentParser {
@@ -50,8 +50,8 @@ public class AdlinkIncidentParser {
     }
 
     /**
-     * Returns an Incident if the subject matches the adlink dry-contact
-     * pattern.
+     * Повертає Incident, якщо тема відповідає патерну сухого контакту
+     * adlink.
      *
      * @param msg
      * @return

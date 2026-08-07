@@ -30,21 +30,22 @@ import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Loads and caches three regex-keyed lookup dictionaries: PD (Zabbix/PD hostnames → location
- * names), SDH (OSM location codes → human-readable names), and device-word (Zabbix hostname
- * prefix → Ukrainian device-type word, e.g. {@code "маршрутизаторі "}).
+ * Завантажує та кешує три словники пошуку за regex-ключами: PD (Zabbix/PD-хостнейми →
+ * назви локацій), SDH (коди локацій OSM → людинозрозумілі назви) та device-word (префікс
+ * Zabbix-хостнейму → українське слово типу пристрою, наприклад {@code "маршрутизаторі "}).
  *
- * <p>Entries are sorted longest-regex-first before compilation so that more specific patterns
- * win over shorter, more generic ones. Results are cached in a {@link ConcurrentHashMap} so
- * each key is compiled and matched only once across concurrent callers.
+ * <p>Перед компіляцією записи сортуються за довжиною regex (довші — першими), щоб більш
+ * специфічні патерни мали перевагу над коротшими, загальнішими. Результати кешуються в
+ * {@link ConcurrentHashMap}, тож кожен ключ компілюється й порівнюється лише один раз,
+ * незалежно від кількості одночасних викликів.
  */
 @Slf4j
 public class Dictionary {
 
     /**
-     * Regex fragment matching an adlink dry-contact address ({@code "card N, port N, line N"}),
-     * shared by the IMAP subject parser and the Zabbix API problem-name parser. Each caller wraps
-     * it with its own prefix, so capture-group numbering is the caller's business.
+     * Фрагмент regex, що відповідає адресі сухого контакту adlink ({@code "card N, port N, line N"}),
+     * спільний для парсера теми IMAP-листа та парсера назви проблеми Zabbix API. Кожен викликач
+     * обгортає його власним префіксом, тож нумерація груп захоплення — справа викликача.
      */
     public static final String CARD_PORT_LINE_REGEX =
             "card\\s+(\\d+),\\s*port\\s+(\\d+),\\s*line\\s+(\\d+)";
@@ -64,10 +65,10 @@ public class Dictionary {
     private final ConcurrentHashMap<String, String> deviceWordCache = new ConcurrentHashMap<>();
 
     /**
-     * Loads all three dictionaries using paths from {@code config}, or from bundled resources
-     * when the paths are null.
+     * Завантажує всі три словники за шляхами з {@code config}, або з вбудованих ресурсів,
+     * якщо шляхи не задані (null).
      *
-     * @throws IOException if a dictionary file/resource is missing or unreadable
+     * @throws IOException якщо файл/ресурс словника відсутній або недоступний для читання
      */
     public Dictionary(Config config) throws IOException {
         pdDictionary = new LinkedHashMap<>();
@@ -79,13 +80,13 @@ public class Dictionary {
     }
 
     /**
-     * Reads a {@code key=value} dictionary file, compiles each key as a regex, and stores the
-     * patterns sorted longest-first in {@code dictionary}.
+     * Читає файл словника у форматі {@code key=value}, компілює кожен ключ як regex і
+     * зберігає патерни в {@code dictionary}, відсортовані за довжиною (довші — першими).
      *
-     * @param filePath     external file path, or {@code null} to use the bundled resource
-     * @param resourceName classpath resource name used when {@code filePath} is null
-     * @param dictionary   target map to populate
-     * @throws IOException if the source cannot be opened or read
+     * @param filePath     шлях до зовнішнього файлу, або {@code null}, щоб використати вбудований ресурс
+     * @param resourceName ім'я ресурсу в classpath, яке використовується, коли {@code filePath} дорівнює null
+     * @param dictionary   цільова мапа для заповнення
+     * @throws IOException якщо джерело неможливо відкрити або прочитати
      */
     private void loadDictionary(String filePath, String resourceName, Map<Pattern, String> dictionary) throws IOException {
 
@@ -121,10 +122,10 @@ public class Dictionary {
     }
 
     /**
-     * Opens a stream for a dictionary source: an external file when {@code filePath} is set,
-     * or the named classpath resource otherwise.
+     * Відкриває потік для джерела словника: зовнішній файл, якщо задано {@code filePath},
+     * або названий ресурс classpath — в іншому разі.
      *
-     * @throws IOException if the file is not found or cannot be opened
+     * @throws IOException якщо файл не знайдено або його неможливо відкрити
      */
     private InputStream openStream(String filePath, String resourceName) throws IOException {
         InputStream input;
@@ -144,15 +145,15 @@ public class Dictionary {
     }
 
     /**
-     * Translates a PD/Zabbix hostname to a human-readable location name.
+     * Перекладає PD/Zabbix-хостнейм у людинозрозумілу назву локації.
      *
-     * <p>Normalisation: strips the router/switch prefix ({@code r}, {@code s}, {@code p},
-     * {@code ies*}, {@code alca-}) and, only when a prefix was matched, the trailing numeric
-     * suffix ({@code -N}). Falls back to the original key if no pattern matches.
-     * Results are cached for repeated lookups.
+     * <p>Нормалізація: знімається префікс маршрутизатора/комутатора ({@code r}, {@code s},
+     * {@code p}, {@code ies*}, {@code alca-}) і, лише якщо префікс збігся, кінцевий числовий
+     * суфікс ({@code -N}). Якщо жоден патерн не збігся — повертається оригінальний ключ.
+     * Результати кешуються для повторних викликів.
      *
-     * @param key raw hostname (e.g. {@code r234-1})
-     * @return resolved location name, or {@code key} unchanged when not found
+     * @param key сирий hostname (наприклад {@code r234-1})
+     * @return розпізнана назва локації, або незмінений {@code key}, якщо не знайдено
      */
     public String lookupPD(String key) {
         return pdCache.computeIfAbsent(key, k -> {
@@ -161,9 +162,10 @@ public class Dictionary {
                                 ? k
                                 : PD_HOST_SUFFIX.matcher(afterPrefix).replaceFirst("");
 
-            // null (not "") is the no-match sentinel: dictionary values are never null but may
-            // legitimately be empty (e.g. «^ramos=» in dictionary_device_word.txt), so an empty
-            // match must still count as a hit and skip the fallback pass.
+            // null (а не "") — це сигнальне значення "не знайдено": значення словника ніколи не
+            // бувають null, але можуть законно бути порожніми (наприклад «^ramos=» у
+            // dictionary_device_word.txt), тож порожній збіг все одно має рахуватись як влучення
+            // і пропускати fallback-прохід.
             String byNormalized = firstMatch(pdDictionary, normalized, null);
             if (byNormalized != null) {
                 return byNormalized;
@@ -177,11 +179,11 @@ public class Dictionary {
     }
 
     /**
-     * Translates an SDH/OSM location code to a human-readable name.
-     * Results are cached for repeated lookups.
+     * Перекладає код локації SDH/OSM у людинозрозумілу назву.
+     * Результати кешуються для повторних викликів.
      *
-     * @param key OSM location code (e.g. {@code KHR__HER})
-     * @return resolved location name, or {@code key} unchanged when not found
+     * @param key код локації OSM (наприклад {@code KHR__HER})
+     * @return розпізнана назва локації, або незмінений {@code key}, якщо не знайдено
      */
     public String lookupSDH(String key) {
         return sdhCache.computeIfAbsent(key, k -> firstMatch(sdhDictionary, k, k));
@@ -205,21 +207,21 @@ public class Dictionary {
     }
 
     /**
-     * Outcome of a dictionary lookup: the resolved value plus whether the key fell through
-     * unresolved (the dictionary returned the key itself), which the report surfaces as
+     * Результат пошуку у словнику: розпізнане значення плюс ознака того, чи ключ лишився
+     * нерозпізнаним (словник повернув сам ключ) — це відображається у звіті як
      * «потребує коригування назви».
      *
-     * @param value       resolved name, or the original key when nothing matched
-     * @param needsReview {@code true} when nothing matched
+     * @param value       розпізнана назва, або оригінальний ключ, якщо нічого не збіглося
+     * @param needsReview {@code true}, якщо нічого не збіглося
      */
     public record Resolution(String value, boolean needsReview) {
     }
 
     /**
-     * Looks a hostname up in the PD dictionary and reports whether it resolved.
+     * Шукає hostname у PD-словнику та повідомляє, чи вдалося його розпізнати.
      *
-     * @param key raw hostname
-     * @return resolved value and review flag
+     * @param key сирий hostname
+     * @return розпізнане значення та ознака необхідності перевірки
      */
     public Resolution resolvePD(String key) {
         String value = lookupPD(key);
@@ -227,10 +229,10 @@ public class Dictionary {
     }
 
     /**
-     * Looks an OSM location code up in the SDH dictionary and reports whether it resolved.
+     * Шукає код локації OSM у SDH-словнику та повідомляє, чи вдалося його розпізнати.
      *
-     * @param key OSM location code
-     * @return resolved value and review flag
+     * @param key код локації OSM
+     * @return розпізнане значення та ознака необхідності перевірки
      */
     public Resolution resolveSDH(String key) {
         String value = lookupSDH(key);
@@ -238,34 +240,35 @@ public class Dictionary {
     }
 
     /**
-     * Builds the PD-dictionary key for one adlink dry-contact line
+     * Формує ключ PD-словника для однієї лінії сухого контакту adlink
      * ({@code device:card:port:line}).
      *
-     * @param device adlink hostname
-     * @param card   card number
-     * @param port   port number
-     * @param line   line number
-     * @return composite dictionary key
+     * @param device hostname adlink-пристрою
+     * @param card   номер картки
+     * @param port   номер порту
+     * @param line   номер лінії
+     * @return складений ключ словника
      */
     public static String lineKey(String device, String card, String port, String line) {
         return device + ":" + card + ":" + port + ":" + line;
     }
 
     /**
-     * Returns the value of the first dictionary entry whose regex matches {@code key}, or
-     * {@code fallback} when none does. Entries are pre-sorted longest-key-first, so the most
-     * specific pattern wins.
+     * Повертає значення першого запису словника, чий regex збігається з {@code key}, або
+     * {@code fallback}, якщо жоден не збігся. Записи попередньо відсортовані за довжиною
+     * ключа (довші — першими), тож перевагу має найспецифічніший патерн.
      *
-     * <p>Reads only the (effectively immutable after construction) pattern map and allocates a
-     * fresh {@link java.util.regex.Matcher} per entry — {@link Pattern} is thread-safe but
-     * {@code Matcher} is not, so no matcher is ever shared. Deliberately touches none of the
-     * caches: it runs inside {@code computeIfAbsent}, where re-entering the same map would
-     * risk an {@link IllegalStateException} or a stuck bin.
+     * <p>Читає лише (фактично незмінну після конструювання) мапу патернів і виділяє новий
+     * {@link java.util.regex.Matcher} для кожного запису — {@link Pattern} є потокобезпечним,
+     * а {@code Matcher} — ні, тож жоден matcher ніколи не використовується спільно. Свідомо
+     * не торкається жодного з кешів: метод виконується всередині {@code computeIfAbsent}, де
+     * повторний вхід у ту саму мапу міг би призвести до {@link IllegalStateException} або
+     * "зависання" bin'а.
      *
-     * @param dictionary compiled pattern → value map to scan
-     * @param key        string to match against
-     * @param fallback   value returned when nothing matches (may be {@code null})
-     * @return matched value, or {@code fallback}
+     * @param dictionary скомпільована мапа патерн → значення для сканування
+     * @param key        рядок, з яким виконується порівняння
+     * @param fallback   значення, що повертається, якщо нічого не збіглося (може бути {@code null})
+     * @return знайдене значення, або {@code fallback}
      */
     private static String firstMatch(Map<Pattern, String> dictionary, String key, String fallback) {
         for (Map.Entry<Pattern, String> entry : dictionary.entrySet()) {

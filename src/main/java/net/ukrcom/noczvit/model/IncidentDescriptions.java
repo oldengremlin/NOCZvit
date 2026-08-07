@@ -17,34 +17,35 @@ package net.ukrcom.noczvit.model;
 import net.ukrcom.noczvit.model.Incident.Status;
 
 /**
- * Shared wording for {@link Incident} descriptions and the alert-subject → {@link Status}
- * mapping, used by every incident source (the four IMAP parsers and the Zabbix API converter).
+ * Спільні формулювання для описів {@link Incident} та відображення теми сповіщення →
+ * {@link Status}, які використовуються кожним джерелом інцидентів (чотирма IMAP-парсерами
+ * та конвертером Zabbix API).
  *
- * <p>Keeping this in one place matters for the report itself: {@code IncidentSectionBuilder}
- * rewrites a paired row's description by replacing the literal {@code "початок інциденту, "} /
- * {@code "кінець інциденту, "} fragments, so any source that words its prefix differently would
- * silently stop pairing correctly.
+ * <p>Зберігання цього в одному місці важливе для самого звіту: {@code IncidentSectionBuilder}
+ * переписує опис спарованого рядка, замінюючи буквальні фрагменти {@code "початок інциденту, "} /
+ * {@code "кінець інциденту, "}, тож будь-яке джерело, яке формулює свій префікс інакше,
+ * непомітно зламало б парування.
  *
- * <p><b>Thread safety:</b> stateless — all methods are static and operate only on their
- * arguments. Incident sources run concurrently on virtual threads.
+ * <p><b>Потокобезпека:</b> без стану — усі методи статичні й оперують лише своїми
+ * аргументами. Джерела інцидентів виконуються одночасно на віртуальних потоках.
  */
 public final class IncidentDescriptions {
 
-    /** Source label for Zabbix-originated incidents (both IMAP alerts and the Zabbix API). */
+    /** Мітка джерела для інцидентів, що походять від Zabbix (як IMAP-сповіщення, так і Zabbix API). */
     public static final String SOURCE_ZABBIX = "Zabbix";
 
-    /** Source label for OSM/SDH-originated incidents. */
+    /** Мітка джерела для інцидентів, що походять від OSM/SDH. */
     public static final String SOURCE_OSM = "OSM";
 
     private IncidentDescriptions() {
     }
 
     /**
-     * Maps an alert subject to a lifecycle status: {@code " Resolved:"} → {@link Status#END},
-     * {@code " Problem:"} → {@link Status#START}, anything else → {@link Status#NONE}.
+     * Відображає тему сповіщення на статус життєвого циклу: {@code " Resolved:"} → {@link Status#END},
+     * {@code " Problem:"} → {@link Status#START}, все інше → {@link Status#NONE}.
      *
-     * @param subject raw mail subject
-     * @return resolved status; never null
+     * @param subject сира тема листа
+     * @return розпізнаний статус; ніколи не null
      */
     public static Status resolveStatus(String subject) {
         if (subject.contains(" Resolved:")) {
@@ -57,25 +58,25 @@ public final class IncidentDescriptions {
     }
 
     /**
-     * Builds the description prefix, e.g. {@code "Zabbix зареєстровано початок інциденту, "}.
-     * {@link Status#NONE} yields the bare {@code "<source> зареєстровано "} form.
+     * Формує префікс опису, наприклад {@code "Zabbix зареєстровано початок інциденту, "}.
+     * {@link Status#NONE} дає просту форму {@code "<source> зареєстровано "}.
      *
-     * @param source source label ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
-     * @param status incident lifecycle status
-     * @return prefix ending with a trailing space
+     * @param source мітка джерела ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
+     * @param status статус життєвого циклу інциденту
+     * @return префікс, що закінчується пробілом
      */
     public static String statePrefix(String source, Status status) {
         return statePrefix(source, status, "");
     }
 
     /**
-     * Builds the description prefix, with an explicit wording for {@link Status#NONE}.
+     * Формує префікс опису з явним формулюванням для {@link Status#NONE}.
      *
-     * @param source   source label ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
-     * @param status   incident lifecycle status
-     * @param noneText what follows {@code "зареєстровано "} for {@link Status#NONE} — OSM says
-     *                 {@code "інцидент, "}, Zabbix sources leave it empty
-     * @return prefix ending with a trailing space
+     * @param source   мітка джерела ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
+     * @param status   статус життєвого циклу інциденту
+     * @param noneText що йде після {@code "зареєстровано "} для {@link Status#NONE} — OSM пише
+     *                 {@code "інцидент, "}, джерела Zabbix лишають порожнім
+     * @return префікс, що закінчується пробілом
      */
     public static String statePrefix(String source, Status status, String noneText) {
         return source + " зареєстровано " + switch (status) {
@@ -89,27 +90,26 @@ public final class IncidentDescriptions {
     }
 
     /**
-     * Assembles a full description from the state prefix and an event phrase, collapsing runs of
-     * whitespace — event phrases are concatenated from dictionary values that may carry stray
-     * spacing.
+     * Збирає повний опис із префікса стану та фрази події, стискаючи послідовності пробілів —
+     * фрази події складаються зі значень словника, які можуть мати зайві пробіли.
      *
-     * @param source source label ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
-     * @param status incident lifecycle status
-     * @param event  event phrase (e.g. {@code "зникнення зв'язку з обладнанням на Прахових 50"})
-     * @return normalised description
+     * @param source мітка джерела ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
+     * @param status статус життєвого циклу інциденту
+     * @param event  фраза події (наприклад {@code "зникнення зв'язку з обладнанням на Прахових 50"})
+     * @return нормалізований опис
      */
     public static String describe(String source, Status status, String event) {
         return describe(source, status, event, "");
     }
 
     /**
-     * Assembles a full description, with an explicit wording for {@link Status#NONE}.
+     * Збирає повний опис з явним формулюванням для {@link Status#NONE}.
      *
-     * @param source   source label ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
-     * @param status   incident lifecycle status
-     * @param event    event phrase
-     * @param noneText what follows {@code "зареєстровано "} for {@link Status#NONE}
-     * @return normalised description
+     * @param source   мітка джерела ({@link #SOURCE_ZABBIX} / {@link #SOURCE_OSM})
+     * @param status   статус життєвого циклу інциденту
+     * @param event    фраза події
+     * @param noneText що йде після {@code "зареєстровано "} для {@link Status#NONE}
+     * @return нормалізований опис
      */
     public static String describe(String source, Status status, String event, String noneText) {
         return (statePrefix(source, status, noneText) + event).replaceAll("\\s+", " ");

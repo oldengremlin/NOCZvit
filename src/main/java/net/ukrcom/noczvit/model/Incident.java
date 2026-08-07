@@ -17,26 +17,26 @@ package net.ukrcom.noczvit.model;
 import java.util.List;
 
 /**
- * Domain model for a single network incident from either PD (Zabbix) or OSM
- * (SDH) source.
+ * Доменна модель одного мережевого інциденту з джерела PD (Zabbix) або OSM
+ * (SDH).
  *
- * @param location dict-resolved location name used for grouping (e.g. "Обухів,
- * Малишка 2")
- * @param device raw device identifier for PD incidents; empty string for OSM
- * @param messageTs unix epoch of the IMAP message
- * @param eventTs unix epoch of the actual event (equals messageTs for PD; from
- * Trap value for OSM)
- * @param messageDateStr localized date string of the IMAP message
- * @param eventDateStr localized date string of the actual event (equals
- * messageDateStr for PD)
- * @param source which system detected the incident
- * @param status incident lifecycle status
- * @param description plain-text event description (no HTML)
- * @param reviewNames device/location names not found in dictionary; empty when
- * all resolved
- * @param inReplyTo   pairing key: {@code In-Reply-To:} header for IMAP incidents,
- * synthetic {@code "zabbix:host:clock"} for Zabbix API incidents,
- * empty string for unpaired events (OSM, etc.)
+ * @param location назва локації, розпізнана словником, використовується для
+ * групування (наприклад "Обухів, Малишка 2")
+ * @param device сирий ідентифікатор пристрою для PD-інцидентів; порожній рядок для OSM
+ * @param messageTs unix epoch IMAP-повідомлення
+ * @param eventTs unix epoch фактичної події (дорівнює messageTs для PD; береться
+ * зі значення Trap для OSM)
+ * @param messageDateStr локалізований рядок дати IMAP-повідомлення
+ * @param eventDateStr локалізований рядок дати фактичної події (дорівнює
+ * messageDateStr для PD)
+ * @param source яка система виявила інцидент
+ * @param status статус життєвого циклу інциденту
+ * @param description опис події у форматі plain-text (без HTML)
+ * @param reviewNames назви пристроїв/локацій, не знайдені у словнику; порожній
+ * список, якщо все розпізнано
+ * @param inReplyTo   ключ парування: заголовок {@code In-Reply-To:} для IMAP-інцидентів,
+ * синтетичний {@code "zabbix:host:clock"} для інцидентів Zabbix API,
+ * порожній рядок для непарних подій (OSM тощо)
  */
 public record Incident(
         String location,
@@ -53,19 +53,19 @@ public record Incident(
         ) {
 
     /**
-     * Identifies which monitoring system generated the incident.
-     * {@code PD} — Zabbix email alerts parsed by {@code PdIncidentParser} or {@code OspfIncidentParser};
-     * {@code OSM} — SDH/OSM trap emails parsed by {@code OsmIncidentParser};
-     * {@code ZABBIX} — events fetched directly from the Zabbix API.
+     * Визначає, яка система моніторингу згенерувала інцидент.
+     * {@code PD} — email-сповіщення Zabbix, розібрані {@code PdIncidentParser} або {@code OspfIncidentParser};
+     * {@code OSM} — trap-листи SDH/OSM, розібрані {@code OsmIncidentParser};
+     * {@code ZABBIX} — події, отримані напряму з Zabbix API.
      */
     public enum Source {
         PD, OSM, ZABBIX
     }
 
     /**
-     * Incident lifecycle state.
-     * {@code START} — problem onset; {@code END} — problem resolved;
-     * {@code NONE} — informational event without a clear start/end pair.
+     * Стан життєвого циклу інциденту.
+     * {@code START} — початок проблеми; {@code END} — проблему вирішено;
+     * {@code NONE} — інформаційна подія без чіткої пари початок/кінець.
      */
     public enum Status {
         START, END, NONE

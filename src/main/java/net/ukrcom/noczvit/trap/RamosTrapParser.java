@@ -31,40 +31,40 @@ import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
- * Parses RAMOS environmental-sensor trap emails into {@link RamosTrapEvent} objects.
+ * Розбирає листи з трапами датчиків довкілля RAMOS в об'єкти {@link RamosTrapEvent}.
  *
- * <p>Expected email subject: contains {@code "Got trap from ramos"} (case-insensitive).
+ * <p>Очікувана тема листа: містить {@code "Got trap from ramos"} (без урахування регістру).
  *
- * <p>Expected body format per trap:
+ * <p>Очікуваний формат тіла на кожен трап:
  * <pre>
  * At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
  * \t"STATE" / "SENSOR_NAME" / "SENSOR_TYPE"
  * </pre>
  *
- * <p>Sensor names may appear as Perl-generated hex byte dumps (a known bug in the RAMOS Perl
- * sender) and can span multiple lines. Example:
+ * <p>Назви датчиків можуть надходити як hex-дампи байтів, згенеровані Perl (відома вада
+ * Perl-відправника RAMOS), і можуть займати кілька рядків. Приклад:
  * {@code "52 6F 6F 6D 34 20 D0 90 D0 9D D0 A2 D0 98\n D0 9F 20 53 30 36"}
- * is decoded to UTF-8 as {@code "Room4 АНТИПОТОП S06"}.
+ * декодується в UTF-8 як {@code "Room4 АНТИПОТОП S06"}.
  *
- * <p>Only events whose state is one of Critical, High Critical, Low Critical,
- * High Warning, Low Warning, Warning, or Sensor Error are returned
- * (see {@link RamosTrapEvent#REPORTABLE_STATES}).
+ * <p>Повертаються лише події, чий стан — один з Critical, High Critical, Low Critical,
+ * High Warning, Low Warning, Warning або Sensor Error
+ * (див. {@link RamosTrapEvent#REPORTABLE_STATES}).
  */
 @Slf4j
 public class RamosTrapParser {
 
-    // Shared header (group 1 = timestamp, group 2 = source IP) + RAMOS's own body: three quoted
-    // fields — state, sensor name, sensor type (groups 3-5).
-    // [^\n]* swallows the uptime portion without crossing the line boundary.
+    // Спільний заголовок (група 1 = timestamp, група 2 = IP джерела) + власне тіло RAMOS: три
+    // поля в лапках — стан, назва датчика, тип датчика (групи 3-5).
+    // [^\n]* поглинає частину з uptime, не переходячи межу рядка.
     private static final Pattern TRAP_RE = Pattern.compile(
             TrapMailFormat.HEADER_PREFIX
             + "[^\\n]*registered trap:\\s*\\r?\\n"
             + "[ \\t]+\"([^\"]+)\"\\s*/\\s+\"([^\"]+)\"\\s*/\\s+\"([^\"]+)\"",
             Pattern.CASE_INSENSITIVE);
 
-    // Sensor name is hex-encoded when it consists entirely of space-separated hex byte pairs.
-    // At least 4 groups are required: shorter names like "AC" (air conditioner) or "DC DC"
-    // are valid hex too and would otherwise be decoded into replacement characters.
+    // Назва датчика вважається hex-кодованою, якщо цілком складається з пар hex-байтів,
+    // розділених пробілами. Потрібно щонайменше 4 групи: короткі назви на кшталт "AC"
+    // (кондиціонер) чи "DC DC" теж є валідним hex і інакше декодувалися б у символи заміни.
     private static final Pattern HEX_SENSOR_RE = Pattern.compile(
             "^(?:[0-9A-Fa-f]{2}\\s+){3,}[0-9A-Fa-f]{2}\\s*$");
 
@@ -74,10 +74,10 @@ public class RamosTrapParser {
     }
 
     /**
-     * Parses all RAMOS trap messages from the given raw message list.
+     * Розбирає всі листи з трапами RAMOS зі списку сирих повідомлень.
      *
-     * @param messages raw IMAP messages (may contain non-RAMOS messages; they are skipped)
-     * @return list of parsed events in arrival order; never null
+     * @param messages сирі IMAP-повідомлення (можуть містити й не-RAMOS листи; вони пропускаються)
+     * @return список розібраних подій у порядку надходження; ніколи не null
      */
     public static List<RamosTrapEvent> parse(List<RawMessage> messages) {
         List<RamosTrapEvent> result = new ArrayList<>();
@@ -90,6 +90,11 @@ public class RamosTrapParser {
         return result;
     }
 
+    /**
+     * Знаходить у тілі листа всі трапи, що відповідають {@link #TRAP_RE}, і для кожного,
+     * чий стан входить до {@link RamosTrapEvent#REPORTABLE_STATES}, додає розібрану подію
+     * до {@code result}.
+     */
     private static void parseBody(String body, long messageEpochSec, List<RamosTrapEvent> result) {
         if (body == null || body.isBlank()) {
             return;
@@ -106,7 +111,8 @@ public class RamosTrapParser {
                 continue;
             }
 
-            // Normalise multiline hex: collapse internal newlines + leading whitespace into a space
+            // Нормалізуємо багаторядковий hex: внутрішні переноси рядків + провідні пробіли
+            // згортаємо в один пробіл
             String sensorNameNorm = sensorNameRaw.replaceAll("[\\r\\n]+[ \\t]*", " ").strip();
             String decodedName = decodeSensorName(sensorNameNorm);
             String room = extractRoom(decodedName);
@@ -128,8 +134,8 @@ public class RamosTrapParser {
     }
 
     /**
-     * Decodes a sensor name that is a Perl hex byte dump back to UTF-8.
-     * Returns the original string unchanged when it does not match the hex pattern.
+     * Декодує назву датчика, що є hex-дампом байтів від Perl, назад у UTF-8.
+     * Повертає початковий рядок без змін, якщо він не відповідає hex-шаблону.
      */
     private static String decodeSensorName(String raw) {
         if (!HEX_SENSOR_RE.matcher(raw).matches()) {
@@ -137,8 +143,9 @@ public class RamosTrapParser {
         }
         try {
             byte[] bytes = HexFormat.of().parseHex(raw.replaceAll("\\s+", ""));
-            // Strict decode: new String(bytes, UTF_8) silently yields U+FFFD for a truncated
-            // dump, so a name that is hex-shaped but not valid UTF-8 must stay as-is.
+            // Строге декодування: new String(bytes, UTF_8) мовчки видало б U+FFFD для
+            // обрізаного дампу, тож назва, що виглядає як hex, але не є валідним UTF-8,
+            // має лишитись як є.
             return StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -150,12 +157,14 @@ public class RamosTrapParser {
         }
     }
 
+    /** Розгортає скорочення в назві датчика (AVR, room N) у повні україномовні формулювання. */
     private static String expandAbbreviations(String name) {
         name = name.replaceAll("(?i)\\bAVR\\b", "автоматичний ввід резерву");
         name = name.replaceAll("(?i)\\broom\\s*(\\d+)", "зал $1");
         return name;
     }
 
+    /** Витягує номер залу з назви датчика; якщо не знайдено — повертає "Інші". */
     private static String extractRoom(String sensorName) {
         Matcher m = ROOM_RE.matcher(sensorName);
         return m.find() ? "Room" + m.group(1) : "Інші";
