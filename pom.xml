@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>net.ukr-com</groupId>
     <artifactId>NOCZvit</artifactId>
-    <version>1.29.3</version>
+    <version>1.30.0</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -68,6 +68,11 @@
             <version>3.51.2.0</version>
         </dependency>
         <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+            <version>4.7.6</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>6.0.3</version>
@@ -83,7 +88,6 @@
                     <include>dictionary_sdh.txt</include>
                     <include>dictionary_pd.txt</include>
                     <include>dictionary_device_word.txt</include>
-                    <include>help.txt</include>
                     <include>version.properties</include>
                     <include>logback.xml</include>
                 </includes>

@@ -303,6 +303,96 @@ class ConfigTest {
         assertEquals("ДЦ1", config.getRamos().get("10.0.0.1").get("name"));
     }
 
+    // ---- CLI-пріоритет над дзеркальними властивостями (по одному прикладу на кожен
+    //      xxxProperties(CliArgs)-метод — сам механізм pick()/pickBool()/pickInt() уже
+    //      покрито вище через --zabbix/--no-incidents/--claude) ----
+
+    @Test
+    @DisplayName("--snmp-hosts перемагає snmp.hosts у properties")
+    void cliFlag_overridesSnmpHostsInProperties(@TempDir Path tempDir) throws IOException {
+        Path p = tempDir.resolve("custom.properties");
+        Files.writeString(p, baseProperties() + "\nsnmp.hosts=fromfile:desc=1\n", StandardCharsets.UTF_8);
+
+        Config config = new Config(new String[]{"--config=" + p, "--snmp-hosts=fromcli:desc=2"});
+        assertEquals("2", config.getHosts().get("fromcli").get("desc"));
+        assertFalse(config.getHosts().containsKey("fromfile"));
+    }
+
+    @Test
+    @DisplayName("--snmp-community перемагає snmp.community у properties")
+    void cliFlag_overridesSnmpCommunityInProperties() throws IOException {
+        Config config = TestFixtures.config("--snmp-community=cli-community");
+        assertEquals("cli-community", config.getSnmpCommunity());
+    }
+
+    @Test
+    @DisplayName("--zabbix-graphwidth перемагає zabbix.graphwidth у properties")
+    void cliFlag_overridesZabbixGraphwidthInProperties() throws IOException {
+        Config config = TestFixtures.config("--zabbix-graphwidth=999");
+        assertEquals(999, config.getZabbixGraphWidth());
+    }
+
+    @Test
+    @DisplayName("--account-mssql-user перемагає account-mssql-user у properties")
+    void cliFlag_overridesAccountMssqlUserInProperties(@TempDir Path tempDir) throws IOException {
+        Path p = tempDir.resolve("custom.properties");
+        Files.writeString(p, baseProperties() + "\naccount-mssql-user=from-file\n", StandardCharsets.UTF_8);
+
+        Config config = new Config(new String[]{"--config=" + p, "--account-mssql-user=from-cli"});
+        assertEquals("from-cli", config.getAccountMssqlUser());
+    }
+
+    @Test
+    @DisplayName("--mail-hostname перемагає mail.hostname у properties")
+    void cliFlag_overridesMailHostnameInProperties() throws IOException {
+        Config config = TestFixtures.config("--mail-hostname=cli-imap.invalid");
+        assertEquals("cli-imap.invalid", config.getMailHostname());
+    }
+
+    @Test
+    @DisplayName("--claude-apikey перемагає claude.apikey у properties")
+    void cliFlag_overridesClaudeApiKeyInProperties() throws IOException {
+        Config config = TestFixtures.config("--claude-apikey=cli-key");
+        assertEquals("cli-key", config.getClaudeApiKey());
+    }
+
+    @Test
+    @DisplayName("--history-resume перемагає history.resume у properties")
+    void cliFlag_overridesHistoryResumeInProperties(@TempDir Path tempDir) throws IOException {
+        Path p = tempDir.resolve("custom.properties");
+        Files.writeString(p, baseProperties() + "\nhistory.resume=jdbc:sqlite:from-file.db\n", StandardCharsets.UTF_8);
+
+        Config config = new Config(new String[]{"--config=" + p, "--history-resume=jdbc:sqlite:from-cli.db"});
+        assertEquals("jdbc:sqlite:from-cli.db", config.getHistoryResumeUrl());
+    }
+
+    @Test
+    @DisplayName("--snmp-trap-folder перемагає snmp.trap.folder у properties")
+    void cliFlag_overridesSnmpTrapFolderInProperties() throws IOException {
+        Config config = TestFixtures.config("--snmp-trap-folder=INBOX.CLI");
+        assertEquals("INBOX.CLI", config.getSnmpTrapFolder());
+    }
+
+    // ---- hasNoConfiguration (пряме тестування чистої функції — без System.exit) ----
+
+    @Test
+    @DisplayName("hasNoConfiguration: true, коли аргументів немає і файлу конфігурації не знайдено")
+    void hasNoConfiguration_trueWhenNoArgsAndNoPropertiesFile() {
+        assertTrue(Config.hasNoConfiguration(new String[0], false));
+    }
+
+    @Test
+    @DisplayName("hasNoConfiguration: false, коли аргументів немає, але файл конфігурації є")
+    void hasNoConfiguration_falseWhenNoArgsButPropertiesFileExists() {
+        assertFalse(Config.hasNoConfiguration(new String[0], true));
+    }
+
+    @Test
+    @DisplayName("hasNoConfiguration: false, коли є хоч один аргумент, навіть без файлу конфігурації")
+    void hasNoConfiguration_falseWhenAnyArgPresent() {
+        assertFalse(Config.hasNoConfiguration(new String[]{"--debug"}, false));
+    }
+
     // ---- Регресія: --dictionarydeviceword= не має вбивати процес ----
 
     @Test

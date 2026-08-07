@@ -488,6 +488,7 @@ classDiagram
   - Apache Commons Text `org.apache.commons:commons-text:1.15.0`
   - Gson `com.google.code.gson:gson:2.13.2`
   - jTDS `net.sourceforge.jtds:jtds:1.3.1`
+  - picocli `info.picocli:picocli:4.7.6` (розбір аргументів CLI, `--help`/`--version`)
   - Lombok `org.projectlombok:lombok:1.18.46` (provided)
   - Anthropic Java SDK `com.anthropic:anthropic-java:2.34.0` (опціонально, для Claude AI)
   - SQLite JDBC `org.xerial:sqlite-jdbc:3.51.2.0` (опціонально, для міжзмінної пам'яті Claude)
@@ -512,7 +513,7 @@ JUnit 5, без Mockito — «чужі» залежності (Zabbix API, IMAP,
 
 Кілька приватних методів навмисно звужені до package-private (не `public`) саме для прямого виклику з тесту в тому самому пакеті — без рефлексії. Перший приклад — `imap/Client.deduplicateAdlink`/`isPdMessage`/`isOspfMessage`/`isAdlinkMessage`/`isOsmMessage`.
 
-**459 тестів**, фіксують поточну поведінку майже всього дерева бізнес-логіки: словники й нормалізація hostname, усі 5 джерел інцидентів (Pd/Osm/Ospf/Adlink/Zabbix), конвеєри трапів Emerson і RAMOS (парсинг, дедуплікація, state machine кореляції, рендеринг), аудит резервного живлення (бакетинг, кореляція перезавантаження, вердикт), `Config` (пріоритет CLI/properties/дефолт), білдер таблиці інцидентів. Правило поводження з тестами під час рефакторингу — у `CLAUDE.md`, розділ «Тести».
+**475 тестів**, фіксують поточну поведінку майже всього дерева бізнес-логіки: словники й нормалізація hostname, усі 5 джерел інцидентів (Pd/Osm/Ospf/Adlink/Zabbix), конвеєри трапів Emerson і RAMOS (парсинг, дедуплікація, state machine кореляції, рендеринг), аудит резервного живлення (бакетинг, кореляція перезавантаження, вердикт), `Config` (пріоритет CLI/properties/дефолт для кожної властивості — picocli), білдер таблиці інцидентів. Правило поводження з тестами під час рефакторингу — у `CLAUDE.md`, розділ «Тести».
 
 ## Запуск
 
@@ -522,8 +523,14 @@ java -jar target/NOCZvit-1.16.0.jar [OPTIONS]
 
 ### Параметри командного рядка
 
+Розбір аргументів — [picocli](https://picocli.info/) (`CliArgs.java`). **Кожна властивість `noczvit.properties` має відповідну опцію** — опція, коли задана, перевизначає властивість з файлу; якщо ні опції, ні властивості немає — застосовується вбудоване значення за замовчуванням. Повний і завжди актуальний список — `--help`/`-h` (генерується з коду, тому не може розійтися з реальністю, на відміну від колишнього окремого `help.txt`). `--version`/`-V` виводить версію збірки.
+
+Якщо не задано **ні** `--config=`/вбудованого `noczvit.properties`, **ні** жодного аргументу командного рядка — замість падіння на порожній конфігурації виводиться та сама довідка.
+
 | Параметр | Опис |
 |---|---|
+| `-h`, `--help` | Показати довідку й завершити роботу |
+| `-V`, `--version` | Показати версію й завершити роботу |
 | `--config=<шлях>` | Шлях до зовнішнього файлу конфігурації (за замовчуванням — вбудований `noczvit.properties`) |
 | `--dictionarypd=<шлях>` | Шлях до зовнішнього словника PD |
 | `--dictionarysdh=<шлях>` | Шлях до зовнішнього словника SDH |
@@ -533,10 +540,59 @@ java -jar target/NOCZvit-1.16.0.jar [OPTIONS]
 | `--ramos` / `--no-ramos` | Увімкнути/вимкнути блок Ramos |
 | `--zabbix` / `--no-zabbix` | Увімкнути/вимкнути вбудовування графіків температури з Zabbix |
 | `--resilience-audit` / `--no-resilience-audit` | Увімкнути/вимкнути секцію «Аудит резервного живлення через непрямий сигнал» (потребує `--zabbix`) |
+| `--resilienceaudit-ignoreinterfaceprefixes=<список>` | Префікси технічних імен інтерфейсів через кому, що виключаються з аудиту (напр. `wireguard,sstp`) |
 | `--claude` / `--no-claude` | Увімкнути/вимкнути AI-резюме зміни (за замовчуванням: увімк. в нормальному режимі, вимк. в `--debug`) |
 | `--debug` / `--no-debug` | Дебаг-режим: звіт надсилається на `email.toDebug` замість `email.to` |
 
-Параметри командного рядка мають пріоритет над налаштуваннями у `noczvit.properties`.
+<details>
+<summary>Решта опцій — по одній на кожну властивість <code>noczvit.properties</code> (розгорнути)</summary>
+
+| Параметр | Властивість | Опис |
+|---|---|---|
+| `--snmp-hosts=<...>` | `snmp.hosts` | Мапа хостів SNMP-моніторингу температури |
+| `--snmp-ramos=<...>` | `snmp.ramos` | Мапа хостів RAMOS |
+| `--snmp-jnxoperatingdescr=<oid>` | `snmp.jnxOperatingDescr` | OID опису компонента температури |
+| `--snmp-jnxoperatingtemp=<oid>` | `snmp.jnxOperatingTemp` | OID значення температури |
+| `--snmp-community=<...>` | `snmp.community` | SNMPv2c community за замовчуванням |
+| `--snmp-community-celsius=<...>` | `snmp.community.celsius` | SNMPv2c community для блоку температури |
+| `--snmp-community-ramos=<...>` | `snmp.community.ramos` | SNMPv2c community для блоку RAMOS |
+| `--snmp-hosts-suffix=<...>` | `snmp.hosts.suffix` | Суфікс hostname при SNMP-опитуванні |
+| `--zabbix-api=<url>` | `zabbix.api` | URL Zabbix API (`api_jsonrpc.php`) |
+| `--zabbix-url=<url>` | `zabbix.url` | Базовий URL Zabbix web UI (для графіків) |
+| `--zabbix-username=<...>` | `zabbix.username` | Ім'я користувача Zabbix API |
+| `--zabbix-password=<...>` | `zabbix.password` | Пароль Zabbix API |
+| `--zabbix-graphwidth=<px>` | `zabbix.graphwidth` | Ширина вбудованих графіків (за замовчуванням 640) |
+| `--zabbix-graphheight=<px>` | `zabbix.graphheight` | Висота вбудованих графіків (за замовчуванням 83) |
+| `--account-mssql-user=<...>` | `account-mssql-user` | Користувач MSSQL, БД боржників |
+| `--account-mssql-password=<...>` | `account-mssql-password` | Пароль MSSQL, БД боржників |
+| `--account-mssql-server=<...>` | `account-mssql-server` | Сервер MSSQL, БД боржників |
+| `--account-mssql-database=<...>` | `account-mssql-database` | Назва БД MSSQL, боржники |
+| `--accequipment-mssql-user=<...>` | `accequipment-mssql-user` | Користувач MSSQL, БД обладнання |
+| `--accequipment-mssql-password=<...>` | `accequipment-mssql-password` | Пароль MSSQL, БД обладнання |
+| `--accequipment-mssql-server=<...>` | `accequipment-mssql-server` | Сервер MSSQL, БД обладнання |
+| `--accequipment-mssql-database=<...>` | `accequipment-mssql-database` | Назва БД MSSQL, обладнання |
+| `--mail-hostname=<...>` | `mail.hostname` | Hostname IMAP-сервера |
+| `--mail-username=<...>` | `mail.username` | Ім'я користувача IMAP |
+| `--mail-password=<...>` | `mail.password` | Пароль IMAP |
+| `--mail-ssl` / `--no-mail-ssl` | `mail.ssl` | SSL/IMAPS для з'єднання |
+| `--mail-zabbixfolder=<...>` | `mail.zabbixFolder` | IMAP-тека з листами Zabbix |
+| `--email-from=<...>` | `email.from` | Адреса відправника (From) |
+| `--email-replyto=<...>` | `email.replyTo` | Адреса для відповіді (Reply-To) |
+| `--email-to=<...>` | `email.to` | Адреси одержувачів звіту (через кому) |
+| `--email-todebug=<...>` | `email.toDebug` | Адреса одержувача в режимі `--debug` |
+| `--email-sendmail=<шлях>` | `email.sendmail` | Шлях до бінарника sendmail |
+| `--claude-apikey=<...>` | `claude.apikey` | API-ключ Claude |
+| `--claude-model=<...>` | `claude.model` | Модель Claude для резюме |
+| `--claude-tokens=<n>` | `claude.tokens` | Максимум токенів відповіді |
+| `--claude-minsentences=<n>` | `claude.minsentences` | Мінімум речень у резюме |
+| `--claude-maxsentences=<n>` | `claude.maxsentences` | Максимум речень у резюме |
+| `--history-resume=<jdbc-url>` | `history.resume` | JDBC URL SQLite для зведень між змінами |
+| `--snmp-trap-folder=<...>` | `snmp.trap.folder` | IMAP-тека з SNMP-трапами Emerson |
+| `--snmp-trap-dedup-seconds=<n>` | `snmp.trap.dedup.seconds` | Вікно дедуплікації трапів |
+| `--snmp-trap-coldstart-link-minutes=<n>` | `snmp.trap.coldstart.link.minutes` | Вікно прив'язки Cold Start до відновлення хоста |
+| `--ramos-trap-folder=<...>` | `ramos.trap.folder` | IMAP-тека з трапами RAMOS |
+
+</details>
 
 ### Приклад запуску в дебаг-режимі
 
@@ -1043,7 +1099,8 @@ IMAP порівнює дати з **добовою** гранулярністю,
 NOCZvit/
 ├── src/main/java/net/ukrcom/noczvit/
 │   ├── NOCZvit.java               — точка входу
-│   ├── Config.java                — зчитування та валідація конфігурації (Lombok)
+│   ├── Config.java                — зчитування та валідація конфігурації (Lombok); CLI перевизначає noczvit.properties
+│   ├── CliArgs.java               — модель аргументів CLI (picocli); кожне поле дзеркалить одну властивість noczvit.properties
 │   ├── Dictionary.java            — словники PD/SDH/device-word (regex-lookup з кешем; нормалізація hostname: prefix ^[rsp]/ies/alca- + суфікс -N; resolvePD/resolveSDH → Resolution(value, needsReview); ключ adlink device:card:port:line)
 │   ├── Debtors.java               — список боржників із MSSQL
 │   ├── ConcurrentPoll.java        — обмежений паралельний fan-out на virtual threads (Semaphore); спільний для snmp.Client та zabbix.PowerResilienceAuditor
@@ -1096,7 +1153,6 @@ NOCZvit/
 │   ├── dictionary_pd.txt          — словник PD/OSPF/adlink (regex → назва / опис)
 │   ├── dictionary_sdh.txt         — словник SDH/OSM (regex → назва виносу)
 │   ├── dictionary_device_word.txt — словник hostname-префікс → тип пристрою (regex → «маршрутизаторі», «комутаторі» тощо)
-│   ├── help.txt
 │   └── version.properties
 └── pom.xml
 ```

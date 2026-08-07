@@ -14,11 +14,14 @@
  */
 package net.ukrcom.noczvit;
 
-import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -34,17 +37,20 @@ import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import picocli.CommandLine;
 
 /**
  * Конфігурація застосунку, що завантажується з файлу властивостей і перевизначається
- * аргументами командного рядка.
+ * аргументами командного рядка (picocli, {@link CliArgs}) — кожній властивості відповідає
+ * опція, і опція, коли задана, перевизначає властивість з файлу.
  *
  * <p>Послідовність побудови (усі виклики йдуть з конструктора по черзі):
- * {@link #initValues()} → {@link #parsePathArgs(String[])} → {@link #loadProperties()} →
- * {@link #generalProperties()} → {@link #parseFlagArgs(String[])} →
- * {@link #hostsProperties()} → {@link #ramosProperties()} → {@link #celsiusProperties()} →
- * {@link #emailProperties()} → {@link #mssqlProperties()} → {@link #zabbixProperties()} →
- * {@link #claudeProperties()} → {@link #historyResumeProperties()} → {@link #trapProperties()}.
+ * {@link #initValues()} → {@link #parseCliArgs(String[])} → {@link #loadProperties()} →
+ * {@link #generalProperties(CliArgs)} → {@link #hostsProperties(CliArgs)} →
+ * {@link #ramosProperties(CliArgs)} → {@link #celsiusProperties(CliArgs)} →
+ * {@link #emailProperties(CliArgs)} → {@link #mssqlProperties(CliArgs)} →
+ * {@link #zabbixProperties(CliArgs)} → {@link #claudeProperties(CliArgs)} →
+ * {@link #historyResumeProperties(CliArgs)} → {@link #trapProperties(CliArgs)}.
  */
 @Slf4j
 // секрети виключені, щоб майбутній log.debug("config={}", config) не міг їх злити;
@@ -85,7 +91,6 @@ public class Config {
     private String dictionarySdhPath;
     @NonNull
     private String dictionaryDeviceWordPath;
-    private static final String HELP_PATH = "help.txt";
 
     @NonNull
     private String mailHostname;
@@ -160,24 +165,40 @@ public class Config {
     /**
      * Завантажує й перевіряє повну конфігурацію.
      *
+     * <p>{@code --help}/{@code -h} і {@code --version}/{@code -V} обробляються тут-таки й
+     * завершують процес (picocli {@code mixinStandardHelpOptions}) — до бізнес-логіки не
+     * доходить. Так само, якщо не задано ні {@code --config=}/вбудованого
+     * {@code noczvit.properties}, ні жодного аргументу CLI — довідка виводиться замість
+     * подальшого падіння на порожній конфігурації.
+     *
      * @param args аргументи командного рядка, передані до {@code main()}
      * @throws IOException якщо файл властивостей або файл словника неможливо прочитати
      */
     public Config(String[] args) throws IOException {
         initValues();
-        parsePathArgs(args);
+        CliArgs cli = parseCliArgs(args);
+        configPath = cli.config;
+        dictionaryPdPath = cli.dictionaryPd;
+        dictionarySdhPath = cli.dictionarySdh;
+        dictionaryDeviceWordPath = cli.dictionaryDeviceWord;
+
+        if (hasNoConfiguration(args, propertiesFileExists(configPath))) {
+            log.error("No configuration file and no CLI arguments provided");
+            new CommandLine(new CliArgs()).usage(utf8(System.err));
+            System.exit(1);
+        }
+
         loadProperties();
-        generalProperties();
-        parseFlagArgs(args);
-        hostsProperties();
-        ramosProperties();
-        celsiusProperties();
-        emailProperties();
-        mssqlProperties();
-        zabbixProperties();
-        claudeProperties();
-        historyResumeProperties();
-        trapProperties();
+        generalProperties(cli);
+        hostsProperties(cli);
+        ramosProperties(cli);
+        celsiusProperties(cli);
+        emailProperties(cli);
+        mssqlProperties(cli);
+        zabbixProperties(cli);
+        claudeProperties(cli);
+        historyResumeProperties(cli);
+        trapProperties(cli);
     }
 
     /** Встановлює безпечні значення за замовчуванням для всіх полів до застосування властивостей чи аргументів CLI. */
@@ -230,146 +251,141 @@ public class Config {
     }
 
     /**
-     * Сканує {@code args} на предмет аргументів-шляхів ({@code --config=}, {@code --dictionarypd=},
-     * {@code --dictionarysdh=}, {@code --dictionarydeviceword=}), які мають бути відомі ще до
-     * завантаження властивостей.
+     * Розбирає {@code args} через picocli. {@code --help}/{@code -h} і {@code --version}/
+     * {@code -V} обробляються тут-таки (виводяться й процес завершується) — жоден виклик
+     * далі по конструктору їх не побачить. Невідомий аргумент чи хибне значення опції теж
+     * завершує процес (з кодом 1) після виводу довідки — так само, як і раніше з ручним
+     * switch, лише повідомлення тепер генерує сам picocli.
      */
-    private void parsePathArgs(String[] args) {
-        for (String arg : args) {
-            if (arg.startsWith("--config=")) {
-                configPath = arg.substring("--config=".length()).trim();
-            } else if (arg.startsWith("--dictionarypd=")) {
-                dictionaryPdPath = arg.substring("--dictionarypd=".length()).trim();
-            } else if (arg.startsWith("--dictionarysdh=")) {
-                dictionarySdhPath = arg.substring("--dictionarysdh=".length()).trim();
-            } else if (arg.startsWith("--dictionarydeviceword=")) {
-                dictionaryDeviceWordPath = arg.substring("--dictionarydeviceword=".length()).trim();
-            }
+    private CliArgs parseCliArgs(String[] args) {
+        CliArgs cli = new CliArgs();
+        CommandLine cmd = new CommandLine(cli);
+        try {
+            cmd.parseArgs(args);
+        } catch (CommandLine.ParameterException e) {
+            log.error("Invalid CLI arguments: {}", e.getMessage());
+            cmd.usage(utf8(System.err));
+            System.exit(1);
         }
+        if (cmd.isUsageHelpRequested()) {
+            cmd.usage(utf8(System.out));
+            System.exit(0);
+        }
+        if (cmd.isVersionHelpRequested()) {
+            cmd.printVersionHelp(utf8(System.out));
+            System.exit(0);
+        }
+        return cli;
     }
 
     /**
-     * Обробляє булеві прапорці та перемикачі функціональності CLI ({@code --incidents},
-     * {@code --debug}, {@code --claude} тощо). При будь-якому нерозпізнаному аргументі
-     * виводить довідку й завершує процес.
+     * Обгортає потік у {@link PrintWriter} з примусовим UTF-8 — довідка й помилки CLI
+     * містять кирилицю, а {@code System.out}/{@code System.err} без явно заданого
+     * {@code LANG} (типово в cron) кодують за застарілим ASCII/{@code file.encoding},
+     * перетворюючи кожну кириличну літеру на {@code ?}.
      */
-    private void parseFlagArgs(String[] args) {
-        for (String arg : args) {
-            // --dictionarydeviceword= тут бракувало, хоча parsePathArgs() уже його обробляє —
-            // кожен реальний виклик із цим прапорцем потрапляв у гілку "Unknown argument"
-            // нижче й убивав процес через System.exit(1).
-            if (arg.startsWith("--config=") || arg.startsWith("--dictionarypd=")
-                    || arg.startsWith("--dictionarysdh=") || arg.startsWith("--dictionarydeviceword=")) {
-                continue;
-            }
-            switch (arg) {
-                case "--incidents" ->
-                    incidentsEnabled = true;
-                case "--no-incidents" ->
-                    incidentsEnabled = false;
-                case "--temperature" ->
-                    temperatureEnabled = true;
-                case "--no-temperature" ->
-                    temperatureEnabled = false;
-                case "--ramos" ->
-                    ramosEnabled = true;
-                case "--no-ramos" ->
-                    ramosEnabled = false;
-                case "--zabbix" ->
-                    zabbixEnabled = true;
-                case "--no-zabbix" ->
-                    zabbixEnabled = false;
-                case "--resilience-audit" ->
-                    resilienceAuditEnabled = true;
-                case "--no-resilience-audit" ->
-                    resilienceAuditEnabled = false;
-                case "--debug" ->
-                    debug = true;
-                case "--no-debug" ->
-                    debug = false;
-                case "--claude" ->
-                    claudeExplicit = true;
-                case "--no-claude" ->
-                    claudeExplicit = false;
-                default -> {
-                    printHelp();
-                    log.error("Unknown argument: {}", arg);
-                    System.exit(1);
-                }
-            }
-        }
+    private static PrintWriter utf8(OutputStream out) {
+        return new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true);
     }
 
-    /** Виводить вбудований ресурс {@code help.txt} у stderr. */
-    private void printHelp() {
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream(HELP_PATH)) {
-            if (input == null) {
-                log.warn("Help file not found in resources: {}", HELP_PATH);
-                return;
-            }
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.err.println(line);
-                }
-            }
-        } catch (IOException e) {
-            log.warn("Failed to read help file {}: {}", HELP_PATH, e.getMessage());
-        }
+    /**
+     * {@code true}, коли немає ні файлу конфігурації (ні зовнішнього через {@code --config=},
+     * ні вбудованого {@code noczvit.properties}), ні жодного аргументу командного рядка —
+     * повністю порожній виклик, для якого змістовніше показати довідку, ніж провалитись
+     * далі на відсутніх обов'язкових властивостях. Package-private і без побічних ефектів
+     * (I/O винесено в {@link #propertiesFileExists}) — щоб можна було перевірити напряму,
+     * не викликаючи {@code System.exit()} в тестовому процесі.
+     */
+    static boolean hasNoConfiguration(String[] args, boolean propertiesFileExists) {
+        return args.length == 0 && !propertiesFileExists;
     }
 
-    /** Читає верхньорівневі булеві прапорці ({@code debug}, {@code incidents} тощо) з властивостей. */
-    private void generalProperties() {
-        debug = Boolean.parseBoolean(properties.getProperty("debug", "false"));
-        incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
-        temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
-        ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
-        zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
+    /**
+     * {@code true}, коли файл властивостей насправді доступний: зовнішній шлях
+     * ({@code configPath}) існує як файл, або (коли шлях не задано) вбудований ресурс
+     * {@code noczvit.properties} присутній у classpath.
+     */
+    private static boolean propertiesFileExists(String configPath) {
+        if (configPath != null) {
+            return new File(configPath).isFile();
+        }
+        return Config.class.getClassLoader().getResource("noczvit.properties") != null;
+    }
+
+    /** CLI-значення, якщо задане, інакше — сирий рядок властивості (може бути {@code null}). */
+    private String pick(String cliValue, String propertyKey) {
+        return cliValue != null ? cliValue : properties.getProperty(propertyKey);
+    }
+
+    /** Те саме, що {@link #pick(String, String)}, з фолбеком на {@code defaultValue}. */
+    private String pick(String cliValue, String propertyKey, String defaultValue) {
+        return cliValue != null ? cliValue : properties.getProperty(propertyKey, defaultValue);
+    }
+
+    /** CLI-прапорець, якщо заданий, інакше — булева властивість (чи {@code defaultValue}). */
+    private boolean pickBool(Boolean cliValue, String propertyKey, boolean defaultValue) {
+        return cliValue != null ? cliValue
+                : Boolean.parseBoolean(properties.getProperty(propertyKey, String.valueOf(defaultValue)));
+    }
+
+    /** CLI-значення, якщо задане, інакше — ціла властивість через {@link #parseIntSafe}. */
+    private int pickInt(Integer cliValue, String propertyKey, int defaultValue) {
+        return cliValue != null ? cliValue : parseIntSafe(properties.getProperty(propertyKey), defaultValue);
+    }
+
+    /** Читає верхньорівневі булеві прапорці ({@code debug}, {@code incidents} тощо) з CLI/властивостей. */
+    private void generalProperties(CliArgs cli) {
+        debug = pickBool(cli.debug, "debug", false);
+        incidentsEnabled = pickBool(cli.incidents, "incidents", true);
+        temperatureEnabled = pickBool(cli.temperature, "temperature", true);
+        ramosEnabled = pickBool(cli.ramos, "ramos", false);
+        zabbixEnabled = pickBool(cli.zabbix, "zabbix", false);
         // Opt-in, як ramos/zabbix, а не увімкнено за замовчуванням, як incidents/temperature —
         // нова функція, що залежить від поведінки Zabbix history/item.get, яку потрібно
         // перевірити на реальному інстансі, перш ніж запускати без нагляду в продакшені.
-        resilienceAuditEnabled = Boolean.parseBoolean(properties.getProperty("resilienceaudit", "false"));
+        resilienceAuditEnabled = pickBool(cli.resilienceAudit, "resilienceaudit", false);
         // Zabbix бачить лише текстове ім'я інтерфейсу (ifDescr/ifName), не ifType — типи на
         // кшталт MikroTik wireguard/sstp/l2tp/pptp нічим не позначені в SNMP-даних, які тут
         // доступні, а самі імена користувач може перейменувати як завгодно. Тому єдиний
         // робочий варіант без додаткових SNMP-запитів — порівняння префікса імені зі списком,
         // який задає сам адміністратор (порожньо за замовчуванням — нічого не виключається).
-        resilienceIgnoredInterfacePrefixes = parseCommaList(
-                properties.getProperty("resilienceaudit.ignoreinterfaceprefixes", ""));
+        resilienceIgnoredInterfacePrefixes = parseCommaList(pick(
+                cli.resilienceauditIgnoreinterfaceprefixes, "resilienceaudit.ignoreinterfaceprefixes", ""));
+        Boolean claudeFromProperty = null;
         String claudeProp = properties.getProperty("claude");
         if (claudeProp != null) {
-            claudeExplicit = Boolean.valueOf(claudeProp);
+            claudeFromProperty = Boolean.valueOf(claudeProp);
         }
+        claudeExplicit = cli.claude != null ? cli.claude : claudeFromProperty;
     }
 
     /**
-     * Розбирає {@code snmp.hosts} у незмінну {@code Map<hostname, Map<attr, value>>}.
-     * Кожен запис має вигляд {@code hostname:key=val;key=val,...}.
+     * Розбирає {@code snmp.hosts} (CLI {@code --snmp-hosts} перевизначає властивість) у незмінну
+     * {@code Map<hostname, Map<attr, value>>}. Кожен запис має вигляд {@code hostname:key=val;key=val,...}.
      */
-    private void hostsProperties() {
-        hosts = parseKeyedAttributes("snmp.hosts");
+    private void hostsProperties(CliArgs cli) {
+        hosts = parseKeyedAttributes(pick(cli.snmpHosts, "snmp.hosts"));
     }
 
     /**
-     * Розбирає {@code snmp.ramos} у незмінну {@code Map<ip, Map<attr, value>>}.
-     * Кожен запис має вигляд {@code ip:key=val;key=val,...}.
+     * Розбирає {@code snmp.ramos} (CLI {@code --snmp-ramos} перевизначає властивість) у незмінну
+     * {@code Map<ip, Map<attr, value>>}. Кожен запис має вигляд {@code ip:key=val;key=val,...}.
      */
-    private void ramosProperties() {
-        ramos = parseKeyedAttributes("snmp.ramos");
+    private void ramosProperties(CliArgs cli) {
+        ramos = parseKeyedAttributes(pick(cli.snmpRamos, "snmp.ramos"));
     }
 
     /**
-     * Розбирає властивість, що містить розділені комою записи {@code key:attr=val;attr=val},
-     * у вкладену мапу. Записи без роздільника {@code :} та атрибути без {@code =}
-     * пропускаються. Обидва рівні обгортаються як незмінні — ці мапи публікуються віртуальним
-     * потокам після завершення розбору й ніколи не повинні змінюватись після цього.
+     * Розбирає рядок виду {@code key:attr=val;attr=val,key2:...} у вкладену мапу. Записи без
+     * роздільника {@code :} та атрибути без {@code =} пропускаються. Обидва рівні обгортаються
+     * як незмінні — ці мапи публікуються віртуальним потокам після завершення розбору й ніколи
+     * не повинні змінюватись після цього.
      *
-     * @param propertyKey ім'я властивості для читання (напр. {@code snmp.hosts})
-     * @return незмінна мапа ключ → незмінна мапа атрибутів; порожня, якщо властивість відсутня
+     * @param raw сирий рядок (з CLI або властивості); {@code null} дає порожню мапу
+     * @return незмінна мапа ключ → незмінна мапа атрибутів; порожня, якщо {@code raw} відсутній
      */
-    private Map<String, Map<String, String>> parseKeyedAttributes(String propertyKey) {
+    private Map<String, Map<String, String>> parseKeyedAttributes(String raw) {
         Map<String, Map<String, String>> result = new HashMap<>();
-        String raw = properties.getProperty(propertyKey);
         if (raw != null) {
             for (String entry : raw.split(",")) {
                 String[] parts = entry.split(":", 2);
@@ -388,24 +404,24 @@ public class Config {
         return Collections.unmodifiableMap(result);
     }
 
-    /** Читає SNMP community-рядки та налаштування OID для опитування Celsius / температури. */
-    private void celsiusProperties() {
-        jnxOperatingDescr = properties.getProperty("snmp.jnxOperatingDescr");
-        jnxOperatingTemp = properties.getProperty("snmp.jnxOperatingTemp");
-        snmpCommunity = properties.getProperty("snmp.community", "public");
-        snmpCommunityCelsius = properties.getProperty("snmp.community.celsius", snmpCommunity);
-        snmpCommunityRamos = properties.getProperty("snmp.community.ramos", snmpCommunity);
-        snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
+    /** Читає SNMP community-рядки та налаштування OID для опитування Celsius / температури (CLI/властивості). */
+    private void celsiusProperties(CliArgs cli) {
+        jnxOperatingDescr = pick(cli.snmpJnxOperatingDescr, "snmp.jnxOperatingDescr");
+        jnxOperatingTemp = pick(cli.snmpJnxOperatingTemp, "snmp.jnxOperatingTemp");
+        snmpCommunity = pick(cli.snmpCommunity, "snmp.community", "public");
+        snmpCommunityCelsius = pick(cli.snmpCommunityCelsius, "snmp.community.celsius", snmpCommunity);
+        snmpCommunityRamos = pick(cli.snmpCommunityRamos, "snmp.community.ramos", snmpCommunity);
+        snmpHostsSuffix = pick(cli.snmpHostsSuffix, "snmp.hosts.suffix", "");
     }
 
-    /** Читає URL Zabbix API, облікові дані та розміри графіків з властивостей. */
-    private void zabbixProperties() {
-        zabbixApi = properties.getProperty("zabbix.api", "");
-        zabbixUrl = properties.getProperty("zabbix.url", "");
-        zabbixUsername = properties.getProperty("zabbix.username", "");
-        zabbixPassword = properties.getProperty("zabbix.password", "");
-        zabbixGraphWidth = parseIntSafe(properties.getProperty("zabbix.graphwidth"), 640);
-        zabbixGraphHeight = parseIntSafe(properties.getProperty("zabbix.graphheight"), 83);
+    /** Читає URL Zabbix API, облікові дані та розміри графіків з CLI/властивостей. */
+    private void zabbixProperties(CliArgs cli) {
+        zabbixApi = pick(cli.zabbixApi, "zabbix.api", "");
+        zabbixUrl = pick(cli.zabbixUrl, "zabbix.url", "");
+        zabbixUsername = pick(cli.zabbixUsername, "zabbix.username", "");
+        zabbixPassword = pick(cli.zabbixPassword, "zabbix.password", "");
+        zabbixGraphWidth = pickInt(cli.zabbixGraphwidth, "zabbix.graphwidth", 640);
+        zabbixGraphHeight = pickInt(cli.zabbixGraphheight, "zabbix.graphheight", 83);
     }
 
     /**
@@ -439,32 +455,32 @@ public class Config {
                 .toList();
     }
 
-    /** Читає облікові дані MSSQL як для БД account, так і для БД accequipment. */
-    private void mssqlProperties() {
-        accountMssqlUser = properties.getProperty("account-mssql-user", "");
-        accountMssqlPassword = properties.getProperty("account-mssql-password", "");
-        accountMssqlServer = properties.getProperty("account-mssql-server", "");
-        accountMssqlDatabase = properties.getProperty("account-mssql-database", "");
-        accequipmentMssqlUser = properties.getProperty("accequipment-mssql-user", "");
-        accequipmentMssqlPassword = properties.getProperty("accequipment-mssql-password", "");
-        accequipmentMssqlServer = properties.getProperty("accequipment-mssql-server", "");
-        accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
+    /** Читає облікові дані MSSQL як для БД account, так і для БД accequipment (CLI/властивості). */
+    private void mssqlProperties(CliArgs cli) {
+        accountMssqlUser = pick(cli.accountMssqlUser, "account-mssql-user", "");
+        accountMssqlPassword = pick(cli.accountMssqlPassword, "account-mssql-password", "");
+        accountMssqlServer = pick(cli.accountMssqlServer, "account-mssql-server", "");
+        accountMssqlDatabase = pick(cli.accountMssqlDatabase, "account-mssql-database", "");
+        accequipmentMssqlUser = pick(cli.accequipmentMssqlUser, "accequipment-mssql-user", "");
+        accequipmentMssqlPassword = pick(cli.accequipmentMssqlPassword, "accequipment-mssql-password", "");
+        accequipmentMssqlServer = pick(cli.accequipmentMssqlServer, "accequipment-mssql-server", "");
+        accequipmentMssqlDatabase = pick(cli.accequipmentMssqlDatabase, "accequipment-mssql-database", "");
     }
 
-    /** Читає налаштування IMAP та SMTP/sendmail разом зі списками email-адрес. */
-    private void emailProperties() {
-        mailHostname = properties.getProperty("mail.hostname");
-        mailUsername = properties.getProperty("mail.username");
-        mailPassword = properties.getProperty("mail.password");
-        mailSsl = Boolean.parseBoolean(properties.getProperty("mail.ssl", "false"));
-        zabbixFolder = properties.getProperty("mail.zabbixFolder");
+    /** Читає налаштування IMAP та SMTP/sendmail разом зі списками email-адрес (CLI/властивості). */
+    private void emailProperties(CliArgs cli) {
+        mailHostname = pick(cli.mailHostname, "mail.hostname");
+        mailUsername = pick(cli.mailUsername, "mail.username");
+        mailPassword = pick(cli.mailPassword, "mail.password");
+        mailSsl = pickBool(cli.mailSsl, "mail.ssl", false);
+        zabbixFolder = pick(cli.mailZabbixfolder, "mail.zabbixFolder");
 
-        emailFrom = properties.getProperty("email.from");
-        emailReplyTo = properties.getProperty("email.replyTo");
-        emailToDebug = properties.getProperty("email.toDebug");
-        sendmailPath = properties.getProperty("email.sendmail", "/usr/sbin/sendmail");
+        emailFrom = pick(cli.emailFrom, "email.from");
+        emailReplyTo = pick(cli.emailReplyto, "email.replyTo");
+        emailToDebug = pick(cli.emailTodebug, "email.toDebug");
+        sendmailPath = pick(cli.emailSendmail, "email.sendmail", "/usr/sbin/sendmail");
         List<String> toList = new ArrayList<>();
-        String toStr = properties.getProperty("email.to");
+        String toStr = pick(cli.emailTo, "email.to");
         if (toStr != null) {
             for (String email : toStr.split(",")) {
                 toList.add(email.trim());
@@ -479,17 +495,22 @@ public class Config {
      * <p>Порядок пріоритету: прапорець CLI ({@code --claude} / {@code --no-claude}) перевизначає
      * властивість {@code claude}, яка перевизначає значення за замовчуванням (увімкнено, лише
      * якщо не в режимі debug). Claude автоматично вимикається, якщо {@code claude.apikey} порожній.
+     * Числові й рядкові властивості так само мають CLI-відповідники ({@code --claude-tokens} тощо),
+     * що перевизначають властивість.
      */
-    private void claudeProperties() {
-        String key = stripInlineComment(properties.getProperty("claude.apikey", ""));
+    private void claudeProperties(CliArgs cli) {
+        String key = cli.claudeApikey != null ? cli.claudeApikey
+                : stripInlineComment(properties.getProperty("claude.apikey", ""));
         if (!key.isBlank()) {
             claudeApiKey = key;
         }
-        String model = stripInlineComment(properties.getProperty("claude.model", ""));
+        String model = cli.claudeModel != null ? cli.claudeModel
+                : stripInlineComment(properties.getProperty("claude.model", ""));
         if (!model.isBlank()) {
             claudeModel = model;
         }
-        String tokens = stripInlineComment(properties.getProperty("claude.tokens", ""));
+        String tokens = cli.claudeTokens != null ? String.valueOf(cli.claudeTokens)
+                : stripInlineComment(properties.getProperty("claude.tokens", ""));
         if (!tokens.isBlank()) {
             try {
                 int t = Integer.parseInt(tokens);
@@ -500,7 +521,8 @@ public class Config {
                 log.warn("claude.tokens: некоректне значення «{}» — використовується {}", tokens, claudeMaxTokens);
             }
         }
-        String minSentences = stripInlineComment(properties.getProperty("claude.minsentences", ""));
+        String minSentences = cli.claudeMinsentences != null ? String.valueOf(cli.claudeMinsentences)
+                : stripInlineComment(properties.getProperty("claude.minsentences", ""));
         if (!minSentences.isBlank()) {
             try {
                 int s = Integer.parseInt(minSentences);
@@ -511,7 +533,8 @@ public class Config {
                 log.warn("claude.minsentences: некоректне значення «{}» — використовується {}", minSentences, claudeMinSentences);
             }
         }
-        String maxSentences = stripInlineComment(properties.getProperty("claude.maxsentences", ""));
+        String maxSentences = cli.claudeMaxsentences != null ? String.valueOf(cli.claudeMaxsentences)
+                : stripInlineComment(properties.getProperty("claude.maxsentences", ""));
         if (!maxSentences.isBlank()) {
             try {
                 int s = Integer.parseInt(maxSentences);
@@ -532,27 +555,30 @@ public class Config {
     }
 
     /**
-     * Читає опціональний JDBC URL {@code history.resume} для сховища SQLite зведень між змінами.
-     * Залишає {@link #historyResumeUrl} порожнім рядком, якщо властивість відсутня чи порожня.
+     * Читає опціональний JDBC URL {@code history.resume} (CLI {@code --history-resume}
+     * перевизначає властивість) для сховища SQLite зведень між змінами. Залишає
+     * {@link #historyResumeUrl} порожнім рядком, якщо ні CLI, ні властивість не задані.
      */
-    private void historyResumeProperties() {
-        String url = stripInlineComment(properties.getProperty("history.resume", ""));
+    private void historyResumeProperties(CliArgs cli) {
+        String url = stripInlineComment(pick(cli.historyResume, "history.resume", ""));
         if (!url.isBlank()) {
             historyResumeUrl = url;
         }
     }
 
     /**
-     * Читає шаблон папки SNMP trap та параметри налаштування.
-     * Залишає {@link #snmpTrapFolder} порожнім (функція вимкнена), якщо властивість відсутня чи порожня.
+     * Читає шаблон папки SNMP trap та параметри налаштування (CLI перевизначає властивість).
+     * Залишає {@link #snmpTrapFolder} порожнім (функція вимкнена), якщо ні CLI, ні властивість
+     * не задані.
      */
-    private void trapProperties() {
-        String folder = stripInlineComment(properties.getProperty("snmp.trap.folder", ""));
+    private void trapProperties(CliArgs cli) {
+        String folder = stripInlineComment(pick(cli.snmpTrapFolder, "snmp.trap.folder", ""));
         if (!folder.isBlank()) {
             snmpTrapFolder = folder;
         }
         try {
-            String dedup = stripInlineComment(properties.getProperty("snmp.trap.dedup.seconds", ""));
+            String dedup = cli.snmpTrapDedupSeconds != null ? String.valueOf(cli.snmpTrapDedupSeconds)
+                    : stripInlineComment(properties.getProperty("snmp.trap.dedup.seconds", ""));
             if (!dedup.isBlank()) {
                 snmpTrapDedupSeconds = Integer.parseInt(dedup);
             }
@@ -560,14 +586,15 @@ public class Config {
             log.warn("snmp.trap.dedup.seconds: invalid value, using default {}", snmpTrapDedupSeconds);
         }
         try {
-            String link = stripInlineComment(properties.getProperty("snmp.trap.coldstart.link.minutes", ""));
+            String link = cli.snmpTrapColdstartLinkMinutes != null ? String.valueOf(cli.snmpTrapColdstartLinkMinutes)
+                    : stripInlineComment(properties.getProperty("snmp.trap.coldstart.link.minutes", ""));
             if (!link.isBlank()) {
                 snmpTrapColdstartLinkMinutes = Integer.parseInt(link);
             }
         } catch (NumberFormatException e) {
             log.warn("snmp.trap.coldstart.link.minutes: invalid value, using default {}", snmpTrapColdstartLinkMinutes);
         }
-        String ramosFolder = stripInlineComment(properties.getProperty("ramos.trap.folder", ""));
+        String ramosFolder = stripInlineComment(pick(cli.ramosTrapFolder, "ramos.trap.folder", ""));
         if (!ramosFolder.isBlank()) {
             ramosTrapFolder = ramosFolder;
         }
