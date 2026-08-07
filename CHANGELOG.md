@@ -6,6 +6,13 @@
 
 ---
 
+## [1.27.1] — 2026-08-07
+
+### Додано
+- Тести `Config` (23), `IncidentSectionBuilder` (11), `PowerResilienceResult`/`PowerResilienceAuditor`/`PowerResilienceSection` (44) — разом 78 тестів, усі проходять. `PowerResilienceAuditor` тестується через fake-підклас `zabbix.Client` (перевизначені `public`-методи, без Mockito) — конструктор `Client` не робить мережевих викликів, тож підклас безпечний
+
+---
+
 ## [1.27.0] — 2026-08-07
 
 ### Додано
