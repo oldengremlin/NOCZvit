@@ -6,6 +6,18 @@
 
 ---
 
+## [1.29.3] — 2026-08-07
+
+### Змінено
+- **Оновлено інструментарій збірки**: `junit-jupiter` 5.11.4 → 6.0.3, `maven-surefire-plugin` 3.2.5 → 3.5.5, `maven-compiler-plugin` → 3.15.0, `maven-jar-plugin` → 3.5.0, `maven-shade-plugin` → 3.6.2, `maven-resources-plugin` → 3.5.0 (правка NetBeans, тестовий набір — 464/464 — проходить без змін)
+- **NetBeans-підказки Javadoc доопрацьовано.** Автоматично згенеровані NetBeans теги `@param`/`@return` без опису (типова заглушка IDE) — заповнено змістовним текстом українською в 16 файлах (47 місць): `Config`, `ConcurrentPoll`, `Debtors`, `Dictionary`, `smtp.EmailSender`, `snmp.Client`, `trap.ImapTrapReader`, `zabbix.Client`, `zabbix.PowerResilienceAuditor`, `imap.Client`/`ImapReader`/`DateUtils`/`MailMessageSupport`/`AdlinkIncidentParser`/`OsmIncidentParser`/`OspfIncidentParser`/`PdIncidentParser`
+- Дрібні супутні правки NetBeans: видалено 3 невикористані імпорти (`TrapIncident` з `NOCZvit`, `IOException` з `imap.Client`, `ZoneId` з `EmersonTrapParser`), заміна ручного циклу копіювання масиву на `Arrays.asList`+`addAll` в `ImapTrapReader`, форматування відступу в `NOCZvit`
+
+### Виправлено
+- **`smtp.EmailSender`: видалено зайвий невикористаний імпорт `java.util.concurrent.Callable`**, доданий у тому ж NetBeans-проході, але ніде в файлі не застосований
+
+---
+
 ## [1.29.2] — 2026-08-07
 
 ### Додано

@@ -74,12 +74,18 @@ public final class MailMessageSupport {
         return props;
     }
 
-    /** Повертає IMAP-порт відповідно до налаштованого режиму SSL. */
+    /** Повертає IMAP-порт відповідно до налаштованого режиму SSL.
+     * @param config джерело налаштувань
+     * @return {@code "993"} для SSL, інакше {@code "143"}
+     */
     public static String imapPort(Config config) {
         return config.isMailSsl() ? "993" : "143";
     }
 
-    /** Повертає назву протоколу jakarta.mail store відповідно до налаштованого режиму SSL. */
+    /** Повертає назву протоколу jakarta.mail store відповідно до налаштованого режиму SSL.
+     * @param config джерело налаштувань
+     * @return {@code "imaps"} для SSL, інакше {@code "imap"}
+     */
     public static String imapProtocol(Config config) {
         return config.isMailSsl() ? "imaps" : "imap";
     }

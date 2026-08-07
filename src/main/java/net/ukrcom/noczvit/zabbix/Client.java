@@ -85,6 +85,7 @@ public class Client {
      * Створює клієнт Zabbix. HTTP-клієнт налаштовано зі спільним сховищем cookie, щоб
      * cookie web-сесії ({@code zbx_sessionid}), встановлений під час {@link #webLogin()},
      * автоматично додавався до кожного наступного запиту {@code chart2.php}.
+     * @param config джерело налаштувань з'єднання з Zabbix API
      */
     public Client(Config config) {
         this.config = config;
@@ -191,9 +192,9 @@ public class Client {
      * problems), бо problem.get повертає лише активні або нещодавно вирішені
      * проблеми — Zabbix housekeeping видаляє вирішені записи з problem-таблиці.
      *
-     * @param from
-     * @param to
-     * @return
+     * @param from початок періоду (включно)
+     * @param to   кінець періоду (включно)
+     * @return події Zabbix за період, або порожній список при помилці/відсутній авторизації
      */
     public List<ZabbixProblem> getProblems(LocalDateTime from, LocalDateTime to) {
         if (authToken == null) {
@@ -532,6 +533,11 @@ public class Client {
     /**
      * Повертає додатковий рядок {@code <tr>} із вбудованим PNG графіка температури для вказаного
      * хоста та опису компонента, або порожній рядок при будь-якій помилці.
+     * @param shortHostname коротке ім'я хоста в Zabbix
+     * @param desc          опис компонента (частина назви графіка перед {@code ": Temperature"})
+     * @param from          початок періоду графіка
+     * @param to            кінець періоду графіка
+     * @return HTML-рядок {@code <tr>} з графіком, або порожній рядок при помилці
      */
     public String getGraphRow(String shortHostname, String desc, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(shortHostname, desc + ": Temperature", from, to,
@@ -542,6 +548,10 @@ public class Client {
      * Повертає додатковий рядок {@code <tr>} із вбудованим PNG графіка Ping для вказаного хоста,
      * або порожній рядок при будь-якій помилці. Графік шукається за стандартною назвою Zabbix
      * {@code "Ping"} (без префікса hostname, який web UI додає лише для відображення).
+     * @param hostname ім'я хоста в Zabbix
+     * @param from     початок періоду графіка
+     * @param to       кінець періоду графіка
+     * @return HTML-рядок {@code <tr>} з графіком, або порожній рядок при помилці
      */
     public String getPingGraphRow(String hostname, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(hostname, "Ping", from, to,

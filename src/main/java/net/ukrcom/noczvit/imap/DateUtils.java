@@ -80,6 +80,8 @@ public class DateUtils {
      * ({@code "dd mmm yyyy HH:mm:ss"}, напр. {@code "01 січ 2025 08:00:00"}) — той самий формат,
      * що дає {@link #convertMonthNumToMnemo} із сирого заголовка IMAP, для джерел (напр.
      * Zabbix API), які вже мають розібраний {@link LocalDateTime} замість рядка заголовка.
+     * @param dt дата-час, що форматується
+     * @return дата-час у форматі {@code "dd mmm yyyy HH:mm:ss"} з українською назвою місяця
      */
     public static String formatUa(LocalDateTime dt) {
         return String.format("%02d %s %d %02d:%02d:%02d",

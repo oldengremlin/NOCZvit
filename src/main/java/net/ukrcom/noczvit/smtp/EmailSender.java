@@ -54,6 +54,7 @@ public class EmailSender {
      * Створює відправник і зчитує версію проекту з вбудованого ресурсу
      * {@code version.properties} (підставляється фільтрацією ресурсів Maven).
      *
+     * @param config джерело налаштувань SMTP-з'єднання
      * @throws IOException якщо {@code version.properties} відсутній у classpath
      */
     public EmailSender(Config config) throws IOException {

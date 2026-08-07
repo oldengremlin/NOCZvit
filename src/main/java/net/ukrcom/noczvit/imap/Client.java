@@ -15,7 +15,6 @@
 package net.ukrcom.noczvit.imap;
 
 import jakarta.mail.MessagingException;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -54,6 +53,8 @@ public class Client {
      * одним екземпляром: побудова другого перечитувала б обидва файли, перекомпільовувала б
      * кожен патерн і давала парсерам кеш пошуку, окремий від того, яким користується
      * {@code ZabbixIncidentConverter}.
+     * @param config     конфігурація з'єднання IMAP
+     * @param dictionary вже завантажений спільний словник
      */
     public Client(Config config, Dictionary dictionary) {
         this.config = config;
@@ -68,11 +69,11 @@ public class Client {
      * Читає повідомлення з IMAP і розбирає їх на інциденти, що охоплюють обидві
      * чергові зміни.
      *
-     * @param isInteractive
-     * @param prevDutyBegin
-     * @param prevDutyEnd
-     * @param currDutyBegin
-     * @param currDutyEnd
+     * @param isInteractive коли true, читає всі повідомлення теки, а не лише в межах дат
+     * @param prevDutyBegin початок попередньої зміни
+     * @param prevDutyEnd   кінець попередньої зміни
+     * @param currDutyBegin початок поточної зміни
+     * @param currDutyEnd   кінець поточної зміни
      * @return усі інциденти, знайдені в межах [prevDutyBegin, currDutyEnd]
      */
     public List<Incident> prepareImapFolder(boolean isInteractive,
