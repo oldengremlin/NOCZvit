@@ -67,3 +67,4 @@
   паралелізму проєкту (віртуальні потоки, CompletableFuture-ланцюжки
   в NOCZvit.main(), обмежений fan-out на кшталт pollConcurrently),
   а не городити власний ad-hoc паралелізм.
+- Коментарі до методів писати навіть тоді, коли вони не public (protected, private, тощо).
