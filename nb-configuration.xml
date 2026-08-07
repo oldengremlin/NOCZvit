@@ -38,5 +38,6 @@
         <org-netbeans-modules-editor-indent.text.x-java.CodeStyle.project.alignMultilineFor>true</org-netbeans-modules-editor-indent.text.x-java.CodeStyle.project.alignMultilineFor>
         <org-netbeans-modules-editor-indent.text.x-java.CodeStyle.project.alignMultilineExports>true</org-netbeans-modules-editor-indent.text.x-java.CodeStyle.project.alignMultilineExports>
         <org-netbeans-modules-editor-indent.text.x-java.CodeStyle.project.alignMultilineTernaryOp>true</org-netbeans-modules-editor-indent.text.x-java.CodeStyle.project.alignMultilineTernaryOp>
+        <netbeans.hint.license>apache20</netbeans.hint.license>
     </properties>
 </project-shared-configuration>
