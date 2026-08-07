@@ -350,8 +350,11 @@ public class TrapCorrelator {
             }
 
             if (trap.startsWith("Monitoring Card Reboot")) {
+                // Точкова подія: почалась і закінчилась одномоментно, як і Cold Start
+                // (той самий текст опису нижче) — clearedAt=activatedAt, а не null,
+                // інакше звіт показує "—"/"незакрито" для події, що вже відбулась.
                 incidents.add(new TrapIncident(TrapEvent.CLASS_PDC, hostname, ip,
-                        Severity.INFO, ev.timestamp(), null,
+                        Severity.INFO, ev.timestamp(), ev.timestamp(),
                         TRAP_DESCRIPTIONS.get("Monitoring Card Reboot"), List.of()));
                 continue;
             }
@@ -490,8 +493,9 @@ public class TrapCorrelator {
             }
 
             if (trap.startsWith("Monitoring Card Reboot")) {
+                // Те саме самозакриття, що й для PDC-гілки вище — див. коментар там.
                 incidents.add(new TrapIncident(TrapEvent.CLASS_ADC, hostname, ip,
-                        Severity.INFO, ev.timestamp(), null,
+                        Severity.INFO, ev.timestamp(), ev.timestamp(),
                         TRAP_DESCRIPTIONS.get("Monitoring Card Reboot"), List.of()));
                 continue;
             }

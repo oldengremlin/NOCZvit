@@ -89,20 +89,19 @@ class TrapDeduplicatorTest {
     }
 
     @Test
-    void coldStart_caseInsensitiveDetection_bothVariantsTreatedAsColdStart() {
+    void coldStart_caseInsensitiveDetection_bothVariantsDeduplicateTogether() {
         // COLD_START.equalsIgnoreCase() вирішує, чи трап є Cold Start-ом взагалі — обидва варіанти
-        // тут проходять у дедуп-гілку (жоден не потрапляє у "пропустити не-ColdStart" шлях).
+        // тут проходять у дедуп-гілку. Ключ групування теж нормалізований до нижнього регістру
+        // (TrapDeduplicator.java, ev.trapType().toLowerCase()), тож "cold start" і "COLD START"
+        // від одного хоста в одному вікні тепер дублюють одне одного, як і мало бути.
         List<TrapEvent> input = List.of(
                 ev("pdc-r1-1", "cold start", T0),
                 ev("pdc-r1-1", "COLD START", T0.plusSeconds(1)));
 
         List<TrapEvent> result = TrapDeduplicator.deduplicate(input, WINDOW);
 
-        // ФІКСАЦІЯ ПОВЕДІНКИ: ключ групування — hostname + "|" + trapType (сирий, без
-        // нормалізації регістру), тож "cold start" і "COLD START" потрапляють у РІЗНІ ключі
-        // й одне одного не дублюють, попри те що обидва розпізнані як Cold Start.
-        // Див. TrapDeduplicator.java:57 (перевірка типу, case-insensitive) vs :61 (ключ, case-sensitive).
-        assertEquals(2, result.size());
+        assertEquals(1, result.size());
+        assertEquals("cold start", result.get(0).trapType());
     }
 
     @Test

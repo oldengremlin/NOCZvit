@@ -444,21 +444,22 @@ class TrapCorrelatorTest {
     }
 
     // =========================================================================================
-    // Monitoring Card Reboot — завжди clearedAt=null, без суфікса "До кінця..."
+    // Monitoring Card Reboot — точкова подія, самозакрита (clearedAt = activatedAt), як і Cold Start
     // =========================================================================================
 
     @Test
-    void monitoringCardReboot_alwaysUnclosed_neverGetsUnresolvedSuffix() {
-        // На відміну від Cold Start (self-closing: clearedAt = activatedAt), Monitoring Card
-        // Reboot будується напряму через `new TrapIncident(..., null, ...)`, минаючи
-        // buildStandaloneIncident — тому суфікс "До кінця зміни не відновлено." ніколи не додається.
+    void monitoringCardReboot_selfClosing_sameAsColdStart() {
+        // Той самий текст опису, що й у Cold Start ("Перезапуск картки моніторингу."), і та
+        // сама семантика: подія почалась і закінчилась одномоментно, тож clearedAt = activatedAt,
+        // а не null — інакше звіт показував "—"/"незакрито" для того, що вже відбулось.
         List<TrapEvent> events = List.of(pdc("pdc-r1-1", "Monitoring Card Reboot", T0));
 
         CorrelationResult result = correlator().correlate(events);
 
         assertEquals(1, result.incidents().size());
         TrapIncident inc = result.incidents().get(0);
-        assertFalse(inc.isClosed());
+        assertTrue(inc.isClosed());
+        assertEquals(T0, inc.clearedAt());
         assertEquals("Перезапуск картки моніторингу.", inc.description());
         assertEquals(Severity.INFO, inc.severity());
     }

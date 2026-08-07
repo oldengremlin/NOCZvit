@@ -58,7 +58,11 @@ public class TrapDeduplicator {
                 result.add(ev);
                 continue;
             }
-            String key = ev.hostname() + "|" + ev.trapType();
+            // trapType нормалізуємо до нижнього регістру: перевірка "це Cold Start?" вище
+            // регістронезалежна (equalsIgnoreCase), а ключ групування мав лишатись
+            // чутливим — "Cold Start" і "COLD START" від одного хоста в одному вікні
+            // не бачили одне одного й дедуплікувались кожен сам із собою.
+            String key = ev.hostname() + "|" + ev.trapType().toLowerCase();
             Instant prev = lastSeen.get(key);
             if (prev == null || ev.timestamp().isAfter(prev.plusSeconds(windowSeconds))) {
                 lastSeen.put(key, ev.timestamp());
