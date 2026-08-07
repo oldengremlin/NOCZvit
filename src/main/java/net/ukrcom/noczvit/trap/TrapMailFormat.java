@@ -18,27 +18,30 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 /**
- * Wire-format constants common to every SNMP trap email, regardless of which device sent it.
+ * Константи формату повідомлення, спільні для кожного листа з SNMP-трапом, незалежно від того,
+ * який пристрій його надіслав.
  *
- * <p>All trap mails are produced by the same trap receiver and therefore open with the same
- * header line — {@code "At <timestamp>, from <ip>, after uptime <u>, registered trap:"} — even
- * though the payload that follows differs per vendor (Emerson emits free text, RAMOS emits three
- * quoted fields). Only the shared header and its timestamp format live here; each parser keeps
- * its own body grammar.
+ * <p>Усі листи з трапами формуються одним і тим самим приймачем трапів, тому починаються з
+ * однакового рядка заголовка — {@code "At <timestamp>, from <ip>, after uptime <u>, registered
+ * trap:"} — хоча вміст, що йде далі, відрізняється залежно від вендора (Emerson видає вільний
+ * текст, RAMOS — три поля в лапках). Тут живе лише спільний заголовок і формат його timestamp;
+ * граматику власного тіла кожен парсер тримає у себе.
  *
- * <p><b>Thread safety:</b> constants only. {@link DateTimeFormatter} is immutable and safe to
- * share across the Emerson and RAMOS parsing branches, which run concurrently on virtual threads.
+ * <p><b>Потокобезпека:</b> лише константи. {@link DateTimeFormatter} незмінний і безпечний для
+ * спільного використання гілками парсингу Emerson і RAMOS, які виконуються паралельно на
+ * віртуальних потоках.
  */
 final class TrapMailFormat {
 
     /**
-     * Regex prefix capturing the trap header: group 1 = timestamp, group 2 = source IP.
-     * Callers append their own body grammar and continue numbering from group 3.
+     * Префікс регулярного виразу, що захоплює заголовок трапу: група 1 = timestamp,
+     * група 2 = IP джерела. Виклики додають власну граматику тіла й продовжують нумерацію
+     * з групи 3.
      */
     static final String HEADER_PREFIX =
             "At\\s+(\\d{2}-\\d{2}-\\d{4}\\s+\\d{2}:\\d{2}:\\d{2}),\\s+from\\s+([\\d.]+),";
 
-    /** Timestamp format used in the trap header line. */
+    /** Формат timestamp, що використовується в рядку заголовка трапу. */
     static final DateTimeFormatter HEADER_TIMESTAMP =
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss", Locale.ENGLISH);
 

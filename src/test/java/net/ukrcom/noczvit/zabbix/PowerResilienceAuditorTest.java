@@ -78,7 +78,12 @@ class PowerResilienceAuditorTest {
     }
 
     private PowerResilienceAuditor auditorWith(FakeZabbixClient fake) throws IOException {
-        return new PowerResilienceAuditor(fake, TestFixtures.dictionaryPd(tempDir, Map.of()));
+        return new PowerResilienceAuditor(fake, TestFixtures.dictionaryPd(tempDir, Map.of()), List.of());
+    }
+
+    private PowerResilienceAuditor auditorWith(FakeZabbixClient fake, List<String> ignoredInterfacePrefixes)
+            throws IOException {
+        return new PowerResilienceAuditor(fake, TestFixtures.dictionaryPd(tempDir, Map.of()), ignoredInterfacePrefixes);
     }
 
     private static ZabbixProblem hostDown(String host, long clock, long rClock) {
@@ -150,6 +155,69 @@ class PowerResilienceAuditorTest {
         assertEquals(1, r.totalKnown());
         assertEquals(1, r.alreadyDownAtFall());
         assertEquals("Interface 5(freedom cafe)", r.alreadyDownNames().get(0).name());
+    }
+
+    // ---- 3b. Ігнорування за префіксом технічного імені (UVPN wireguard/sstp/... ) ------------
+
+    @Test
+    void audit_ignoresConfiguredInterfaceNamePrefixes_caseInsensitively() throws IOException {
+        // Непорожні описи навмисно скрізь, крім item 1 — щоб ignoredPorts=3 доводив саме новий
+        // фільтр за префіксом технічного імені, а не випадково збігався з наявним IGNORED_PORT
+        // (порожній опис ігнорується незалежно від списку префіксів).
+        FakeZabbixClient fake = new FakeZabbixClient();
+        List<InterfaceItem> items = List.of(
+                new InterfaceItem("1", "Interface ether1(uplink)", 3),          // фізичний — враховуємо
+                new InterfaceItem("2", "Interface wireguard1(peer-a)", 3),      // виключений префікс
+                new InterfaceItem("3", "Interface WireGuard2(peer-b)", 3),      // той самий префікс, інший регістр
+                new InterfaceItem("4", "Interface sstp-in3(peer-c)", 3)         // інший виключений префікс
+        );
+        fake.interfaceItemsByHost.put("host1", items);
+        fake.beforeByItemId.put("1", new HistoryPoint(Instant.ofEpochSecond(90), OPERATIONAL_DOWN));
+
+        List<PowerResilienceResult> results = auditorWith(fake, List.of("wireguard", "sstp"))
+                .audit(List.of(hostDown("host1", 100, 200)));
+
+        assertEquals(1, results.size());
+        PowerResilienceResult r = results.get(0);
+        assertEquals(3, r.ignoredPorts());
+        assertEquals(1, r.totalKnown());
+        assertEquals("Interface ether1(uplink)", r.alreadyDownNames().get(0).name());
+    }
+
+    @Test
+    void audit_interfacePrefixFilter_matchesPrefixNotSubstring() throws IOException {
+        // "wire" не повинен випадково зловити "ether-wired1" (виключення лише за ПОЧАТКОМ
+        // технічного імені, не за будь-яким входженням підрядка).
+        FakeZabbixClient fake = new FakeZabbixClient();
+        List<InterfaceItem> items = List.of(
+                new InterfaceItem("1", "Interface ether-wired1(uplink)", 3));
+        fake.interfaceItemsByHost.put("host1", items);
+        fake.beforeByItemId.put("1", new HistoryPoint(Instant.ofEpochSecond(90), OPERATIONAL_DOWN));
+
+        List<PowerResilienceResult> results = auditorWith(fake, List.of("wire"))
+                .audit(List.of(hostDown("host1", 100, 200)));
+
+        assertEquals(1, results.size());
+        assertEquals(0, results.get(0).ignoredPorts());
+        assertEquals(1, results.get(0).totalKnown());
+    }
+
+    @Test
+    void audit_emptyPrefixList_ignoresNothingByInterfaceType() throws IOException {
+        // Непорожній опис навмисно — щоб не зловити вже наявний фільтр IGNORED_PORT
+        // (порожнє "()" ігнорується незалежно від списку префіксів) і перевірити рівно те,
+        // що тут заявлено: порожній список префіксів нічого не виключає сам по собі.
+        FakeZabbixClient fake = new FakeZabbixClient();
+        List<InterfaceItem> items = List.of(new InterfaceItem("1", "Interface wireguard1(peer-a)", 3));
+        fake.interfaceItemsByHost.put("host1", items);
+        fake.beforeByItemId.put("1", new HistoryPoint(Instant.ofEpochSecond(90), OPERATIONAL_DOWN));
+
+        // Дефолт — auditorWith(fake) без списку — нічого не виключає.
+        List<PowerResilienceResult> results = auditorWith(fake).audit(List.of(hostDown("host1", 100, 200)));
+
+        assertEquals(1, results.size());
+        assertEquals(0, results.get(0).ignoredPorts());
+        assertEquals(1, results.get(0).totalKnown());
     }
 
     // ---- 4. Бакетинг за двома знімками ---------------------------------------------------------

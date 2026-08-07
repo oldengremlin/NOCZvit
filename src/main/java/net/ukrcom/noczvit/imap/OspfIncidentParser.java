@@ -25,8 +25,8 @@ import net.ukrcom.noczvit.model.Incident.Status;
 import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
- * Domain: parses Zabbix ospfNbrStateChange alert emails into {@link Incident}
- * objects. Subject format: "[±] Problem/Resolved: <host>: <router> <channel>
+ * Домен: парсить листи-алерти Zabbix ospfNbrStateChange в об'єкти {@link Incident}.
+ * Формат теми: "[±] Problem/Resolved: <host>: <router> <channel>
  * ospfNbrStateChange"
  */
 @Slf4j
@@ -39,15 +39,15 @@ public class OspfIncidentParser {
     }
 
     /**
-     * Returns an Incident if the message is a valid OSPF neighbor state change
-     * alert.
+     * Повертає Incident, якщо повідомлення є валідним алертом зміни стану
+     * OSPF-сусіда.
      * @param msg
-     * @return 
+     * @return
      */
     public Optional<Incident> parse(RawMessage msg) {
         String subject = msg.subject();
         String[] parts = subject.split("\\s+");
-        // parts[2] = "host:", parts[3] = router, parts[4] = channel
+        // parts[2] = "host:", parts[3] = router (маршрутизатор), parts[4] = channel (канал)
         String router = parts.length > 3 ? parts[3] : "";
         String channel = parts.length > 4 ? parts[4] : "";
 

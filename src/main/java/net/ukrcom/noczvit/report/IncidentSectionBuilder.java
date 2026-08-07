@@ -34,29 +34,28 @@ import net.ukrcom.noczvit.zabbix.Client;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
- * Presentation: converts a list of {@link Incident} objects into the HTML
- * incidents section.
+ * Презентаційний шар: перетворює список {@link Incident} на HTML-секцію інцидентів.
  *
- * <p>Incidents with a non-empty {@code inReplyTo} key are paired: the earliest
- * START and the latest END sharing the same key are displayed as a single row
- * with Початок / Закінчення / Тривалість columns. Unpaired incidents (empty
- * key, or only one side present) are displayed with "—" in the missing columns.
+ * <p>Інциденти з непорожнім ключем {@code inReplyTo} об'єднуються в пари: найраніший
+ * START і найпізніший END з однаковим ключем відображаються одним рядком з колонками
+ * Початок / Закінчення / Тривалість. Непарні інциденти (порожній ключ або наявна лише
+ * одна сторона) відображаються з "—" у відсутніх колонках.
  */
 @Slf4j
 public class IncidentSectionBuilder {
 
-    /** Creates the builder. Stateless — safe to reuse across calls. */
+    /** Створює білдер. Без стану — безпечно повторно використовувати між викликами. */
     public IncidentSectionBuilder() {
     }
 
     /**
-     * Builds the full HTML section for incidents in the given duty period.
+     * Будує повну HTML-секцію інцидентів за вказану чергову зміну.
      *
-     * @param allIncidents all parsed incidents (may span multiple duty periods)
-     * @param zabbix Zabbix client for Ping graphs; null to skip graphs
-     * @param dutyBegin start of the duty period to display
-     * @param dutyEnd end of the duty period to display
-     * @return HTML fragment (never null)
+     * @param allIncidents усі розібрані інциденти (можуть охоплювати кілька чергових змін)
+     * @param zabbix клієнт Zabbix для графіків Ping; null, щоб пропустити графіки
+     * @param dutyBegin початок чергової зміни для відображення
+     * @param dutyEnd кінець чергової зміни для відображення
+     * @return HTML-фрагмент (ніколи не null)
      */
     public String build(List<Incident> allIncidents, Client zabbix,
                         LocalDateTime dutyBegin, LocalDateTime dutyEnd) {
@@ -64,14 +63,14 @@ public class IncidentSectionBuilder {
     }
 
     /**
-     * Builds the full HTML section with an optional pre-rendered AI summary block.
+     * Будує повну HTML-секцію з опціональним попередньо відрендереним блоком підсумку від AI.
      *
-     * @param allIncidents all parsed incidents (may span multiple duty periods)
-     * @param zabbix       Zabbix client for Ping graphs; null to skip graphs
-     * @param dutyBegin    start of the duty period to display
-     * @param dutyEnd      end of the duty period to display
-     * @param summaryHtml  Claude AI summary HTML fragment, or {@code null} to omit it
-     * @return HTML fragment (never null)
+     * @param allIncidents усі розібрані інциденти (можуть охоплювати кілька чергових змін)
+     * @param zabbix       клієнт Zabbix для графіків Ping; null, щоб пропустити графіки
+     * @param dutyBegin    початок чергової зміни для відображення
+     * @param dutyEnd      кінець чергової зміни для відображення
+     * @param summaryHtml  HTML-фрагмент підсумку від Claude AI, або {@code null}, щоб не додавати
+     * @return HTML-фрагмент (ніколи не null)
      */
     public String build(List<Incident> allIncidents, Client zabbix,
                         LocalDateTime dutyBegin, LocalDateTime dutyEnd, String summaryHtml) {
@@ -97,10 +96,14 @@ public class IncidentSectionBuilder {
             return html.toString();
         }
 
+        // Групуємо вже спарені рядки за локацією; явний LinkedHashMap як фабрика мапи зберігає
+        // порядок першої появи локації серед інцидентів, а не алфавітний чи хеш-порядок.
         Map<String, List<IncidentRow>> byLocation = pairIncidents(incidents).stream()
                 .collect(Collectors.groupingBy(IncidentRow::location, LinkedHashMap::new, Collectors.toList()));
 
         AtomicInteger n = new AtomicInteger(0);
+        // Для кожної локації рендеримо окрему HTML-секцію: заголовок з таблицею, рядки
+        // інцидентів, опційні графіки Ping (якщо задано zabbix), і закриваємо таблицю/секцію.
         byLocation.forEach((location, group) -> {
             html.append("<div class=\"section\">\n")
                     .append("<h2>Зареєстровані інциденти на виносі ")
@@ -129,8 +132,8 @@ public class IncidentSectionBuilder {
     }
 
     /**
-     * Groups incidents by {@code inReplyTo} key into paired rows, then sorts by start time.
-     * Incidents with an empty key are each placed in their own row.
+     * Групує інциденти за ключем {@code inReplyTo} у парні рядки, потім сортує за часом початку.
+     * Інциденти з порожнім ключем розміщуються кожен у власному рядку.
      */
     private List<IncidentRow> pairIncidents(List<Incident> incidents) {
         Map<String, List<Incident>> byKey = new LinkedHashMap<>();
@@ -156,7 +159,7 @@ public class IncidentSectionBuilder {
                     .max(Comparator.comparingLong(Incident::messageTs))
                     .orElse(null);
             if (start == null && end == null) {
-                // Group contains only NONE-status incidents (e.g. device restarts) — each as its own row
+                // Група містить лише інциденти зі статусом NONE (напр. перезавантаження обладнання) — кожен своїм рядком
                 group.forEach(i -> rows.add(new IncidentRow(i, null)));
             } else {
                 rows.add(new IncidentRow(start, end));
@@ -176,10 +179,10 @@ public class IncidentSectionBuilder {
     }
 
     /**
-     * Renders a single table row ({@code <tr>}) for the given incident pair.
-     * Paired rows (both start and end present) show the combined description with
-     * "інцидент" wording and the computed duration. Unpaired rows keep their
-     * original description and show "—" in the missing columns.
+     * Рендерить один рядок таблиці ({@code <tr>}) для заданої пари інцидентів.
+     * Парні рядки (наявні і start, і end) показують об'єднаний опис зі словом
+     * "інцидент" та обчисленою тривалістю. Непарні рядки зберігають оригінальний
+     * опис і показують "—" у відсутніх колонках.
      */
     private String buildRow(IncidentRow row, AtomicInteger n) {
         boolean paired = row.start() != null && row.end() != null;
@@ -224,8 +227,8 @@ public class IncidentSectionBuilder {
     }
 
     /**
-     * Appends inline PNG Ping graphs for all distinct devices in {@code rows}.
-     * Each graph is fetched concurrently via virtual threads and embedded as a base64 data URI.
+     * Додає вбудовані PNG-графіки Ping для всіх унікальних пристроїв у {@code rows}.
+     * Кожен графік отримується паралельно через віртуальні потоки й вбудовується як base64 data URI.
      */
     private void appendPingGraphs(StringBuilder html, List<IncidentRow> rows,
                                   Client zabbix, LocalDateTime from, LocalDateTime to) {
@@ -254,7 +257,7 @@ public class IncidentSectionBuilder {
         }
     }
 
-    /** Holds a paired or half-present incident for display as a single table row. */
+    /** Утримує парний або наполовину наявний інцидент для відображення одним рядком таблиці. */
     private record IncidentRow(Incident start, Incident end) {
 
         String location() {
@@ -270,6 +273,7 @@ public class IncidentSectionBuilder {
             return (start != null ? start : end).device();
         }
 
+        /** Об'єднує назви на перегляд з обох сторін пари, без дублікатів. */
         List<String> mergedReviewNames() {
             List<String> names = new ArrayList<>();
             if (start != null) names.addAll(start.reviewNames());

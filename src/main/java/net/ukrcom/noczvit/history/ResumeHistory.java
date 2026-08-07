@@ -22,21 +22,21 @@ import java.sql.SQLException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Persistent store for Claude shift summaries backed by a SQLite database.
+ * Постійне сховище резюме змін від Claude на базі SQLite.
  *
  * <p>
- * Each reporting period is identified by {@code (period_from, period_to)} (Unix
- * epoch seconds). At most one record exists per period — subsequent saves for
- * the same period perform an in-place update via SQLite 3.24+ UPSERT semantics,
- * which is safe for test re-runs.
+ * Кожен звітний період ідентифікується парою {@code (period_from, period_to)}
+ * (Unix epoch у секундах). На кожен період існує щонайбільше один запис —
+ * повторні збереження для того самого періоду виконують оновлення на місці
+ * через семантику UPSERT SQLite 3.24+, що безпечно для повторних запусків тестів.
  *
  * <p>
- * A new connection is opened and closed for every operation
- * (connection-per-operation pattern) to avoid SQLite write-lock issues between
- * invocations.
+ * Для кожної операції відкривається й закривається нове з'єднання
+ * (патерн "connection-per-operation"), щоб уникнути проблем із блокуванням
+ * запису SQLite між викликами.
  *
  * <p>
- * DDL (applied on construction):
+ * DDL (застосовується при конструюванні):
  * <pre>{@code
  * CREATE TABLE IF NOT EXISTS resume_history (
  *     period_from  INTEGER NOT NULL,
@@ -79,12 +79,12 @@ public class ResumeHistory {
     private final String jdbcUrl;
 
     /**
-     * Creates the store and initialises the {@code resume_history} table if it
-     * does not exist.
+     * Створює сховище та ініціалізує таблицю {@code resume_history}, якщо вона
+     * ще не існує.
      *
-     * @param jdbcUrl JDBC URL of the SQLite file, e.g.
+     * @param jdbcUrl JDBC URL файлу SQLite, наприклад
      * {@code jdbc:sqlite:/var/lib/noczvit/history.db}
-     * @throws SQLException if the database cannot be opened or the DDL fails
+     * @throws SQLException якщо базу даних неможливо відкрити або DDL завершується помилкою
      */
     public ResumeHistory(String jdbcUrl) throws SQLException {
         this.jdbcUrl = jdbcUrl;
@@ -104,13 +104,13 @@ public class ResumeHistory {
     }
 
     /**
-     * Returns the most recent summary whose reporting period ended before
-     * {@code currentFrom}, or {@code null} when no such record exists.
+     * Повертає найновіше резюме, чий звітний період завершився до
+     * {@code currentFrom}, або {@code null}, якщо такого запису не існує.
      *
-     * @param currentFrom Unix epoch (seconds) start of the current reporting
-     * period; records with {@code period_to >= currentFrom} are excluded
-     * @return the latest previous {@link ResumeRecord}, or {@code null}
-     * @throws SQLException if the query fails
+     * @param currentFrom Unix epoch (секунди) початку поточного звітного
+     * періоду; записи з {@code period_to >= currentFrom} виключаються
+     * @return останній попередній {@link ResumeRecord}, або {@code null}
+     * @throws SQLException якщо запит завершується помилкою
      */
     public ResumeRecord findPrevious(long currentFrom) throws SQLException {
         try (Connection conn = DriverManager.getConnection(jdbcUrl); PreparedStatement ps = conn.prepareStatement(SELECT_PREVIOUS)) {
@@ -129,17 +129,17 @@ public class ResumeHistory {
     }
 
     /**
-     * Saves (or updates) the plain-text Claude summary for the given reporting
-     * period.
+     * Зберігає (або оновлює) текстове резюме Claude для заданого звітного
+     * періоду.
      *
      * <p>
-     * If a record for {@code (periodFrom, periodTo)} already exists it is
-     * updated in place; the row identity (primary key) is preserved.
+     * Якщо запис для {@code (periodFrom, periodTo)} вже існує, він оновлюється
+     * на місці; ідентичність рядка (primary key) зберігається.
      *
-     * @param periodFrom Unix epoch (seconds) start of the reporting period
-     * @param periodTo Unix epoch (seconds) end of the reporting period
-     * @param summaryText plain-text Claude summary (no HTML)
-     * @throws SQLException if the write fails
+     * @param periodFrom Unix epoch (секунди) початку звітного періоду
+     * @param periodTo Unix epoch (секунди) кінця звітного періоду
+     * @param summaryText текстове резюме Claude у форматі plain-text (без HTML)
+     * @throws SQLException якщо запис завершується помилкою
      */
     public void save(long periodFrom, long periodTo, String summaryText) throws SQLException {
         long now = System.currentTimeMillis() / 1000L;

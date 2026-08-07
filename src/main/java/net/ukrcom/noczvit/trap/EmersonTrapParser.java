@@ -29,16 +29,16 @@ import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.imap.RawMessage;
 
 /**
- * Parses raw IMAP trap emails from the Emerson/Liebert SNMP trap receiver into
- * {@link TrapEvent} objects.
+ * Розбирає сирі IMAP-листи з SNMP-трапами від приймача Emerson/Liebert у
+ * об'єкти {@link TrapEvent}.
  *
- * <p>Expected subject: {@code Got trap from HOSTNAME - Trap Registrator <...> - DATE}
+ * <p>Очікувана тема листа: {@code Got trap from HOSTNAME - Trap Registrator <...> - DATE}
  *
- * <p>Expected body (single line, then newline+traptype):
+ * <p>Очікуване тіло (один рядок, потім перенос рядка + тип трапа):
  * {@code At DD-MM-YYYY HH:mm:ss, from IP, after uptime U, registered trap:}
  * {@code \r\n\tTRAP_TYPE}
  *
- * <p>Device class is inferred from hostname prefix: {@code adc*} → ADC, {@code pdc*} → PDC.
+ * <p>Клас пристрою визначається за префіксом хостнейму: {@code adc*} → ADC, {@code pdc*} → PDC.
  */
 @Slf4j
 public class EmersonTrapParser {
@@ -47,8 +47,8 @@ public class EmersonTrapParser {
             "^Got trap from ([\\w-]+)",
             Pattern.CASE_INSENSITIVE);
 
-    // Shared header (group 1 = timestamp, group 2 = IP) + Emerson's own body: free text after
-    // "registered trap:" — group 3.
+    // Спільний заголовок (група 1 = мітка часу, група 2 = IP) + власне тіло Emerson: довільний
+    // текст після "registered trap:" — група 3.
     private static final Pattern BODY_RE = Pattern.compile(
             TrapMailFormat.HEADER_PREFIX
             + "\\s+after\\s+uptime\\s+[\\d:.]+,\\s*registered\\s+trap:\\s*\\r?\\n\\s+(.*)",
@@ -58,12 +58,12 @@ public class EmersonTrapParser {
     }
 
     /**
-     * Parses a list of raw IMAP messages into trap events.
-     * Messages that cannot be parsed (wrong subject/body format, unknown device class) are skipped
-     * with a WARN log entry.
+     * Розбирає список сирих IMAP-листів у події трапів.
+     * Листи, які не вдалось розібрати (неочікуваний формат теми/тіла, невідомий клас пристрою),
+     * пропускаються з записом WARN у лог.
      *
-     * @param messages raw messages from the SNMP trap IMAP folders
-     * @return list of parsed {@link TrapEvent} objects; never null
+     * @param messages сирі листи з IMAP-тек SNMP-трапів
+     * @return список розібраних {@link TrapEvent}; ніколи не null
      */
     public static List<TrapEvent> parse(List<RawMessage> messages) {
         List<TrapEvent> result = new ArrayList<>();
@@ -73,6 +73,10 @@ public class EmersonTrapParser {
         return result;
     }
 
+    /**
+     * Розбирає один сирий лист у подію трапа, повертаючи {@link Optional#empty()},
+     * якщо тема, тіло чи клас пристрою не розпізнані.
+     */
     private static Optional<TrapEvent> parse(RawMessage msg) {
         Matcher subjectMatcher = SUBJECT_RE.matcher(msg.subject());
         if (!subjectMatcher.find()) {
@@ -109,7 +113,7 @@ public class EmersonTrapParser {
             timestamp = DateUtils.toInstant(
                     LocalDateTime.parse(bodyMatcher.group(1).trim(), TrapMailFormat.HEADER_TIMESTAMP), msg.unixDate());
         } catch (DateTimeParseException e) {
-            // Fall back to the email Date: header timestamp
+            // Повертаємось до мітки часу з заголовка листа Date:
             timestamp = Instant.ofEpochSecond(msg.unixDate());
             log.debug("EmersonTrapParser: body timestamp parse failed for hostname «{}», using email date", hostname);
         }
@@ -118,8 +122,8 @@ public class EmersonTrapParser {
     }
 
     /**
-     * Normalizes a raw trap type string: strips surrounding double-quotes and collapses
-     * {@code ": "} (colon-space) sequences to {@code ":"}.
+     * Нормалізує сирий рядок типу трапа: знімає обрамляючі подвійні лапки й згортає
+     * послідовності {@code ": "} (двокрапка-пробіл) до {@code ":"}.
      */
     static String normalizeTrapType(String raw) {
         String s = raw.strip();
@@ -129,6 +133,10 @@ public class EmersonTrapParser {
         return s.replaceAll(":\\s+", ":");
     }
 
+    /**
+     * Визначає клас пристрою за префіксом хостнейму: {@code adc*} → ADC, {@code pdc*} → PDC,
+     * інакше {@code null}.
+     */
     private static String classifyHostname(String hostname) {
         if (hostname.startsWith("adc")) {
             return TrapEvent.CLASS_ADC;

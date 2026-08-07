@@ -36,13 +36,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
- * Builds the "temporarily blocked subscribers" HTML section by querying two MSSQL databases:
- * the account DB for customer name resolution, and the accequipment DB for the current blocked
- * list ({@code ServicesLastState} JSON parameter).
+ * Формує HTML-секцію "Список тимчасово заблокованих абонентів", опитуючи дві бази MSSQL:
+ * account DB для визначення імен клієнтів та accequipment DB для поточного списку
+ * заблокованих (JSON-параметр {@code ServicesLastState}).
  *
- * <p>Database connection parameters are resolved through FreeTDS {@code freetds.conf} aliases
- * (searched in {@code ~/.freetds.conf}, {@code /etc/freetds/freetds.conf}, and
- * {@code /etc/freetds.conf}) with a fallback to direct host:1433.
+ * <p>Параметри підключення до баз даних визначаються через алiаси FreeTDS {@code freetds.conf}
+ * (пошук у {@code ~/.freetds.conf}, {@code /etc/freetds/freetds.conf} та
+ * {@code /etc/freetds.conf}) з відкатом на прямий host:1433.
  */
 @Slf4j
 public class Debtors {
@@ -51,7 +51,7 @@ public class Debtors {
     private final Config config;
 
     /**
-     * Constructs the HTML section immediately. The result is available via {@link #toString()}.
+     * Одразу формує HTML-секцію. Результат доступний через {@link #toString()}.
      */
     public Debtors(Config config) {
         this.config = config;
@@ -64,7 +64,7 @@ public class Debtors {
         return returnMessage.toString();
     }
 
-    /** Queries the databases and appends the subscriber rows to {@code returnMessage}. */
+    /** Опитує бази даних і додає рядки абонентів до {@code returnMessage}. */
     private void getDebtors() {
         returnMessage.append("<p>\n<h1>Список тимчасово заблокованих абонентів</h1>\n")
                 .append("<table class=\"table-debtors\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">")
@@ -75,6 +75,8 @@ public class Debtors {
 
         if (config.isDebtorsEnabled()) {
             try {
+                // AtomicInteger замість звичайного int — лямбді потрібна effectively final
+                // змінна для наскрізної нумерації рядків під час формування HTML-таблиці
                 AtomicInteger n = new AtomicInteger(0);
                 returnMessage.append(fetchDebtors().stream()
                         .map(debtor -> "<tr><td>" + n.incrementAndGet() + ".</td>"
@@ -89,8 +91,8 @@ public class Debtors {
         returnMessage.append("</tbody></table>\n");
     }
 
-    // Resolves FreeTDS server alias from freetds.conf to [host, port].
-    // Falls back to [serverName, "1433"] if not found.
+    // Визначає аліас сервера FreeTDS із freetds.conf у [host, port].
+    // Якщо не знайдено — відкат на [serverName, "1433"].
     private String[] resolveServer(String serverName) {
         String[] searchPaths = {
             System.getProperty("user.home") + "/.freetds.conf",
@@ -107,9 +109,9 @@ public class Debtors {
     }
 
     /**
-     * Parses a single {@code freetds.conf} file for the given server alias.
+     * Розбирає один файл {@code freetds.conf} у пошуках заданого аліасу сервера.
      *
-     * @return {@code [host, port]} if the section is found, {@code null} otherwise
+     * @return {@code [host, port]}, якщо секцію знайдено, інакше {@code null}
      */
     private String[] parseFreeTdsConf(String path, String serverName) {
         File file = new File(path);
@@ -149,32 +151,32 @@ public class Debtors {
     }
 
     /**
-     * Opens a jTDS MSSQL connection, resolving {@code server} through FreeTDS aliases first.
+     * Відкриває з'єднання jTDS MSSQL, спершу визначаючи {@code server} через аліаси FreeTDS.
      */
     private Connection connectTo(String server, String database, String user, String password) throws SQLException {
         String[] hostPort = resolveServer(server);
-        // jTDS defaults both timeouts to 0 (= wait forever); a firewalled MSSQL host would
-        // otherwise hang the cron run indefinitely.
+        // jTDS за замовчуванням обидва таймаути ставить у 0 (= чекати вічно); інакше
+        // заблокований фаєрволом MSSQL-хост зависав би cron-запуск нескінченно.
         String url = "jdbc:jtds:sqlserver://" + hostPort[0] + ":" + hostPort[1] + "/" + database
                 + ";loginTimeout=10;socketTimeout=60";
         log.debug("Debtors connecting: {}", url);
         return DriverManager.getConnection(url, user, password);
     }
 
-    /** One entry of the {@code ServicesLastState} JSON array. */
+    /** Один запис масиву JSON {@code ServicesLastState}. */
     private record ServiceEntry(String firmId, int customerId) {
     }
 
-    /** MSSQL caps a statement at 2100 parameters; stay well below when building the IN list. */
+    /** MSSQL обмежує запит 2100 параметрами; тримаємось значно нижче при побудові списку IN. */
     private static final int ID_BATCH = 1000;
 
     /**
-     * Loads {@code Customer_id → FirmId → Title} for the given customer IDs only.
+     * Завантажує {@code Customer_id → FirmId → Title} лише для заданих ID клієнтів.
      *
-     * <p>The blocked-subscriber list holds tens of entries while {@code Customers} holds tens of
-     * thousands of rows, so the IDs are resolved with a filtered query instead of pulling the
-     * whole table into a nested map. The two databases live on separate servers, which is exactly
-     * why the read order is inverted: the ID set comes from the accequipment DB first.
+     * <p>Список заблокованих абонентів містить десятки записів, тоді як {@code Customers} —
+     * десятки тисяч рядків, тому ID визначаються фільтрованим запитом замість завантаження
+     * всієї таблиці у вкладену мапу. Дві бази даних розташовані на різних серверах, саме тому
+     * порядок читання інвертовано: спершу набір ID береться з accequipment DB.
      */
     private Map<Integer, Map<String, String>> buildAccountMap(List<Integer> customerIds) throws SQLException {
         Map<Integer, Map<String, String>> accountMap = new HashMap<>();
@@ -186,7 +188,7 @@ public class Debtors {
                 config.getAccountMssqlUser(), config.getAccountMssqlPassword())) {
             for (int off = 0; off < customerIds.size(); off += ID_BATCH) {
                 List<Integer> batch = customerIds.subList(off, Math.min(off + ID_BATCH, customerIds.size()));
-                // placeholders are generated from the batch size, values are always bound
+                // плейсхолдери генеруються за розміром пакета, значення завжди прив'язуються
                 String placeholders = batch.stream().map(id -> "?").collect(Collectors.joining(","));
                 try (PreparedStatement stmt = conn.prepareStatement(
                         "SELECT Customer_id, FirmId, Title FROM [dbo].[Customers]"
@@ -207,8 +209,8 @@ public class Debtors {
     }
 
     /**
-     * Reads the latest {@code ServicesLastState} blob from the accequipment DB, then resolves the
-     * referenced customer IDs to subscriber names via the account DB.
+     * Читає останній blob {@code ServicesLastState} з accequipment DB, після чого визначає
+     * імена абонентів для відповідних ID клієнтів через account DB.
      */
     private List<String> fetchDebtors() throws SQLException {
         List<ServiceEntry> entries = readServicesLastState();
@@ -231,7 +233,7 @@ public class Debtors {
         return result;
     }
 
-    /** Reads the most recent {@code ServicesLastState} parameter value and parses it. */
+    /** Читає найновіше значення параметра {@code ServicesLastState} і розбирає його. */
     private List<ServiceEntry> readServicesLastState() throws SQLException {
         try (Connection conn = connectTo(
                 config.getAccequipmentMssqlServer(), config.getAccequipmentMssqlDatabase(),
@@ -246,8 +248,8 @@ public class Debtors {
     }
 
     /**
-     * Parses the {@code ServicesLastState} JSON array
-     * ({@code [{"Key":firmId,"Value":customerId},...]}) into {@link ServiceEntry} records.
+     * Розбирає JSON-масив {@code ServicesLastState}
+     * ({@code [{"Key":firmId,"Value":customerId},...]}) у записи {@link ServiceEntry}.
      */
     private List<ServiceEntry> parseServicesLastState(String paramValue) {
         List<ServiceEntry> result = new ArrayList<>();
@@ -273,9 +275,9 @@ public class Debtors {
                 }
                 result.add(new ServiceEntry(key.getAsString(), value.getAsInt()));
             }
-            // A single malformed ServicesLastState row used to abort the entire report:
-            // getAsJsonArray/getAsInt throw IllegalState/NumberFormat/UnsupportedOperation,
-            // none of which JsonSyntaxException covers, and the failure propagated to exit(1).
+            // Раніше один пошкоджений рядок ServicesLastState зривав увесь звіт:
+            // getAsJsonArray/getAsInt кидають IllegalState/NumberFormat/UnsupportedOperation,
+            // жоден з яких не покривається JsonSyntaxException, і помилка доходила до exit(1).
         } catch (RuntimeException e) {
             log.warn("Debtors JSON parse error: {}", e.toString());
         }

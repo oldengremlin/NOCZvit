@@ -22,6 +22,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -35,9 +36,10 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Application configuration loaded from a properties file and overridden by CLI arguments.
+ * Конфігурація застосунку, що завантажується з файлу властивостей і перевизначається
+ * аргументами командного рядка.
  *
- * <p>Construction sequence (all called from the constructor in order):
+ * <p>Послідовність побудови (усі виклики йдуть з конструктора по черзі):
  * {@link #initValues()} → {@link #parsePathArgs(String[])} → {@link #loadProperties()} →
  * {@link #generalProperties()} → {@link #parseFlagArgs(String[])} →
  * {@link #hostsProperties()} → {@link #ramosProperties()} → {@link #celsiusProperties()} →
@@ -45,8 +47,8 @@ import lombok.extern.slf4j.Slf4j;
  * {@link #claudeProperties()} → {@link #historyResumeProperties()} → {@link #trapProperties()}.
  */
 @Slf4j
-// secrets are excluded so that any future log.debug("config={}", config) cannot leak them;
-// `properties` holds every key-value pair, i.e. all secrets a second time
+// секрети виключені, щоб майбутній log.debug("config={}", config) не міг їх злити;
+// `properties` містить усі пари ключ-значення, тобто всі секрети ще раз
 @ToString(includeFieldNames = true, exclude = {"properties", "zabbixPassword", "mailPassword",
     "claudeApiKey", "accountMssqlPassword", "accequipmentMssqlPassword",
     // SNMPv2c community — фактично пароль на читання всього обладнання, ще й ходить мережею
@@ -66,6 +68,8 @@ public class Config {
     private boolean ramosEnabled;
     private boolean zabbixEnabled;
     private boolean resilienceAuditEnabled;
+    @NonNull
+    private List<String> resilienceIgnoredInterfacePrefixes;
     private String zabbixApi;
     private String zabbixUrl;
     private String zabbixUsername;
@@ -127,7 +131,7 @@ public class Config {
     @NonNull
     private String historyResumeUrl;
     @Getter(AccessLevel.NONE)
-    private Boolean claudeExplicit; // null = not explicitly set via property or CLI
+    private Boolean claudeExplicit; // null = не задано явно ні властивістю, ні CLI
 
     @NonNull
     private String snmpTrapFolder;
@@ -154,10 +158,10 @@ public class Config {
     private String accequipmentMssqlDatabase;
 
     /**
-     * Loads and validates the full configuration.
+     * Завантажує й перевіряє повну конфігурацію.
      *
-     * @param args CLI arguments passed to {@code main()}
-     * @throws IOException if the properties file or a dictionary file cannot be read
+     * @param args аргументи командного рядка, передані до {@code main()}
+     * @throws IOException якщо файл властивостей або файл словника неможливо прочитати
      */
     public Config(String[] args) throws IOException {
         initValues();
@@ -176,7 +180,7 @@ public class Config {
         trapProperties();
     }
 
-    /** Sets safe defaults for all fields before any properties or CLI arguments are applied. */
+    /** Встановлює безпечні значення за замовчуванням для всіх полів до застосування властивостей чи аргументів CLI. */
     private void initValues() {
         properties = new Properties();
         hosts = Collections.emptyMap();
@@ -197,17 +201,18 @@ public class Config {
         snmpTrapDedupSeconds = 30;
         snmpTrapColdstartLinkMinutes = 5;
         ramosTrapFolder = "";
+        resilienceIgnoredInterfacePrefixes = Collections.emptyList();
     }
 
     /**
-     * Loads properties from the file pointed to by {@code --config=}, or from the bundled
-     * {@code noczvit.properties} resource when no external path was given.
+     * Завантажує властивості з файлу, на який вказує {@code --config=}, або з вбудованого
+     * ресурсу {@code noczvit.properties}, якщо зовнішній шлях не задано.
      *
-     * @throws IOException if the file is missing or unreadable
+     * @throws IOException якщо файл відсутній або нечитабельний
      */
     private void loadProperties() throws IOException {
-        // load(InputStream) decodes as ISO-8859-1 per spec, which mangles Cyrillic values
-        // such as `snmp.ramos=...:name=Датацентр` (they go straight into the report HTML).
+        // load(InputStream) декодує як ISO-8859-1 за специфікацією, що псує кириличні значення
+        // на кшталт `snmp.ramos=...:name=Датацентр` (вони йдуть напряму в HTML звіту).
         if (configPath != null) {
             try (Reader input = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
                 properties.load(input);
@@ -225,9 +230,9 @@ public class Config {
     }
 
     /**
-     * Scans {@code args} for path-type arguments ({@code --config=}, {@code --dictionarypd=},
-     * {@code --dictionarysdh=}, {@code --dictionarydeviceword=}) that must be known before
-     * properties are loaded.
+     * Сканує {@code args} на предмет аргументів-шляхів ({@code --config=}, {@code --dictionarypd=},
+     * {@code --dictionarysdh=}, {@code --dictionarydeviceword=}), які мають бути відомі ще до
+     * завантаження властивостей.
      */
     private void parsePathArgs(String[] args) {
         for (String arg : args) {
@@ -244,14 +249,15 @@ public class Config {
     }
 
     /**
-     * Processes boolean and feature-toggle CLI flags ({@code --incidents}, {@code --debug},
-     * {@code --claude}, etc.). Prints help and exits on any unrecognised argument.
+     * Обробляє булеві прапорці та перемикачі функціональності CLI ({@code --incidents},
+     * {@code --debug}, {@code --claude} тощо). При будь-якому нерозпізнаному аргументі
+     * виводить довідку й завершує процес.
      */
     private void parseFlagArgs(String[] args) {
         for (String arg : args) {
-            // --dictionarydeviceword= was missing here even though parsePathArgs() already
-            // handles it — every real invocation with that flag hit the "Unknown argument"
-            // branch below and killed the process via System.exit(1).
+            // --dictionarydeviceword= тут бракувало, хоча parsePathArgs() уже його обробляє —
+            // кожен реальний виклик із цим прапорцем потрапляв у гілку "Unknown argument"
+            // нижче й убивав процес через System.exit(1).
             if (arg.startsWith("--config=") || arg.startsWith("--dictionarypd=")
                     || arg.startsWith("--dictionarysdh=") || arg.startsWith("--dictionarydeviceword=")) {
                 continue;
@@ -294,7 +300,7 @@ public class Config {
         }
     }
 
-    /** Prints the bundled {@code help.txt} resource to stderr. */
+    /** Виводить вбудований ресурс {@code help.txt} у stderr. */
     private void printHelp() {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(HELP_PATH)) {
             if (input == null) {
@@ -312,17 +318,24 @@ public class Config {
         }
     }
 
-    /** Reads top-level boolean flags ({@code debug}, {@code incidents}, etc.) from properties. */
+    /** Читає верхньорівневі булеві прапорці ({@code debug}, {@code incidents} тощо) з властивостей. */
     private void generalProperties() {
         debug = Boolean.parseBoolean(properties.getProperty("debug", "false"));
         incidentsEnabled = Boolean.parseBoolean(properties.getProperty("incidents", "true"));
         temperatureEnabled = Boolean.parseBoolean(properties.getProperty("temperature", "true"));
         ramosEnabled = Boolean.parseBoolean(properties.getProperty("ramos", "false"));
         zabbixEnabled = Boolean.parseBoolean(properties.getProperty("zabbix", "false"));
-        // Opt-in like ramos/zabbix, not on-by-default like incidents/temperature — new feature,
-        // depends on Zabbix history/item.get behavior that needs verifying against a real
-        // instance before it runs unattended in production.
+        // Opt-in, як ramos/zabbix, а не увімкнено за замовчуванням, як incidents/temperature —
+        // нова функція, що залежить від поведінки Zabbix history/item.get, яку потрібно
+        // перевірити на реальному інстансі, перш ніж запускати без нагляду в продакшені.
         resilienceAuditEnabled = Boolean.parseBoolean(properties.getProperty("resilienceaudit", "false"));
+        // Zabbix бачить лише текстове ім'я інтерфейсу (ifDescr/ifName), не ifType — типи на
+        // кшталт MikroTik wireguard/sstp/l2tp/pptp нічим не позначені в SNMP-даних, які тут
+        // доступні, а самі імена користувач може перейменувати як завгодно. Тому єдиний
+        // робочий варіант без додаткових SNMP-запитів — порівняння префікса імені зі списком,
+        // який задає сам адміністратор (порожньо за замовчуванням — нічого не виключається).
+        resilienceIgnoredInterfacePrefixes = parseCommaList(
+                properties.getProperty("resilienceaudit.ignoreinterfaceprefixes", ""));
         String claudeProp = properties.getProperty("claude");
         if (claudeProp != null) {
             claudeExplicit = Boolean.valueOf(claudeProp);
@@ -330,29 +343,29 @@ public class Config {
     }
 
     /**
-     * Parses {@code snmp.hosts} into an immutable {@code Map<hostname, Map<attr, value>>}.
-     * Each entry has the form {@code hostname:key=val;key=val,...}.
+     * Розбирає {@code snmp.hosts} у незмінну {@code Map<hostname, Map<attr, value>>}.
+     * Кожен запис має вигляд {@code hostname:key=val;key=val,...}.
      */
     private void hostsProperties() {
         hosts = parseKeyedAttributes("snmp.hosts");
     }
 
     /**
-     * Parses {@code snmp.ramos} into an immutable {@code Map<ip, Map<attr, value>>}.
-     * Each entry has the form {@code ip:key=val;key=val,...}.
+     * Розбирає {@code snmp.ramos} у незмінну {@code Map<ip, Map<attr, value>>}.
+     * Кожен запис має вигляд {@code ip:key=val;key=val,...}.
      */
     private void ramosProperties() {
         ramos = parseKeyedAttributes("snmp.ramos");
     }
 
     /**
-     * Parses a property holding comma-separated {@code key:attr=val;attr=val} entries into a
-     * nested map. Entries without a {@code :} separator and attributes without {@code =} are
-     * skipped. Both levels are wrapped unmodifiable — the maps are published to virtual threads
-     * once parsing finishes and must never be mutated afterwards.
+     * Розбирає властивість, що містить розділені комою записи {@code key:attr=val;attr=val},
+     * у вкладену мапу. Записи без роздільника {@code :} та атрибути без {@code =}
+     * пропускаються. Обидва рівні обгортаються як незмінні — ці мапи публікуються віртуальним
+     * потокам після завершення розбору й ніколи не повинні змінюватись після цього.
      *
-     * @param propertyKey property name to read (e.g. {@code snmp.hosts})
-     * @return immutable map of key → immutable attribute map; empty when the property is absent
+     * @param propertyKey ім'я властивості для читання (напр. {@code snmp.hosts})
+     * @return незмінна мапа ключ → незмінна мапа атрибутів; порожня, якщо властивість відсутня
      */
     private Map<String, Map<String, String>> parseKeyedAttributes(String propertyKey) {
         Map<String, Map<String, String>> result = new HashMap<>();
@@ -375,7 +388,7 @@ public class Config {
         return Collections.unmodifiableMap(result);
     }
 
-    /** Reads SNMP community strings and OID settings for Celsius / temperature polling. */
+    /** Читає SNMP community-рядки та налаштування OID для опитування Celsius / температури. */
     private void celsiusProperties() {
         jnxOperatingDescr = properties.getProperty("snmp.jnxOperatingDescr");
         jnxOperatingTemp = properties.getProperty("snmp.jnxOperatingTemp");
@@ -385,7 +398,7 @@ public class Config {
         snmpHostsSuffix = properties.getProperty("snmp.hosts.suffix", "");
     }
 
-    /** Reads Zabbix API URL, credentials, and graph dimensions from properties. */
+    /** Читає URL Zabbix API, облікові дані та розміри графіків з властивостей. */
     private void zabbixProperties() {
         zabbixApi = properties.getProperty("zabbix.api", "");
         zabbixUrl = properties.getProperty("zabbix.url", "");
@@ -396,7 +409,8 @@ public class Config {
     }
 
     /**
-     * Parses an integer property value, returning {@code defaultValue} on null or format error.
+     * Розбирає цілочисельне значення властивості, повертаючи {@code defaultValue} при null
+     * чи помилці формату.
      */
     private int parseIntSafe(String value, int defaultValue) {
         if (value == null) {
@@ -409,7 +423,23 @@ public class Config {
         }
     }
 
-    /** Reads MSSQL credentials for both the account DB and accequipment DB. */
+    /**
+     * Розбирає властивість виду {@code "a, B,, c"} на список непорожніх, обрізаних від пробілів,
+     * приведених до нижнього регістру записів ({@code ["a", "b", "c"]}). Порожні елементи (в
+     * т.ч. від подвійної коми) пропускаються. Порожній чи відсутній рядок дає порожній список.
+     */
+    private static List<String> parseCommaList(String value) {
+        if (value == null || value.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(String::toLowerCase)
+                .toList();
+    }
+
+    /** Читає облікові дані MSSQL як для БД account, так і для БД accequipment. */
     private void mssqlProperties() {
         accountMssqlUser = properties.getProperty("account-mssql-user", "");
         accountMssqlPassword = properties.getProperty("account-mssql-password", "");
@@ -421,7 +451,7 @@ public class Config {
         accequipmentMssqlDatabase = properties.getProperty("accequipment-mssql-database", "");
     }
 
-    /** Reads IMAP and SMTP/sendmail settings together with email address lists. */
+    /** Читає налаштування IMAP та SMTP/sendmail разом зі списками email-адрес. */
     private void emailProperties() {
         mailHostname = properties.getProperty("mail.hostname");
         mailUsername = properties.getProperty("mail.username");
@@ -444,11 +474,11 @@ public class Config {
     }
 
     /**
-     * Reads Claude AI settings and resolves the effective {@code claudeEnabled} flag.
+     * Читає налаштування Claude AI й обчислює фактичний прапорець {@code claudeEnabled}.
      *
-     * <p>Priority order: CLI flag ({@code --claude} / {@code --no-claude}) overrides the
-     * {@code claude} property, which overrides the default (enabled iff not in debug mode).
-     * Claude is auto-disabled when {@code claude.apikey} is blank.
+     * <p>Порядок пріоритету: прапорець CLI ({@code --claude} / {@code --no-claude}) перевизначає
+     * властивість {@code claude}, яка перевизначає значення за замовчуванням (увімкнено, лише
+     * якщо не в режимі debug). Claude автоматично вимикається, якщо {@code claude.apikey} порожній.
      */
     private void claudeProperties() {
         String key = stripInlineComment(properties.getProperty("claude.apikey", ""));
@@ -492,8 +522,8 @@ public class Config {
                 log.warn("claude.maxsentences: некоректне значення «{}» — використовується {}", maxSentences, claudeMaxSentences);
             }
         }
-        // Default: enabled in normal mode, disabled in debug mode.
-        // Explicit claude=.../--claude/--no-claude overrides the default.
+        // За замовчуванням: увімкнено в звичайному режимі, вимкнено в режимі debug.
+        // Явне claude=.../--claude/--no-claude перевизначає значення за замовчуванням.
         claudeEnabled = (claudeExplicit != null) ? claudeExplicit : !debug;
         if (claudeEnabled && claudeApiKey.isBlank()) {
             log.warn("Claude summary enabled but claude.apikey is not set — disabling");
@@ -502,8 +532,8 @@ public class Config {
     }
 
     /**
-     * Reads the optional {@code history.resume} JDBC URL for the SQLite cross-shift summary store.
-     * Leaves {@link #historyResumeUrl} as an empty string when the property is absent or blank.
+     * Читає опціональний JDBC URL {@code history.resume} для сховища SQLite зведень між змінами.
+     * Залишає {@link #historyResumeUrl} порожнім рядком, якщо властивість відсутня чи порожня.
      */
     private void historyResumeProperties() {
         String url = stripInlineComment(properties.getProperty("history.resume", ""));
@@ -513,8 +543,8 @@ public class Config {
     }
 
     /**
-     * Reads SNMP trap folder pattern and tuning parameters.
-     * Leaves {@link #snmpTrapFolder} empty (feature disabled) when the property is absent or blank.
+     * Читає шаблон папки SNMP trap та параметри налаштування.
+     * Залишає {@link #snmpTrapFolder} порожнім (функція вимкнена), якщо властивість відсутня чи порожня.
      */
     private void trapProperties() {
         String folder = stripInlineComment(properties.getProperty("snmp.trap.folder", ""));
@@ -544,22 +574,22 @@ public class Config {
     }
 
     /**
-     * Returns {@code true} when the SNMP trap folder is configured (feature is enabled).
+     * Повертає {@code true}, коли папку SNMP trap налаштовано (функція увімкнена).
      */
     public boolean isTrapEnabled() {
         return !snmpTrapFolder.isBlank();
     }
 
     /**
-     * Returns {@code true} when the RAMOS trap email folder is configured (feature is enabled).
+     * Повертає {@code true}, коли папку email для RAMOS trap налаштовано (функція увімкнена).
      */
     public boolean isRamosTrapEnabled() {
         return !ramosTrapFolder.isBlank();
     }
 
     /**
-     * Strips a trailing inline comment ({@code # ...}) from a property value and trims whitespace.
-     * Returns an empty string for null input.
+     * Відсікає кінцевий вбудований коментар ({@code # ...}) зі значення властивості й обрізає пробіли.
+     * Повертає порожній рядок для {@code null} на вході.
      */
     private static String stripInlineComment(String value) {
         if (value == null) {
@@ -570,8 +600,8 @@ public class Config {
     }
 
     /**
-     * Returns {@code true} when all four MSSQL connection properties (for both the account
-     * and accequipment databases) are non-empty.
+     * Повертає {@code true}, коли всі чотири властивості з'єднання MSSQL (для обох баз даних —
+     * account і accequipment) непорожні.
      */
     public boolean isDebtorsEnabled() {
         return !accountMssqlServer.isEmpty() && !accountMssqlDatabase.isEmpty()
@@ -579,9 +609,9 @@ public class Config {
     }
 
     /**
-     * Returns {@code true} when the minimum required settings are present: email addresses
-     * ({@code from}, {@code replyTo}, at least one {@code to}) and, if SNMP sections are
-     * enabled, at least one community string.
+     * Повертає {@code true}, коли присутній мінімально необхідний набір налаштувань: email-адреси
+     * ({@code from}, {@code replyTo}, щонайменше одна {@code to}) і, якщо секції SNMP увімкнені,
+     * щонайменше один community-рядок.
      */
     public boolean isValid() {
         boolean isEmailValid = emailFrom != null && emailReplyTo != null && !emailTo.isEmpty();

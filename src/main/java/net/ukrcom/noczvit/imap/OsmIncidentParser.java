@@ -32,8 +32,8 @@ import net.ukrcom.noczvit.model.Incident.Status;
 import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
- * Domain: parses OSM/SDH alert emails into {@link Incident} objects. No I/O —
- * receives a {@link RawMessage} and produces a domain object.
+ * Домен: парсить листи-алерти OSM/SDH в об'єкти {@link Incident}. Без I/O —
+ * отримує {@link RawMessage} і повертає доменний об'єкт.
  */
 @Slf4j
 public class OsmIncidentParser {
@@ -44,10 +44,10 @@ public class OsmIncidentParser {
             = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
     private static final Pattern PATTERN_DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}");
 
-    // How far a Trap value must predate its alert before the «який відбувся …» note is worth
-    // adding. Below this the gap is clock skew or processing lag between the OSM host and the
-    // mail server — observed at ~2 minutes — and the note would only restate the «Початок»
-    // column. Only a genuinely delayed report says something that column cannot.
+    // Наскільки Trap value має випереджати свій алерт у часі, щоб приписка «який відбувся …»
+    // мала сенс. Менший розрив — це розбіжність годинників чи затримка обробки між хостом OSM
+    // і поштовим сервером (спостерігалась ~2 хвилини), і приписка лише повторила б колонку
+    // «Початок». Лише справді запізнілий звіт повідомляє те, чого ця колонка сказати не може.
     private static final long TRAP_NOTE_MIN_LAG_SEC = 5 * 60;
 
     private final Dictionary dictionary;
@@ -57,7 +57,7 @@ public class OsmIncidentParser {
     }
 
     /**
-     * Returns an Incident if the message is a valid OSM alert, empty otherwise.
+     * Повертає Incident, якщо повідомлення є валідним алертом OSM, інакше empty.
      *
      * @param msg
      * @return
@@ -82,8 +82,8 @@ public class OsmIncidentParser {
         from = fromRes.value();
         boolean needsReviewFrom = fromRes.needsReview();
 
-        // An absent "to" (non-STM subjects) resolves to itself and would look unresolved —
-        // an empty code is not a missing dictionary entry, so it never goes to review.
+        // Відсутній "to" (теми не STM) резолвиться сам у себе і виглядав би нерезолвленим —
+        // порожній код це не відсутній запис у словнику, тож він ніколи не йде на review.
         String originalTo = to;
         Dictionary.Resolution toRes = dictionary.resolveSDH(to);
         to = toRes.value();
@@ -106,7 +106,7 @@ public class OsmIncidentParser {
         String description = IncidentDescriptions.describe(
                 IncidentDescriptions.SOURCE_OSM, status, eventDesc, "інцидент, ");
 
-        // Extract precise event time from Trap value in body
+        // Видобуваємо точний час події з Trap value в тілі листа
         long eventTs = msg.unixDate();
         String eventDateStr = msg.dateStr();
         String[] lines = msg.body().replace("\r", "").split("\n");
@@ -128,9 +128,10 @@ public class OsmIncidentParser {
             }
         }
 
-        // An event cannot have happened after the alert that reports it, yet OSM regularly sends
-        // a Trap value a couple of minutes ahead of its own mail — clock skew between the OSM
-        // host and the mail server, not a real event time. Clamp those to the alert time.
+        // Подія не може статися пізніше за алерт, що про неї повідомляє, проте OSM регулярно
+        // надсилає Trap value на кілька хвилин раніше за власний лист — це розбіжність
+        // годинників хоста OSM і поштового сервера, а не реальний час події. Обрізаємо такі
+        // значення до часу алерту.
         if (eventTs > msg.unixDate()) {
             log.debug("Trap value {} is after the alert ({}), clamping to the alert time",
                     eventTs, msg.unixDate());
@@ -138,10 +139,11 @@ public class OsmIncidentParser {
             eventDateStr = msg.dateStr();
         }
 
-        // Only a Trap value that predates the alert by more than the skew threshold says
-        // something the «Початок» column does not — the event sat unreported that long. Anything
-        // closer (including everything just clamped above) adds nothing, so the note is omitted.
-        // eventTs stays as reported either way; only the note is suppressed.
+        // Лише Trap value, що випереджає алерт більше за поріг розбіжності годинників,
+        // повідомляє те, чого не каже колонка «Початок» — подія настільки довго лишалась
+        // незвітованою. Все ближче (включно з усім щойно обрізаним вище) нічого не додає,
+        // тож приписку опускаємо. eventTs у будь-якому разі лишається як заявлено;
+        // приховується лише приписка.
         if (msg.unixDate() - eventTs >= TRAP_NOTE_MIN_LAG_SEC) {
             description += ", який відбувся " + DateUtils.convertMonthNumToMnemo(eventDateStr);
         }

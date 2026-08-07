@@ -287,7 +287,9 @@ class PowerResilienceSectionTest {
 
         String html = section.build(List.of(r)).html();
 
-        assertTrue(html.contains("Немає даних для аналізу — усі 3 портів хоста без опису або позначені вільними."));
+        assertTrue(html.contains(
+                "Немає даних для аналізу — усі 3 портів хоста без опису, позначені вільними, або виключеного типу "
+                        + "(налаштування)."));
         assertFalse(html.contains("жоден інтерфейс не мав історії"));
     }
 
@@ -315,7 +317,7 @@ class PowerResilienceSectionTest {
         String html = section.build(List.of(r)).html();
 
         assertTrue(html.contains("2 портів не враховано — не мали історії на момент падіння вузла."));
-        assertTrue(html.contains("5 портів не враховано — без опису або позначені вільними"));
+        assertTrue(html.contains("5 портів не враховано — без опису, позначені вільними"));
     }
 
     // ---- stillUpAtFall == 0: параграф "З тих, що ще працювали" не з'являється ------------------

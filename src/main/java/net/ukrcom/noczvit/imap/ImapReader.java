@@ -32,11 +32,11 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
 /**
- * Infrastructure: connects to an IMAP server and returns raw messages. No
- * business logic — callers decide what to do with the messages.
+ * Інфраструктура: підключається до сервера IMAP і повертає сирі повідомлення. Без
+ * бізнес-логіки — виклики самі вирішують, що робити з повідомленнями.
  *
- * <p>Connection setup and message conversion are shared with {@code trap.ImapTrapReader}
- * via {@link MailMessageSupport}.
+ * <p>Налаштування з'єднання й перетворення повідомлень спільні з {@code trap.ImapTrapReader}
+ * через {@link MailMessageSupport}.
  */
 @Slf4j
 public class ImapReader {
@@ -44,21 +44,21 @@ public class ImapReader {
     private final Config config;
 
     /**
-     * Creates a reader bound to the given configuration.
+     * Створює читач, прив'язаний до заданої конфігурації.
      */
     public ImapReader(Config config) {
         this.config = config;
     }
 
     /**
-     * Reads messages from the configured IMAP folder.
+     * Читає повідомлення з налаштованої теки IMAP.
      *
-     * @param fetchAll when true, retrieves all messages regardless of date
-     * @param fromEpoch unix epoch lower bound (inclusive) for date-based
-     * filtering
-     * @param toEpoch unix epoch upper bound (inclusive) for date-based
-     * filtering
-     * @return parsed raw messages; never null
+     * @param fetchAll коли true, отримує всі повідомлення незалежно від дати
+     * @param fromEpoch нижня межа unix-епохи (включно) для фільтрації
+     * за датою
+     * @param toEpoch верхня межа unix-епохи (включно) для фільтрації
+     * за датою
+     * @return розібрані сирі повідомлення; ніколи не null
      * @throws jakarta.mail.MessagingException
      */
     public List<RawMessage> readMessages(boolean fetchAll, long fromEpoch, long toEpoch) throws MessagingException {
@@ -106,16 +106,16 @@ public class ImapReader {
     }
 
     /**
-     * Builds a server-side {@code SEARCH} term for the given epoch range.
+     * Будує серверний термін {@code SEARCH} для заданого діапазону епохи.
      *
-     * <p>Only standard terms are translated into an IMAP {@code SEARCH} command; an anonymous
-     * {@link jakarta.mail.search.SearchTerm} subclass silently falls back to
-     * {@link jakarta.mail.Folder#search}, which downloads <em>every</em> message in the folder
-     * and calls {@code getSentDate()} on each — the single most expensive operation of a run.
+     * <p>У команду IMAP {@code SEARCH} перекладаються лише стандартні терміни; анонімний
+     * підклас {@link jakarta.mail.search.SearchTerm} мовчки відкочується до
+     * {@link jakarta.mail.Folder#search}, який завантажує <em>кожне</em> повідомлення теки
+     * і викликає {@code getSentDate()} для кожного — найдорожча операція за весь запуск.
      *
-     * <p>IMAP {@code SEARCH} compares dates at day granularity, so the range is padded by one day
-     * on each side to stay immune to server/client timezone differences. Exact second-level
-     * trimming already happens downstream (see {@code imap.Client} and {@code NOCZvit}).
+     * <p>IMAP {@code SEARCH} порівнює дати з точністю до дня, тому діапазон розширюється на
+     * один день з кожного боку, щоб не залежати від різниці часових зон сервера й клієнта.
+     * Точне обрізання до секунди вже відбувається далі (див. {@code imap.Client} та {@code NOCZvit}).
      */
     public static SearchTerm dateRangeTerm(long fromEpoch, long toEpoch) {
         return new AndTerm(

@@ -121,6 +121,7 @@ public class PowerResilienceSection {
         return new SectionResult(html.toString(), plainText.toString());
     }
 
+    /** Один рядок компактного текстового блока для Claude — підсумкові цифри й вердикт без переліку портів. */
     private String buildPlainTextOne(String location, PowerResilienceResult r) {
         StringBuilder sb = new StringBuilder();
         String title = location.equals(r.host()) ? r.host() : location + " (" + r.host() + ")";
@@ -171,7 +172,8 @@ public class PowerResilienceSection {
             // коли насправді всі порти хоста виключені як службові чи вільні.
             body.append(r.noDataAtFall() == 0 && r.ignoredPorts() > 0
                     ? "<i>Немає даних для аналізу — усі " + r.ignoredPorts()
-                      + " портів хоста без опису або позначені вільними.</i>\n"
+                      + " портів хоста без опису, позначені вільними, або виключеного типу "
+                      + "(налаштування).</i>\n"
                     : "<i>Немає даних для аналізу — жоден інтерфейс не мав історії "
                       + "на момент падіння вузла.</i>\n");
             return html.append(body).append("</td></tr>\n").toString();
@@ -216,9 +218,10 @@ public class PowerResilienceSection {
                             + "робить переповнення лічильника малоймовірним поясненням: більш "
                             + "вірогідно, що обладнання дійсно перезавантажилось.</i></p>\n");
         } else if (r.verdict().isEmpty() && r.uptimeDecreased()) {
-            // Uptime fact belongs only here — in the ambiguous middle where neither the port
-            // pattern nor a restart event gives a clearer answer. At the two clear edges (or with
-            // a confirmed restart above) this would just be noise alongside a stronger signal.
+            // Факт про uptime показуємо лише тут — у неоднозначній середині, де ні розподіл
+            // портів, ні подія перезавантаження не дають чіткішої відповіді. На двох однозначних
+            // краях (або за наявності підтвердженого перезавантаження вище) це був би просто шум
+            // поруч із сильнішим сигналом.
             body.append("<p><i>Zabbix зафіксував зменшення лічильника uptime з ")
                     .append(r.uptimeBefore().get()).append(" на ").append(r.uptimeAfter().get())
                     .append(" с. Лічильник може переповнюватись і без реального перезавантаження — "
@@ -235,13 +238,15 @@ public class PowerResilienceSection {
         }
         if (r.ignoredPorts() > 0) {
             body.append("<p><i>").append(r.ignoredPorts())
-                    .append(" портів не враховано — без опису або позначені вільними "
-                            + "(<code>--free--</code>, <code>--unused--</code>).</i></p>\n");
+                    .append(" портів не враховано — без опису, позначені вільними "
+                            + "(<code>--free--</code>, <code>--unused--</code>), "
+                            + "або виключеного типу (налаштування).</i></p>\n");
         }
 
         return html.append(body).append("</td></tr>\n").toString();
     }
 
+    /** Додає до {@code html} маркований список інтерфейсів з міткою часу під заданим заголовком, якщо перелік непорожній. */
     private void appendNames(StringBuilder html, String label,
             List<PowerResilienceResult.InterfaceObservation> observations) {
         if (observations.isEmpty()) {

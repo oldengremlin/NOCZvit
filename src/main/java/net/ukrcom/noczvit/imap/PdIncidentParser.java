@@ -25,8 +25,8 @@ import net.ukrcom.noczvit.model.Incident.Status;
 import net.ukrcom.noczvit.model.IncidentDescriptions;
 
 /**
- * Domain: parses Zabbix/PD alert emails into {@link Incident} objects. No I/O —
- * receives a {@link RawMessage} and produces a domain object.
+ * Домен: парсить листи-алерти Zabbix/PD в об'єкти {@link Incident}. Без I/O —
+ * отримує {@link RawMessage} і повертає доменний об'єкт.
  */
 @Slf4j
 public class PdIncidentParser {
@@ -41,7 +41,7 @@ public class PdIncidentParser {
     }
 
     /**
-     * Returns an Incident if the message is a valid PD alert, empty otherwise.
+     * Повертає Incident, якщо повідомлення є валідним алертом PD, інакше empty.
      *
      * @param msg
      * @return
@@ -69,6 +69,13 @@ public class PdIncidentParser {
             }
             String[] fromParts = from.split(":");
             String fromName = fromParts[0];
+            // ВІДОМА ОСОБЛИВІСТЬ (свідомо не виправлено): якщо fromObject після цього зняття
+            // сам починається з r/s/p чи ies*/alca- (напр. "ssks-2" → "sks-2"), Dictionary.resolvePD
+            // знову зніме префікс і суфікс — подвійне зняття. У наявному словнику це рятує
+            // fallback-прохід lookupPD по оригінальному ключу (сам збігається за коротшим
+            // префіксом), тож на реальних даних хибного результату не спостерігалось. Ризик
+            // теоретичний: спрацював би, лише якби подвійно-зрізаний залишок випадково збігався
+            // з ІНШИМ записом словника (тоді fallback узагалі не викликається).
             String fromObject = fromName.matches(".*-\\d+$")
                                 ? fromName.replaceAll(DEVICE_PREFIX_PATTERN.pattern(), "")
                                 : fromName;
@@ -92,7 +99,7 @@ public class PdIncidentParser {
             ));
         }
 
-        // Subject has no colon-terminated device (e.g. "has been restarted") — device is from plain parts
+        // У темі немає пристрою, що закінчується двокрапкою (напр. "has been restarted") — пристрій береться з plain parts
         Status status = resolveStatus(subject, type);
         String description = buildDescription(status, type, from);
         String dateLoc = DateUtils.convertMonthNumToMnemo(msg.dateStr());
@@ -109,8 +116,8 @@ public class PdIncidentParser {
     }
 
     /**
-     * Returns {@code true} for subjects that should be silently skipped (IVR, SDH-OSM,
-     * console, UVPN, paired host-port patterns, etc.).
+     * Повертає {@code true} для тем, які слід мовчки пропускати (IVR, SDH-OSM,
+     * console, UVPN, паровані патерни host-port тощо).
      */
     private boolean isIgnored(String subject) {
         return subject.contains("IVR") || subject.contains("TELEVIEV") || subject.contains("Z-SQL")
@@ -121,11 +128,11 @@ public class PdIncidentParser {
     }
 
     /**
-     * Determines the incident status from the subject keyword and event type token.
+     * Визначає статус інциденту за ключовим словом теми та токеном типу події.
      *
-     * <p>Extends {@link IncidentDescriptions#resolveStatus} with one PD-only rule: a restart
-     * ({@code type="been"}) is reported under a {@code "Problem:"} subject but is an
-     * informational event, not the start of an incident.
+     * <p>Розширює {@link IncidentDescriptions#resolveStatus} одним правилом, властивим лише PD:
+     * перезавантаження ({@code type="been"}) надходить під темою {@code "Problem:"}, але є
+     * інформаційною подією, а не початком інциденту.
      */
     private Status resolveStatus(String subject, String type) {
         if (subject.contains(" Problem:") && type.contains("been")) {
@@ -135,8 +142,8 @@ public class PdIncidentParser {
     }
 
     /**
-     * Assembles the plain-text incident description from the status prefix, event-type token,
-     * and resolved location name.
+     * Складає текстовий опис інциденту з префікса статусу, токена типу події
+     * та резолвленої назви локації.
      */
     private String buildDescription(Status status, String type, String from) {
         String eventDesc = switch (type) {

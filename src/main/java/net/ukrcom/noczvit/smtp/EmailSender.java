@@ -38,11 +38,11 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
 /**
- * Sends the HTML report email by piping the serialised MIME message to the system
- * {@code sendmail} binary (or SMTP in debug mode).
+ * Надсилає лист зі звітом у HTML, передаючи серіалізоване MIME-повідомлення через канал у
+ * системний бінарник {@code sendmail} (або через SMTP у режимі debug).
  *
- * <p>Writing the message and reading from the pipe run in separate virtual threads to avoid
- * the deadlock that would occur if the pipe buffer filled before the process started reading.
+ * <p>Запис повідомлення та читання з каналу виконуються в окремих віртуальних потоках, щоб
+ * уникнути дедлоку, який стався б, якби буфер каналу заповнився до того, як процес почав читати.
  */
 @Slf4j
 public class EmailSender {
@@ -51,10 +51,10 @@ public class EmailSender {
     private final String version;
 
     /**
-     * Creates the sender and reads the project version from the bundled
-     * {@code version.properties} resource (injected by Maven resource filtering).
+     * Створює відправник і зчитує версію проекту з вбудованого ресурсу
+     * {@code version.properties} (підставляється фільтрацією ресурсів Maven).
      *
-     * @throws IOException if {@code version.properties} is missing from the classpath
+     * @throws IOException якщо {@code version.properties} відсутній у classpath
      */
     public EmailSender(Config config) throws IOException {
         this.config = config;
@@ -69,15 +69,16 @@ public class EmailSender {
     }
 
     /**
-     * Assembles a MIME email and delivers it via sendmail.
+     * Формує MIME-лист і доставляє його через sendmail.
      *
-     * <p>In debug mode the message goes to {@code emailToDebug} only. The sendmail process is
-     * given 30 seconds to complete; it is killed and an exception is thrown on timeout.
+     * <p>У режимі debug лист іде лише на {@code emailToDebug}. На завершення процесу sendmail
+     * відводиться 30 секунд; при перевищенні таймауту процес примусово завершується і кидається
+     * виняток.
      *
-     * @param subject     email subject line
-     * @param messageHtml complete HTML body
-     * @throws MessagingException if the MIME message cannot be built or serialised
-     * @throws IOException        if sendmail cannot be started, times out, or is interrupted
+     * @param subject     тема листа
+     * @param messageHtml повне тіло листа у HTML
+     * @throws MessagingException якщо MIME-повідомлення не вдалося побудувати чи серіалізувати
+     * @throws IOException        якщо sendmail не вдалося запустити, стався таймаут або переривання
      */
     public void sendReport(String subject, String messageHtml) throws MessagingException, IOException {
         Properties props = new Properties();

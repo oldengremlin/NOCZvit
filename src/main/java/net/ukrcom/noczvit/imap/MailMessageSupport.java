@@ -32,19 +32,21 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
 /**
- * Shared IMAP connection setup and message-to-{@link RawMessage} conversion, used by both
- * {@link ImapReader} (Zabbix/OSM alert folder) and {@code trap.ImapTrapReader} (SNMP trap folders).
+ * Спільне налаштування IMAP-з'єднання та конвертація повідомлення в {@link RawMessage},
+ * використовується і в {@link ImapReader} (тека алертів Zabbix/OSM), і в
+ * {@code trap.ImapTrapReader} (теки SNMP-трапів).
  *
- * <p><b>Thread safety:</b> stateless — every method is static and works only on its arguments and
- * locals. This matters because the report run opens several IMAP branches concurrently on virtual
- * threads (Emerson traps and RAMOS traps each construct their own reader), so these methods are
- * called in parallel. {@link DateTimeFormatter} is immutable and safe to share; a fresh
- * {@link Properties} instance is returned per call rather than a shared constant.
+ * <p><b>Потокобезпечність:</b> без стану — кожен метод статичний і працює лише зі своїми
+ * аргументами та локальними змінними. Це важливо, бо під час формування звіту одночасно
+ * відкривається кілька IMAP-гілок на віртуальних потоках (трапи Emerson і трапи RAMOS кожен
+ * створюють власний reader), тож ці методи викликаються паралельно. {@link DateTimeFormatter}
+ * незмінний і безпечний для спільного використання; свіжий екземпляр {@link Properties}
+ * повертається на кожен виклик, а не спільна константа.
  */
 @Slf4j
 public final class MailMessageSupport {
 
-    // RFC 2822 allows single-digit day (e.g. "Thu, 9 Jul 2026") — use 'd' not 'dd'
+    // RFC 2822 допускає одноцифровий день (напр. "Thu, 9 Jul 2026") — тому 'd', а не 'dd'
     private static final DateTimeFormatter MESSAGE_HEADER_FORMATTER
             = DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
@@ -52,19 +54,19 @@ public final class MailMessageSupport {
     }
 
     /**
-     * Builds the jakarta.mail session properties for the configured IMAP server, including
-     * connection/read/write timeouts.
+     * Формує властивості сесії jakarta.mail для налаштованого IMAP-сервера, включно з
+     * таймаутами з'єднання/читання/запису.
      *
-     * @param config source of hostname and SSL settings
-     * @return a fresh mutable {@link Properties} owned by the caller
+     * @param config джерело імені хоста та налаштувань SSL
+     * @return свіжий мутабельний екземпляр {@link Properties}, яким володіє викликач
      */
     public static Properties imapProperties(Config config) {
         Properties props = new Properties();
         props.put("mail.imap.ssl.enable", config.isMailSsl());
         props.put("mail.imap.host", config.getMailHostname());
         props.put("mail.imap.port", imapPort(config));
-        // getStore("imaps") makes jakarta.mail read the "mail.imaps." prefix, so timeouts
-        // must be registered under the prefix that matches the protocol actually used.
+        // getStore("imaps") змушує jakarta.mail читати префікс "mail.imaps.", тож таймаути
+        // потрібно реєструвати під префіксом, що відповідає фактично використаному протоколу.
         String p = config.isMailSsl() ? "mail.imaps." : "mail.imap.";
         props.put(p + "connectiontimeout", "10000");
         props.put(p + "timeout", "30000");
@@ -72,26 +74,26 @@ public final class MailMessageSupport {
         return props;
     }
 
-    /** Returns the IMAP port matching the configured SSL mode. */
+    /** Повертає IMAP-порт відповідно до налаштованого режиму SSL. */
     public static String imapPort(Config config) {
         return config.isMailSsl() ? "993" : "143";
     }
 
-    /** Returns the jakarta.mail store protocol name matching the configured SSL mode. */
+    /** Повертає назву протоколу jakarta.mail store відповідно до налаштованого режиму SSL. */
     public static String imapProtocol(Config config) {
         return config.isMailSsl() ? "imaps" : "imap";
     }
 
     /**
-     * Converts a Jakarta Mail {@link Message} to a {@link RawMessage}.
-     * Returns empty if the {@code Date} header is missing, unparseable, or the subject is null.
+     * Конвертує Jakarta Mail {@link Message} у {@link RawMessage}.
+     * Повертає empty, якщо заголовок {@code Date} відсутній, не парситься, або тема (subject) null.
      *
-     * @param msg            message to convert
-     * @param withInReplyTo  when true, the {@code In-Reply-To} header is carried over (used for
-     *                       START/END pairing of alert mails); trap mails have no pairing and pass
-     *                       false, which stores an empty key
-     * @param logContext     short caller name used to attribute warnings to the right reader
-     * @return converted message, or empty when it cannot be used
+     * @param msg            повідомлення для конвертації
+     * @param withInReplyTo  якщо true, заголовок {@code In-Reply-To} переноситься (використовується
+     *                       для парування START/END листів-алертів); листи-трапи парування не мають
+     *                       і передають false, що зберігає порожній ключ
+     * @param logContext     коротке ім'я викликача для прив'язки попереджень до потрібного reader
+     * @return сконвертоване повідомлення, або empty, якщо його не можна використати
      */
     public static Optional<RawMessage> parseRawMessage(Message msg, boolean withInReplyTo,
                                                        String logContext) {
@@ -109,11 +111,11 @@ public final class MailMessageSupport {
             try {
                 unixDate = OffsetDateTime.parse(dateStr, MESSAGE_HEADER_FORMATTER).toEpochSecond();
             } catch (DateTimeParseException e) {
-                // The strict pattern rejects RFC 5322 forms real MTAs emit — a trailing zone
-                // comment ("+0300 (EEST)", added by Postfix), folding whitespace before a
-                // single-digit day, a missing day-of-week or missing seconds. Dropping such
-                // messages was silent (log.debug is off in production), so fall back to
-                // jakarta.mail's lenient MailDateFormat instead.
+                // Строгий патерн відхиляє форми RFC 5322, які реально надсилають MTA — коментар
+                // часового поясу в кінці ("+0300 (EEST)", доданий Postfix), пробіли перед
+                // одноцифровим днем, відсутній день тижня чи відсутні секунди. Відкидання таких
+                // повідомлень проходило непомітно (log.debug вимкнено в продакшені), тож натомість
+                // використовуємо резервний варіант — поблажливий MailDateFormat з jakarta.mail.
                 Date sent = msg.getSentDate();
                 if (sent == null) {
                     log.warn("{}: unparseable Date header «{}» and no sent date, skipping message",
@@ -145,8 +147,8 @@ public final class MailMessageSupport {
     }
 
     /**
-     * Extracts the plain-text body from a message. Returns an empty string when no
-     * {@code text/plain} part is found or the message has an unsupported MIME structure.
+     * Видобуває текстове тіло з повідомлення. Повертає порожній рядок, якщо частину
+     * {@code text/plain} не знайдено або повідомлення має непідтримувану MIME-структуру.
      */
     private static String extractText(Message message) throws MessagingException, IOException {
         if (message.isMimeType("text/plain")) {
@@ -159,12 +161,12 @@ public final class MailMessageSupport {
     }
 
     /**
-     * Walks a multipart tree depth-first and returns the first {@code text/plain} part found.
+     * Обходить дерево multipart углиб і повертає першу знайдену частину {@code text/plain}.
      *
-     * <p>Recursion is required: a message carrying an attachment is typically
-     * {@code multipart/mixed → multipart/alternative → text/plain}, and a flat scan of the top
-     * level finds no {@code text/plain} part at all, silently yielding an empty body — which for
-     * a trap mail means dropping the trap entirely.
+     * <p>Рекурсія необхідна: повідомлення з вкладенням зазвичай має структуру
+     * {@code multipart/mixed → multipart/alternative → text/plain}, і плоский прохід лише
+     * верхнього рівня взагалі не знаходить частини {@code text/plain}, мовчки повертаючи
+     * порожнє тіло — а для листа-трапу це означає повне відкидання трапу.
      */
     private static String extractText(Multipart multipart) throws MessagingException, IOException {
         for (int i = 0; i < multipart.getCount(); i++) {
@@ -182,7 +184,7 @@ public final class MailMessageSupport {
         return "";
     }
 
-    /** Normalises a MIME part payload to text; {@code InputStream} parts are read as UTF-8. */
+    /** Нормалізує вміст MIME-частини в текст; частини {@code InputStream} читаються як UTF-8. */
     private static String contentAsText(Object content) throws IOException {
         return switch (content) {
             case String s ->

@@ -23,11 +23,11 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Removes duplicate trap events that arise from SNMP trap receiver re-delivery.
+ * Прибирає дубльовані події трапів, що виникають через повторну доставку приймачем SNMP-трапів.
  *
- * <p>Only {@code Cold Start} traps are deduplicated (they commonly fire multiple times on reboot).
- * All other traps pass through unchanged. Deduplication groups by
- * {@code (hostname, trapType)} and keeps only the first event within a time window.
+ * <p>Дедуплікуються лише трапи {@code Cold Start} (вони зазвичай спрацьовують по кілька разів
+ * при перезавантаженні). Усі інші трапи проходять без змін. Дедуплікація групує за
+ * {@code (hostname, trapType)} і залишає лише першу подію в межах часового вікна.
  */
 @Slf4j
 public class TrapDeduplicator {
@@ -38,12 +38,12 @@ public class TrapDeduplicator {
     }
 
     /**
-     * Deduplicates Cold Start events within the given time window.
+     * Дедуплікує події Cold Start у межах заданого часового вікна.
      *
-     * @param events        input trap events (order is not required but helps logging)
-     * @param windowSeconds time window in seconds; events of the same
-     *                      {@code (hostname, trapType)} within this window after the first are dropped
-     * @return deduplicated list, sorted by timestamp ascending
+     * @param events        вхідні події трапів (порядок не обов'язковий, але допомагає логуванню)
+     * @param windowSeconds часове вікно в секундах; події з однаковим {@code (hostname, trapType)}
+     *                      у межах цього вікна після першої відкидаються
+     * @return дедуплікований список, відсортований за міткою часу за зростанням
      */
     public static List<TrapEvent> deduplicate(List<TrapEvent> events, int windowSeconds) {
         List<TrapEvent> sorted = events.stream()

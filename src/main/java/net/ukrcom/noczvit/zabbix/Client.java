@@ -48,12 +48,13 @@ import lombok.extern.slf4j.Slf4j;
 import net.ukrcom.noczvit.Config;
 
 /**
- * Zabbix API and web client used for fetching historical events and downloading graph images.
+ * Клієнт Zabbix API та web-інтерфейсу для отримання історичних подій і завантаження
+ * зображень графіків.
  *
- * <p>Maintains two sessions: a JSON-RPC API session (for {@code event.get}, {@code host.get},
- * {@code graph.get}) and a web UI session (for {@code chart2.php} PNG downloads). Both are
- * established by {@link #login()}. Host IDs and graph IDs are cached to avoid redundant API
- * calls when building the same report section for multiple incidents.
+ * <p>Підтримує дві сесії: сесію JSON-RPC API (для {@code event.get}, {@code host.get},
+ * {@code graph.get}) та сесію web UI (для завантаження PNG через {@code chart2.php}). Обидві
+ * встановлюються через {@link #login()}. ID хостів та ID графіків кешуються, щоб уникнути
+ * повторних викликів API при формуванні одного й того ж розділу звіту для кількох інцидентів.
  */
 @Slf4j
 public class Client {
@@ -62,11 +63,11 @@ public class Client {
     private static final AtomicInteger ID_GEN = new AtomicInteger(1);
     private static final Gson GSON = new Gson();
 
-    // Without these a stalled Zabbix front-end hangs the whole cron run indefinitely:
-    // java.net.http.HttpClient has no default connect or read timeout.
+    // Без цього завислий front-end Zabbix підвісить увесь cron-запуск на невизначений час:
+    // java.net.http.HttpClient не має типового таймауту з'єднання чи читання.
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
-    /** chart2.php renders PNGs and is legitimately slower than the JSON-RPC endpoint. */
+    /** chart2.php рендерить PNG і закономірно повільніший за JSON-RPC endpoint. */
     private static final Duration GRAPH_TIMEOUT = Duration.ofSeconds(60);
 
     private final Config config;
@@ -81,14 +82,14 @@ public class Client {
     private final ConcurrentHashMap<String, Optional<InterfaceItem>> uptimeItemCache = new ConcurrentHashMap<>();
 
     /**
-     * Creates the Zabbix client. The HTTP client is configured with a shared cookie store so
-     * that the web session cookie ({@code zbx_sessionid}) set during {@link #webLogin()} is
-     * automatically attached to every subsequent {@code chart2.php} request.
+     * Створює клієнт Zabbix. HTTP-клієнт налаштовано зі спільним сховищем cookie, щоб
+     * cookie web-сесії ({@code zbx_sessionid}), встановлений під час {@link #webLogin()},
+     * автоматично додавався до кожного наступного запиту {@code chart2.php}.
      */
     public Client(Config config) {
         this.config = config;
-        // CookieManager stores the zbx_sessionid from web login and sends it automatically
-        // with every subsequent request (including chart2.php).
+        // CookieManager зберігає zbx_sessionid після web-логіну та автоматично надсилає
+        // його з кожним наступним запитом (включно з chart2.php).
         this.http = HttpClient.newBuilder()
                 .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -98,10 +99,10 @@ public class Client {
     }
 
     /**
-     * Authenticates against both the Zabbix JSON-RPC API and the Zabbix web UI.
-     * Both sessions must succeed for graph images to work correctly.
+     * Виконує автентифікацію і в Zabbix JSON-RPC API, і у web UI Zabbix.
+     * Для коректної роботи зображень графіків обидві сесії мають бути успішними.
      *
-     * @return {@code true} when both API and web logins succeeded
+     * @return {@code true}, якщо і API-, і web-логін пройшли успішно
      */
     public boolean login() {
         boolean apiOk = apiLogin();
@@ -110,7 +111,7 @@ public class Client {
         return apiOk && webOk;
     }
 
-    /** Authenticates via {@code user.login} and stores the returned auth token. */
+    /** Автентифікується через {@code user.login} і зберігає отриманий auth-токен. */
     private boolean apiLogin() {
         try {
             JsonObject params = new JsonObject();
@@ -134,9 +135,9 @@ public class Client {
     }
 
     /**
-     * Authenticates via a form POST to {@code index.php}. On success Zabbix sets the
-     * {@code zbx_sessionid} cookie, which is stored in the shared {@code CookieManager} and
-     * sent automatically with every subsequent {@code chart2.php} request.
+     * Автентифікується через form POST на {@code index.php}. У разі успіху Zabbix встановлює
+     * cookie {@code zbx_sessionid}, який зберігається у спільному {@code CookieManager} і
+     * автоматично надсилається з кожним наступним запитом {@code chart2.php}.
      */
     private boolean webLogin() {
         try {
@@ -157,6 +158,9 @@ public class Client {
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             log.debug("Zabbix web login response: HTTP {}, final URI: {}", resp.statusCode(), resp.uri());
 
+            // Optional.map тут не перетворює значення, а обчислює ознаку "чи є потрібна cookie":
+            // приводимо cookieHandler до CookieManager і одразу шукаємо серед його cookie ту, чиє
+            // ім'я починається з "zbx_session"; відсутній cookieHandler трактуємо як "немає cookie".
             boolean hasCookie = http.cookieHandler()
                     .map(ch -> ch instanceof CookieManager cm
                     && cm.getCookieStore().getCookies().stream()
@@ -201,9 +205,9 @@ public class Client {
 
         try {
             JsonObject params = new JsonObject();
-            params.addProperty("source", 0);                              // trigger-based events
-            params.addProperty("object", 0);                              // trigger objects
-            params.add("value", GSON.toJsonTree(new int[]{1}));           // 1 = PROBLEM (not recovery)
+            params.addProperty("source", 0);                              // події на основі тригерів
+            params.addProperty("object", 0);                              // обʼєкти-тригери
+            params.add("value", GSON.toJsonTree(new int[]{1}));           // 1 = PROBLEM (не відновлення)
             params.addProperty("time_from", ctFrom);
             params.addProperty("time_till", ctTo);
             params.add("severities", GSON.toJsonTree(new int[]{3, 4, 5}));
@@ -270,8 +274,8 @@ public class Client {
     }
 
     /**
-     * Fetches the {@code clock} (unix timestamp) for a batch of recovery event IDs in a single
-     * {@code event.get} call. Used to populate {@link ZabbixProblem#rClock()}.
+     * Отримує {@code clock} (unix timestamp) для пакета ID подій відновлення одним викликом
+     * {@code event.get}. Використовується для заповнення {@link ZabbixProblem#rClock()}.
      */
     private Map<String, Long> fetchEventClocks(List<String> eventIds) {
         if (eventIds.isEmpty()) {
@@ -301,9 +305,9 @@ public class Client {
     }
 
     /**
-     * Resolves hostnames for trigger IDs where {@code event.get/selectHosts} returned an empty
-     * array (happens with template-level triggers). Falls back to a single {@code trigger.get}
-     * call for the whole batch.
+     * Розвʼязує hostname для тих ID тригерів, для яких {@code event.get/selectHosts} повернув
+     * порожній масив (трапляється для тригерів на рівні шаблону). Робить fallback одним
+     * викликом {@code trigger.get} для всього пакета.
      */
     private Map<String, String> resolveTriggerHosts(List<String> triggerIds) {
         if (triggerIds.isEmpty()) {
@@ -488,6 +492,11 @@ public class Client {
         return historyValue(item, "time_from", timestamp, "ASC");
     }
 
+    /**
+     * Спільна реалізація для {@link #historyValueBefore} та {@link #historyValueAfter}: один
+     * запис {@code history.get} з {@code limit=1}, напрямок сортування та часовий фільтр
+     * ({@code time_till}/{@code time_from}) задаються викликачем.
+     */
     private Optional<HistoryPoint> historyValue(InterfaceItem item, String timeParam, long timestamp, String sortOrder) {
         try {
             JsonObject params = new JsonObject();
@@ -521,8 +530,8 @@ public class Client {
     }
 
     /**
-     * Returns an extra {@code <tr>} row with an embedded temperature graph PNG for the given
-     * host and component description, or an empty string on any failure.
+     * Повертає додатковий рядок {@code <tr>} із вбудованим PNG графіка температури для вказаного
+     * хоста та опису компонента, або порожній рядок при будь-якій помилці.
      */
     public String getGraphRow(String shortHostname, String desc, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(shortHostname, desc + ": Temperature", from, to,
@@ -530,9 +539,9 @@ public class Client {
     }
 
     /**
-     * Returns an extra {@code <tr>} row with an embedded Ping graph PNG for the given host,
-     * or an empty string on any failure. The graph is looked up by the standard Zabbix name
-     * {@code "Ping"} (without the hostname prefix that the web UI prepends for display).
+     * Повертає додатковий рядок {@code <tr>} із вбудованим PNG графіка Ping для вказаного хоста,
+     * або порожній рядок при будь-якій помилці. Графік шукається за стандартною назвою Zabbix
+     * {@code "Ping"} (без префікса hostname, який web UI додає лише для відображення).
      */
     public String getPingGraphRow(String hostname, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(hostname, "Ping", from, to,
@@ -540,10 +549,10 @@ public class Client {
     }
 
     /**
-     * Resolves host ID and graph ID via the Zabbix API, downloads the PNG via {@code chart2.php},
-     * and returns a {@code <tr>} row with the image embedded as a base64 data URI.
+     * Розвʼязує ID хоста та ID графіка через Zabbix API, завантажує PNG через {@code chart2.php}
+     * і повертає рядок {@code <tr>} із зображенням, вбудованим як base64 data URI.
      *
-     * @param debugLabel context string used in log/warning messages
+     * @param debugLabel рядок контексту, що використовується у повідомленнях лог/warning
      */
     private String getGraphRowForName(String shortHostname, String graphName, LocalDateTime from, LocalDateTime to, String debugLabel) {
         if (authToken == null) {
@@ -653,9 +662,9 @@ public class Client {
     }
 
     /**
-     * Downloads a graph PNG from Zabbix {@code chart2.php} using the web session cookie.
-     * Validates the PNG magic bytes before returning; returns {@code null} on HTTP errors or
-     * non-image responses.
+     * Завантажує PNG графіка з Zabbix {@code chart2.php}, використовуючи cookie web-сесії.
+     * Перед поверненням перевіряє магічні байти PNG; повертає {@code null} при помилках HTTP
+     * або відповідях, що не є зображенням.
      */
     private byte[] downloadGraph(String graphId, LocalDateTime from, LocalDateTime to) throws IOException, InterruptedException {
         String url = config.getZabbixUrl() + "/chart2.php"
@@ -693,7 +702,7 @@ public class Client {
             return null;
         }
 
-        // Verify PNG magic bytes
+        // Перевіряємо магічні байти PNG
         if (resp.body().length < 4
                 || resp.body()[0] != (byte) 0x89 || resp.body()[1] != 0x50
                 || resp.body()[2] != 0x4e || resp.body()[3] != 0x47) {
@@ -705,9 +714,9 @@ public class Client {
     }
 
     /**
-     * Sends a Zabbix JSON-RPC 2.0 request and returns the parsed response object.
+     * Надсилає запит Zabbix JSON-RPC 2.0 і повертає розібраний обʼєкт відповіді.
      *
-     * @throws IOException if the HTTP request fails or the server returns a non-200 status
+     * @throws IOException якщо HTTP-запит не вдався, або сервер повернув статус, відмінний від 200
      */
     private JsonObject apiCall(String method, JsonObject params, String auth) throws IOException, InterruptedException {
         JsonObject body = new JsonObject();

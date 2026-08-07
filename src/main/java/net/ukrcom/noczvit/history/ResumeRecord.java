@@ -15,12 +15,12 @@
 package net.ukrcom.noczvit.history;
 
 /**
- * Immutable snapshot of a previously generated Claude shift summary, read from the
- * {@code resume_history} SQLite table.
+ * Незмінний знімок раніше згенерованого резюме зміни від Claude, прочитаний з
+ * таблиці SQLite {@code resume_history}.
  *
- * @param periodFrom  Unix epoch (seconds) of the reporting period start
- * @param periodTo    Unix epoch (seconds) of the reporting period end
- * @param createdAt   Unix epoch (seconds) when this record was saved
- * @param summaryText plain-text Claude summary (no HTML markup)
+ * @param periodFrom  Unix epoch (секунди) початку звітного періоду
+ * @param periodTo    Unix epoch (секунди) кінця звітного періоду
+ * @param createdAt   Unix epoch (секунди) моменту збереження цього запису
+ * @param summaryText текстове резюме Claude у форматі plain-text (без HTML-розмітки)
  */
 public record ResumeRecord(long periodFrom, long periodTo, long createdAt, String summaryText) {}

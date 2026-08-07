@@ -29,15 +29,15 @@ import net.ukrcom.noczvit.Dictionary;
 import net.ukrcom.noczvit.model.Incident;
 
 /**
- * Orchestrates IMAP reading and incident parsing. Delegates I/O to
- * {@link ImapReader}, business logic to {@link PdIncidentParser} and
+ * Оркеструє читання IMAP та розбір інцидентів. Делегує ввід/вивід
+ * {@link ImapReader}, бізнес-логіку — {@link PdIncidentParser} та
  * {@link OsmIncidentParser}.
  */
 @Slf4j
 public class Client {
 
-    // Zabbix emits each adlink alert twice within seconds; collapse repeats of the same
-    // subject that arrive within this window.
+    // Zabbix надсилає кожен adlink-алерт двічі протягом кількох секунд; згортаємо повтори
+    // з однаковою темою, що надходять у межах цього вікна.
     private static final long ADLINK_DEDUP_WINDOW_SEC = 60;
 
     private final Config config;
@@ -48,12 +48,12 @@ public class Client {
     private final AdlinkIncidentParser adlinkParser;
 
     /**
-     * Creates the client using an already-loaded dictionary.
+     * Створює клієнт, використовуючи вже завантажений словник.
      *
-     * <p>The dictionary is passed in rather than constructed here so that the whole process
-     * shares one instance: building a second one re-read both files, recompiled every pattern
-     * and gave the parsers a lookup cache separate from the one {@code ZabbixIncidentConverter}
-     * uses.
+     * <p>Словник передається ззовні, а не створюється тут, щоб увесь процес користувався
+     * одним екземпляром: побудова другого перечитувала б обидва файли, перекомпільовувала б
+     * кожен патерн і давала парсерам кеш пошуку, окремий від того, яким користується
+     * {@code ZabbixIncidentConverter}.
      */
     public Client(Config config, Dictionary dictionary) {
         this.config = config;
@@ -65,15 +65,15 @@ public class Client {
     }
 
     /**
-     * Reads messages from IMAP and parses them into incidents covering both
-     * duty periods.
+     * Читає повідомлення з IMAP і розбирає їх на інциденти, що охоплюють обидві
+     * чергові зміни.
      *
      * @param isInteractive
      * @param prevDutyBegin
      * @param prevDutyEnd
      * @param currDutyBegin
      * @param currDutyEnd
-     * @return all incidents found within [prevDutyBegin, currDutyEnd]
+     * @return усі інциденти, знайдені в межах [prevDutyBegin, currDutyEnd]
      */
     public List<Incident> prepareImapFolder(boolean isInteractive,
                                             LocalDateTime prevDutyBegin,
@@ -97,10 +97,10 @@ public class Client {
 
         List<Incident> incidents = new ArrayList<>();
         for (RawMessage msg : deduped) {
-            // The window guard is identical for every source, so it is applied once up front.
-            // The OSM branch used to filter after parsing, on Incident.messageTs — which is
-            // assigned msg.unixDate() anyway, so the outcome is unchanged and out-of-window
-            // messages are no longer parsed just to be discarded.
+            // Перевірка вікна однакова для кожного джерела, тому застосовується один раз наперед.
+            // Раніше гілка OSM фільтрувала вже після розбору, за Incident.messageTs — який усе одно
+            // присвоюється з msg.unixDate(), тож результат не змінився, а повідомлення поза вікном
+            // більше не розбираються лише для того, щоб бути відкинутими.
             if (msg.unixDate() < fromEpoch || msg.unixDate() > toEpoch) {
                 log.debug("Skipping message (time filter): unixDate={}, subject={}",
                         msg.unixDate(), msg.subject());
@@ -122,21 +122,21 @@ public class Client {
     }
 
     /**
-     * Removes duplicate adlink alerts: Zabbix sends each alert twice within
-     * seconds. Keeps the first occurrence of each (subject, status) pair within
-     * a 60-second window. Deduplication runs before duty-period filtering so
-     * cross-boundary duplicates (e.g. 07:59:59 and 08:00:03) are correctly
-     * collapsed into the earlier shift.
+     * Прибирає дублікати adlink-алертів: Zabbix надсилає кожен алерт двічі протягом
+     * кількох секунд. Залишає перше входження кожної пари (subject, status) у межах
+     * 60-секундного вікна. Дедуплікація виконується до фільтрації за черговою зміною,
+     * тому дублікати на межі періодів (напр. 07:59:59 та 08:00:03) коректно згортаються
+     * в межах ранішої зміни.
      */
-    // Package-private (not private): unit-tested directly from ClientTest in this package,
-    // per CLAUDE.md's rule to widen visibility for tests rather than duplicate the logic.
+    // Package-private (не private): юніт-тестується напряму з ClientTest у цьому пакеті,
+    // згідно з правилом CLAUDE.md розширювати видимість для тестів, а не дублювати логіку.
     List<RawMessage> deduplicateAdlink(List<RawMessage> messages) {
         List<RawMessage> sorted = new ArrayList<>(messages);
         sorted.sort(Comparator.comparingLong(RawMessage::unixDate));
 
-        // Last kept timestamp per subject — same map-based approach as TrapDeduplicator.
-        // The previous version rescanned a growing list of every adlink seen so far, which is
-        // quadratic; since the input is already sorted ascending, only the last kept one matters.
+        // Останній збережений timestamp за темою — той самий підхід на основі мапи, що й у TrapDeduplicator.
+        // Попередня версія повторно сканувала список усіх раніше побачених adlink, що є
+        // квадратичним; оскільки вхід уже відсортований за зростанням, важливий лише останній збережений.
         Map<String, Long> lastKept = new HashMap<>();
         List<RawMessage> result = new ArrayList<>();
         for (RawMessage msg : sorted) {
@@ -155,24 +155,24 @@ public class Client {
         return result;
     }
 
-    /** Returns {@code true} for ICMP-ping or device-restart alert subjects handled by {@link PdIncidentParser}. */
+    /** Повертає {@code true} для тем алертів ICMP-ping або перезавантаження пристрою, які обробляє {@link PdIncidentParser}. */
     boolean isPdMessage(String subject) {
         return subject.matches(".*(?:Unavailable by ICMP ping|has been restarted).*");
     }
 
-    /** Returns {@code true} for OSPF neighbour state-change alert subjects handled by {@link OspfIncidentParser}. */
+    /** Повертає {@code true} для тем алертів зміни стану сусіда OSPF, які обробляє {@link OspfIncidentParser}. */
     boolean isOspfMessage(String subject) {
         return subject.contains("ospfNbrStateChange");
     }
 
-    /** Returns {@code true} for Zabbix dry-contact (adlink) alert subjects handled by {@link AdlinkIncidentParser}. */
+    /** Повертає {@code true} для тем алертів сухого контакту Zabbix (adlink), які обробляє {@link AdlinkIncidentParser}. */
     boolean isAdlinkMessage(String subject) {
         return subject.contains("adlink") && subject.contains("- Fault");
     }
 
     /**
-     * Returns {@code true} for SDH/OSM power-loss or STM circuit alert subjects handled by
-     * {@link OsmIncidentParser}. In debug mode STM-1 alerts are also included.
+     * Повертає {@code true} для тем алертів втрати живлення SDH/OSM або каналу STM, які
+     * обробляє {@link OsmIncidentParser}. У режимі debug також враховуються алерти STM-1.
      */
     boolean isOsmMessage(String subject) {
         String stmPattern = "2-9";

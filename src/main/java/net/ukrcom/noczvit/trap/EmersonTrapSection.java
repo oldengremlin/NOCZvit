@@ -24,18 +24,18 @@ import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
 
 /**
- * Renders a list of {@link TrapIncident} objects into an HTML section and a
- * plain-text summary block for the Claude AI prompt.
+ * Рендерить список об'єктів {@link TrapIncident} у HTML-секцію та блок
+ * текстового резюме для промпту Claude AI.
  */
 public class EmersonTrapSection {
 
     /**
-     * Result of {@link #build(List, List)}: an HTML fragment, a plain-text block for the AI prompt,
-     * and an optional PS section HTML listing unrecognized trap types.
+     * Результат {@link #build(List, List)}: HTML-фрагмент, текстовий блок для промпту AI,
+     * та опціональний HTML PS-розділу зі списком нерозпізнаних типів трапів.
      *
-     * @param html        HTML section fragment; empty string when there are no incidents
-     * @param plainText   plain text for the Claude prompt; empty string when there are no incidents
-     * @param unknownHtml PS section HTML for unrecognized trap types; empty string when there are none
+     * @param html        HTML-фрагмент секції; порожній рядок, якщо інцидентів немає
+     * @param plainText   звичайний текст для промпту Claude; порожній рядок, якщо інцидентів немає
+     * @param unknownHtml HTML PS-розділу для нерозпізнаних типів трапів; порожній рядок, якщо їх немає
      */
     public record SectionResult(String html, String plainText, String unknownHtml) {
 
@@ -44,16 +44,16 @@ public class EmersonTrapSection {
         }
     }
 
-    /** Creates the builder. Stateless — safe to reuse across calls. */
+    /** Створює білдер. Без стану — безпечно перевикористовувати між викликами. */
     public EmersonTrapSection() {
     }
 
     /**
-     * Builds the section HTML, plain-text, and PS (unknown traps) HTML.
+     * Будує HTML секції, звичайний текст та HTML PS-розділу (нерозпізнані трапи).
      *
-     * @param incidents    correlated trap incidents
-     * @param unknownTraps raw trap events that hit the catch-all and have no known description
-     * @return {@link SectionResult}; never null
+     * @param incidents    скорельовані інциденти трапів
+     * @param unknownTraps сирі події трапів, що потрапили в catch-all і не мають відомого опису
+     * @return {@link SectionResult}; ніколи не null
      */
     public SectionResult build(List<TrapIncident> incidents, List<TrapEvent> unknownTraps) {
         SectionResult base = build(incidents);
@@ -63,18 +63,18 @@ public class EmersonTrapSection {
     }
 
     /**
-     * Builds the section HTML and plain-text from the given incidents.
-     * Returns an empty result if the list is empty.
+     * Будує HTML секції та звичайний текст із заданих інцидентів.
+     * Повертає порожній результат, якщо список порожній.
      *
-     * @param incidents correlated trap incidents
-     * @return {@link SectionResult} with HTML and plain text; never null
+     * @param incidents скорельовані інциденти трапів
+     * @return {@link SectionResult} з HTML та звичайним текстом; ніколи не null
      */
     public SectionResult build(List<TrapIncident> incidents) {
         if (incidents == null || incidents.isEmpty()) {
             return new SectionResult("", "", "");
         }
 
-        // Sort: ADC alphabetically first, then PDC alphabetically
+        // Сортування: спочатку ADC за алфавітом, потім PDC за алфавітом
         List<TrapIncident> sorted = incidents.stream()
                 .sorted(Comparator
                         .comparing((TrapIncident i) -> i.deviceClass().equals(TrapEvent.CLASS_ADC) ? 0 : 1)
@@ -82,7 +82,7 @@ public class EmersonTrapSection {
                         .thenComparing(TrapIncident::activatedAt))
                 .toList();
 
-        // Group by hostname (preserving ADC-first order)
+        // Групування за хостнеймом (зі збереженням порядку ADC-спочатку)
         Map<String, List<TrapIncident>> byDevice = sorted.stream()
                 .collect(Collectors.groupingBy(TrapIncident::hostname, LinkedHashMap::new, Collectors.toList()));
 
@@ -97,7 +97,7 @@ public class EmersonTrapSection {
             TrapIncident first = devIncidents.get(0);
             String ip = first.ip();
 
-            // HTML device block
+            // HTML-блок пристрою
             html.append("<h3 class=\"trap-device\"><a href=\"http://").append(StringEscapeUtils.escapeHtml4(ip))
                     .append("/\" style=\"color:#1b5e20\">").append(StringEscapeUtils.escapeHtml4(hostname))
                     .append("</a> (").append(StringEscapeUtils.escapeHtml4(ip)).append(")</h3>\n")
@@ -110,7 +110,7 @@ public class EmersonTrapSection {
                     .append("<th>Подія</th>")
                     .append("</tr></thead><tbody>\n");
 
-            // Plain text device block
+            // Текстовий блок пристрою
             text.append("\n[").append(hostname).append(" / ").append(ip).append("]\n");
 
             int n = 0;
@@ -139,7 +139,7 @@ public class EmersonTrapSection {
                         .append("<td>").append(descHtml).append("</td>")
                         .append("</tr>\n");
 
-                // Plain text row
+                // Текстовий рядок
                 String startTextStr = DateUtils.formatUa(inc.activatedAt());
                 String endTextStr = inc.clearedAt() != null ? DateUtils.formatUa(inc.clearedAt()) : "незакрито";
                 text.append(n).append(". ").append(startTextStr)
@@ -160,7 +160,11 @@ public class EmersonTrapSection {
         return new SectionResult(html.toString(), text.toString(), "");
     }
 
+    /**
+     * Будує HTML PS-розділу зі списком нерозпізнаних типів трапів, згрупованих за хостнеймом.
+     */
     private String buildUnknownHtml(List<TrapEvent> unknownTraps) {
+        // Групуємо нерозпізнані трапи за хостнеймом, зберігаючи порядок надходження хостів
         Map<String, List<TrapEvent>> byHost = unknownTraps.stream()
                 .collect(Collectors.groupingBy(TrapEvent::hostname, LinkedHashMap::new, Collectors.toList()));
 
@@ -168,6 +172,7 @@ public class EmersonTrapSection {
         html.append("<div class=\"section\">\n")
                 .append("<h2 class=\"trap-ps-title\">ps: нерозпізнані типи подій по ДБЖ та кондиціонерах Emerson:</h2>\n");
 
+        // Для кожного хоста рендеримо заголовок і маркований список усіх його нерозпізнаних подій
         byHost.forEach((hostname, evs) -> {
             TrapEvent first = evs.get(0);
             html.append("<h3 class=\"trap-ps-device\">")

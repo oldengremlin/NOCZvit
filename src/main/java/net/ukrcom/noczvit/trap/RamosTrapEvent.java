@@ -18,14 +18,14 @@ import java.time.Instant;
 import java.util.Set;
 
 /**
- * One point-in-time RAMOS environmental sensor event parsed from an IMAP trap email.
+ * Одна точкова подія датчика довкілля RAMOS, розібрана з IMAP-листа з трапом.
  *
- * @param timestamp  when the sensor event occurred (derived from the email body header line)
- * @param ip         source IP address of the RAMOS device
- * @param state      alert state string (e.g. "High Critical", "Low Warning")
- * @param sensorName human-readable sensor name (Cyrillic hex names are already decoded)
- * @param sensorType sensor type from the MIB (e.g. "Dual Temperature N", "Dry Contact N.M")
- * @param room       normalised room label: "Room1"–"Room4", or "Інші" when not matched
+ * @param timestamp  коли сталася подія датчика (визначено з рядка заголовка в тілі листа)
+ * @param ip         IP-адреса джерела — пристрою RAMOS
+ * @param state      рядок стану тривоги (наприклад, "High Critical", "Low Warning")
+ * @param sensorName зрозуміла людині назва датчика (кириличні hex-назви вже декодовані)
+ * @param sensorType тип датчика з MIB (наприклад, "Dual Temperature N", "Dry Contact N.M")
+ * @param room       нормалізована мітка залу: "Room1"–"Room4", або "Інші", якщо не збіглося
  */
 public record RamosTrapEvent(
         Instant timestamp,
@@ -37,21 +37,21 @@ public record RamosTrapEvent(
 ) {
 
     /**
-     * States forwarded to the Claude prompt — deliberately not just "the Critical tier".
+     * Стани, що передаються в промпт до Claude — свідомо не просто «рівень Critical».
      *
-     * <p>Rising and falling temperature are not symmetric risks in a datacenter: falling
-     * temperature ({@code Low Warning}/{@code Low Critical}) is rarely a problem worth an
-     * engineer's attention, since everything else in the room tends to run hot — so both are
-     * excluded even at the Critical level. Rising temperature ({@code High Warning}/
-     * {@code High Critical}) is the opposite: worth watching from the first warning, before it
-     * becomes critical. Plain {@code Critical}/{@code Warning} (no High/Low prefix) belong to
-     * non-directional sensors — water detectors, dry contacts — where the state alone is already
-     * informative regardless of direction.
+     * <p>Зростання й падіння температури в дата-центрі не є симетричними ризиками: падіння
+     * температури ({@code Low Warning}/{@code Low Critical}) рідко є проблемою, вартою уваги
+     * інженера, бо все інше в залі зазвичай і так працює в тепловому режимі — тому обидва
+     * винятки виключено навіть на рівні Critical. Зростання температури ({@code High Warning}/
+     * {@code High Critical}) — навпаки: вартий уваги вже з першого попередження, до того як
+     * стане критичним. Прості {@code Critical}/{@code Warning} (без префікса High/Low) належать
+     * ненапрямленим датчикам — детекторам води, сухим контактам — де сам стан уже інформативний
+     * незалежно від напрямку.
      */
     public static final Set<String> CLAUDE_STATES =
             Set.of("Critical", "High Critical", "Warning", "High Warning");
 
-    /** States worth parsing at all; everything else is normal operation and is dropped. */
+    /** Стани, які взагалі варто розбирати; усе інше — нормальна робота, тому відкидається. */
     public static final Set<String> REPORTABLE_STATES = Set.of(
             "Critical", "High Critical", "Low Critical",
             "High Warning", "Low Warning", "Warning",

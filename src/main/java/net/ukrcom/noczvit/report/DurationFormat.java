@@ -18,14 +18,14 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Single wording for the «Тривалість» column, shared by every table in the report.
+ * Єдине формулювання для колонки «Тривалість», спільне для всіх таблиць звіту.
  *
- * <p>Sub-minute spans read {@code "< 1 хв"} rather than a second count: the report is written for
- * a shift handover, where «майже миттєво» is the useful fact and an exact second count is noise.
- * It also avoids the nonsensical {@code "0 с"} that point-in-time events (Cold Start, Compressor
- * Short Cycle) produced — those close at their own timestamp and have no duration at all.
+ * <p>Проміжки коротші за хвилину виводяться як {@code "< 1 хв"} замість кількості секунд: звіт
+ * пишеться для передачі зміни, де «майже миттєво» — корисний факт, а точна кількість секунд —
+ * шум. Це також уникає безглуздого {@code "0 с"}, яке давали миттєві події (Cold Start,
+ * Compressor Short Cycle) — вони закриваються у власну мітку часу й не мають тривалості взагалі.
  *
- * <p><b>Thread safety:</b> stateless — static methods over their arguments only.
+ * <p><b>Потокобезпека:</b> без стану — статичні методи оперують лише своїми аргументами.
  */
 public final class DurationFormat {
 
@@ -33,11 +33,11 @@ public final class DurationFormat {
     }
 
     /**
-     * Formats a duration in seconds: {@code "< 1 хв"} below a minute, then {@code "X хв"},
-     * {@code "X год"} or {@code "X год Y хв"}. Negative input is clamped to zero.
+     * Форматує тривалість у секундах: {@code "< 1 хв"} до хвилини, далі {@code "X хв"},
+     * {@code "X год"} або {@code "X год Y хв"}. Від'ємне значення обрізається до нуля.
      *
-     * @param seconds duration in seconds
-     * @return human-readable Ukrainian duration
+     * @param seconds тривалість у секундах
+     * @return тривалість у зручному для читання форматі українською
      */
     public static String humanize(long seconds) {
         if (seconds < 0) {
@@ -56,11 +56,11 @@ public final class DurationFormat {
     }
 
     /**
-     * Formats the span between two instants using {@link #humanize(long)}.
+     * Форматує проміжок між двома моментами часу за допомогою {@link #humanize(long)}.
      *
-     * @param from start instant
-     * @param to   end instant
-     * @return human-readable Ukrainian duration
+     * @param from початковий момент
+     * @param to   кінцевий момент
+     * @return тривалість у зручному для читання форматі українською
      */
     public static String between(Instant from, Instant to) {
         return humanize(Duration.between(from, to).getSeconds());
