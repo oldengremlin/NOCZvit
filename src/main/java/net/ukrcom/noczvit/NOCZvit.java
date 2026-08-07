@@ -81,7 +81,7 @@ public class NOCZvit {
      * Zabbix-події, конвертує та зливає їх, будує розділи HTML-звіту й надсилає результат через
      * sendmail (або SMTP у режимі debug).
      *
-     * @param args аргументи CLI (повний перелік — у {@code help.txt})
+     * @param args аргументи CLI (повний перелік — {@code --help}/{@code -h})
      * @throws MessagingException якщо стається фатальна помилка IMAP чи SMTP
      * @throws IOException        якщо не вдається прочитати конфігурацію чи файли словника
      */
