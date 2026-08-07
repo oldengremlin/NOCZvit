@@ -15,7 +15,6 @@
 package net.ukrcom.noczvit.imap;
 
 import jakarta.mail.MessagingException;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -54,6 +53,8 @@ public class Client {
      * одним екземпляром: побудова другого перечитувала б обидва файли, перекомпільовувала б
      * кожен патерн і давала парсерам кеш пошуку, окремий від того, яким користується
      * {@code ZabbixIncidentConverter}.
+     * @param config
+     * @param dictionary
      */
     public Client(Config config, Dictionary dictionary) {
         this.config = config;

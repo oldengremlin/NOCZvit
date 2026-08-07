@@ -68,6 +68,7 @@ public class Dictionary {
      * Завантажує всі три словники за шляхами з {@code config}, або з вбудованих ресурсів,
      * якщо шляхи не задані (null).
      *
+     * @param config
      * @throws IOException якщо файл/ресурс словника відсутній або недоступний для читання
      */
     public Dictionary(Config config) throws IOException {

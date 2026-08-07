@@ -85,6 +85,7 @@ public class Client {
      * Створює клієнт Zabbix. HTTP-клієнт налаштовано зі спільним сховищем cookie, щоб
      * cookie web-сесії ({@code zbx_sessionid}), встановлений під час {@link #webLogin()},
      * автоматично додавався до кожного наступного запиту {@code chart2.php}.
+     * @param config
      */
     public Client(Config config) {
         this.config = config;
@@ -532,6 +533,11 @@ public class Client {
     /**
      * Повертає додатковий рядок {@code <tr>} із вбудованим PNG графіка температури для вказаного
      * хоста та опису компонента, або порожній рядок при будь-якій помилці.
+     * @param shortHostname
+     * @param desc
+     * @param from
+     * @param to
+     * @return 
      */
     public String getGraphRow(String shortHostname, String desc, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(shortHostname, desc + ": Temperature", from, to,
@@ -542,6 +548,10 @@ public class Client {
      * Повертає додатковий рядок {@code <tr>} із вбудованим PNG графіка Ping для вказаного хоста,
      * або порожній рядок при будь-якій помилці. Графік шукається за стандартною назвою Zabbix
      * {@code "Ping"} (без префікса hostname, який web UI додає лише для відображення).
+     * @param hostname
+     * @param from
+     * @param to
+     * @return 
      */
     public String getPingGraphRow(String hostname, LocalDateTime from, LocalDateTime to) {
         return getGraphRowForName(hostname, "Ping", from, to,

@@ -87,6 +87,8 @@ public class PowerResilienceAuditor {
     private final List<String> ignoredInterfacePrefixes;
 
     /**
+     * @param zabbix
+     * @param dictionary
      * @param ignoredInterfacePrefixes технічні імена інтерфейсів (частина назви item до дужки з
      *                                 описом — напр. {@code "wireguard"} для
      *                                 {@code "Interface wireguard2(...)"}), які виключаються з

@@ -28,7 +28,6 @@ import net.ukrcom.noczvit.trap.RamosTrapSection;
 import net.ukrcom.noczvit.trap.TrapCorrelator;
 import net.ukrcom.noczvit.trap.TrapDeduplicator;
 import net.ukrcom.noczvit.trap.TrapEvent;
-import net.ukrcom.noczvit.trap.TrapIncident;
 import net.ukrcom.noczvit.zabbix.PowerResilienceAuditor;
 import net.ukrcom.noczvit.zabbix.PowerResilienceResult;
 import net.ukrcom.noczvit.zabbix.PowerResilienceSection;
@@ -200,7 +199,7 @@ public class NOCZvit {
                             // Фільтруємо за часовою міткою в тілі повідомлення — працює і в режимі fetchAll, і в режимі за датами
                             events = events.stream()
                                     .filter(e -> !e.timestamp().isBefore(trapFrom)
-                                              && !e.timestamp().isAfter(trapTo))
+                                            && !e.timestamp().isAfter(trapTo))
                                     .toList();
                             events = TrapDeduplicator.deduplicate(events, config.getSnmpTrapDedupSeconds());
                             TrapCorrelator.CorrelationResult corr = new TrapCorrelator(

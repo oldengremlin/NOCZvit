@@ -575,6 +575,8 @@ public class Config {
 
     /**
      * Повертає {@code true}, коли папку SNMP trap налаштовано (функція увімкнена).
+     * 
+     * @return 
      */
     public boolean isTrapEnabled() {
         return !snmpTrapFolder.isBlank();
@@ -582,6 +584,8 @@ public class Config {
 
     /**
      * Повертає {@code true}, коли папку email для RAMOS trap налаштовано (функція увімкнена).
+     * 
+     * @return 
      */
     public boolean isRamosTrapEnabled() {
         return !ramosTrapFolder.isBlank();
@@ -602,6 +606,8 @@ public class Config {
     /**
      * Повертає {@code true}, коли всі чотири властивості з'єднання MSSQL (для обох баз даних —
      * account і accequipment) непорожні.
+     * 
+     * @return 
      */
     public boolean isDebtorsEnabled() {
         return !accountMssqlServer.isEmpty() && !accountMssqlDatabase.isEmpty()
@@ -612,6 +618,8 @@ public class Config {
      * Повертає {@code true}, коли присутній мінімально необхідний набір налаштувань: email-адреси
      * ({@code from}, {@code replyTo}, щонайменше одна {@code to}) і, якщо секції SNMP увімкнені,
      * щонайменше один community-рядок.
+     * 
+     * @return 
      */
     public boolean isValid() {
         boolean isEmailValid = emailFrom != null && emailReplyTo != null && !emailTo.isEmpty();

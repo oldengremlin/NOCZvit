@@ -45,6 +45,7 @@ public class ImapReader {
 
     /**
      * Створює читач, прив'язаний до заданої конфігурації.
+     * @param config
      */
     public ImapReader(Config config) {
         this.config = config;
@@ -116,6 +117,9 @@ public class ImapReader {
      * <p>IMAP {@code SEARCH} порівнює дати з точністю до дня, тому діапазон розширюється на
      * один день з кожного боку, щоб не залежати від різниці часових зон сервера й клієнта.
      * Точне обрізання до секунди вже відбувається далі (див. {@code imap.Client} та {@code NOCZvit}).
+     * @param fromEpoch
+     * @param toEpoch
+     * @return 
      */
     public static SearchTerm dateRangeTerm(long fromEpoch, long toEpoch) {
         return new AndTerm(

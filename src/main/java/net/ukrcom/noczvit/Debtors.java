@@ -52,6 +52,7 @@ public class Debtors {
 
     /**
      * Одразу формує HTML-секцію. Результат доступний через {@link #toString()}.
+     * @param config
      */
     public Debtors(Config config) {
         this.config = config;

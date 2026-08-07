@@ -59,7 +59,8 @@ public class Client {
 
     private final Config config;
 
-    /** Створює SNMP-клієнт, прив'язаний до заданої конфігурації. */
+    /** Створює SNMP-клієнт, прив'язаний до заданої конфігурації.
+     * @param config */
     public Client(Config config) {
         this.config = config;
     }

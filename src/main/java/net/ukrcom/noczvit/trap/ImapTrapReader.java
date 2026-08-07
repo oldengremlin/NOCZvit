@@ -21,6 +21,7 @@ import jakarta.mail.Message;
 import jakarta.mail.MessagingException;
 import jakarta.mail.Session;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ public class ImapTrapReader {
 
     /**
      * Створює рідер, прив'язаний до заданої конфігурації.
+     * @param config
      */
     public ImapTrapReader(Config config) {
         this.config = config;
@@ -172,9 +174,7 @@ public class ImapTrapReader {
         Folder[] matched = parent.list(mask);
 
         if (matched != null) {
-            for (Folder f : matched) {
-                result.add(f);
-            }
+            result.addAll(Arrays.asList(matched));
         }
 
         if (result.isEmpty()) {
