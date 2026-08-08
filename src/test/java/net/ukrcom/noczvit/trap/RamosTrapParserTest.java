@@ -224,13 +224,16 @@ class RamosTrapParserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"Room 1", "room1", "ROOM  2", "Room3", "Room4"})
+    @ValueSource(strings = {"Room 1", "room1", "ROOM  2", "Room3", "Room4",
+        "Room10", "room 12", "ROOM   99"})
     void parse_extractRoom_variantsWithOptionalSpaceAndCase(String prefix) {
         List<RamosTrapEvent> events = RamosTrapParser.parse(List.of(
                 ramosMessage(trapBody("Critical", prefix + " Sensor", "Dry Contact N.M"))));
         assertEquals(1, events.size());
-        char digit = prefix.replaceAll("\\D", "").charAt(0);
-        assertEquals("Room" + digit, events.get(0).room());
+        // Регресія: ROOM_RE раніше захоплював лише одну цифру ((\d), не (\d+)) —
+        // "Room10" мовчки давало б "Room1". Багатоцифрові варіанти тут саме проти цього.
+        String digits = prefix.replaceAll("\\D", "");
+        assertEquals("Room" + digits, events.get(0).room());
     }
 
     @Test

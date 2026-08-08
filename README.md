@@ -966,7 +966,7 @@ At DD-MM-YYYY HH:MM:SS, from IP, after uptime D:HH:MM:SS.ms, registered trap:
 
 #### Групування по кімнатах
 
-Назва датчика аналізується regex `(?i)room\s*(\d)`:
+Назва датчика аналізується regex `(?i)room\s*(\d+)`:
 - `Room 3 Антипотоп 2 S17` → **Room3**
 - `Room4 АНТИПОТОП ВЫХОД S06` → **Room4**
 - Назва без `Room` → **Інші**

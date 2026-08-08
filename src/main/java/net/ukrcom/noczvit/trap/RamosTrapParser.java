@@ -68,7 +68,9 @@ public class RamosTrapParser {
     private static final Pattern HEX_SENSOR_RE = Pattern.compile(
             "^(?:[0-9A-Fa-f]{2}\\s+){3,}[0-9A-Fa-f]{2}\\s*$");
 
-    private static final Pattern ROOM_RE = Pattern.compile("(?i)room\\s*(\\d)");
+    // \d+, а не \d: зараз усі зали однозначні (Room1..Room4), але лишати захоплення однієї
+    // цифри — пастка на майбутнє, якщо колись з'явиться Room10+ (мовчки дало б "Room1").
+    private static final Pattern ROOM_RE = Pattern.compile("(?i)room\\s*(\\d+)");
 
     private RamosTrapParser() {
     }
