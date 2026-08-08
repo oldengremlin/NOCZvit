@@ -488,7 +488,7 @@ classDiagram
   - Apache Commons Text `org.apache.commons:commons-text:1.15.0`
   - Gson `com.google.code.gson:gson:2.13.2`
   - jTDS `net.sourceforge.jtds:jtds:1.3.1`
-  - picocli `info.picocli:picocli:4.7.6` (розбір аргументів CLI, `--help`/`--version`)
+  - picocli `info.picocli:picocli:4.7.7` (розбір аргументів CLI, `--help`/`--version`)
   - Lombok `org.projectlombok:lombok:1.18.46` (provided)
   - Anthropic Java SDK `com.anthropic:anthropic-java:2.34.0` (опціонально, для Claude AI)
   - SQLite JDBC `org.xerial:sqlite-jdbc:3.51.2.0` (опціонально, для міжзмінної пам'яті Claude)
