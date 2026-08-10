@@ -141,20 +141,29 @@ class PowerResilienceAuditorTest {
                 new InterfaceItem("2", "Interface 12(--free--)", 3),            // вільний — ігнор
                 new InterfaceItem("3", "Interface 13(--FREE--)", 3),            // будь-який регістр — ігнор
                 new InterfaceItem("4", "Interface 14( -- unused -- )", 3),      // пробіли всередині дужок — ігнор
-                new InterfaceItem("5", "Interface 5(freedom cafe)", 3)          // "free" саме по собі НЕ тригерить
+                new InterfaceItem("5", "Interface 5(freedom cafe)", 3),         // "free" саме по собі НЕ тригерить
+                // Реальний випадок з продакшн-звіту: людина обрамила маркер лапками й беклешами
+                // при ручному редагуванні опису в Zabbix — після обрізання все одно "--free--".
+                new InterfaceItem("6", "Interface 1/2(\\\"--free--\\\")", 3),   // ігнор попри лапки/беклеші
+                // Маркер присутній, але це лише ЧАСТИНА змістовного опису — увесь опис ним не
+                // вичерпується, тож ігнорувати НЕ можна (інакше реальний коментар про причину
+                // тимчасового невикористання порту мовчки ховав би його з підрахунку).
+                new InterfaceItem("7", "Interface 15(-- unused --, чекає на міграцію)", 3)
         );
         fake.interfaceItemsByHost.put("host1", items);
-        // Реальний опис на порту 5 має знімок, щоб довести, що він реально враховується.
+        // Реальні описи на портах 5 і 7 мають знімки, щоб довести, що вони реально враховуються.
         fake.beforeByItemId.put("5", new HistoryPoint(Instant.ofEpochSecond(90), OPERATIONAL_DOWN));
+        fake.beforeByItemId.put("7", new HistoryPoint(Instant.ofEpochSecond(90), OPERATIONAL_DOWN));
 
         List<PowerResilienceResult> results = auditorWith(fake).audit(List.of(hostDown("host1", 100, 200)));
 
         assertEquals(1, results.size());
         PowerResilienceResult r = results.get(0);
-        assertEquals(4, r.ignoredPorts());
-        assertEquals(1, r.totalKnown());
-        assertEquals(1, r.alreadyDownAtFall());
-        assertEquals("Interface 5(freedom cafe)", r.alreadyDownNames().get(0).name());
+        assertEquals(5, r.ignoredPorts());
+        assertEquals(2, r.totalKnown());
+        assertEquals(2, r.alreadyDownAtFall());
+        assertEquals(List.of("Interface 5(freedom cafe)", "Interface 15(-- unused --, чекає на міграцію)"),
+                r.alreadyDownNames().stream().map(o -> o.name()).toList());
     }
 
     // ---- 3b. Ігнорування за префіксом технічного імені (UVPN wireguard/sstp/... ) ------------
@@ -162,7 +171,7 @@ class PowerResilienceAuditorTest {
     @Test
     void audit_ignoresConfiguredInterfaceNamePrefixes_caseInsensitively() throws IOException {
         // Непорожні описи навмисно скрізь, крім item 1 — щоб ignoredPorts=3 доводив саме новий
-        // фільтр за префіксом технічного імені, а не випадково збігався з наявним IGNORED_PORT
+        // фільтр за префіксом технічного імені, а не випадково збігався з наявним isFreeUnusedOrEmpty
         // (порожній опис ігнорується незалежно від списку префіксів).
         FakeZabbixClient fake = new FakeZabbixClient();
         List<InterfaceItem> items = List.of(
@@ -204,7 +213,7 @@ class PowerResilienceAuditorTest {
 
     @Test
     void audit_emptyPrefixList_ignoresNothingByInterfaceType() throws IOException {
-        // Непорожній опис навмисно — щоб не зловити вже наявний фільтр IGNORED_PORT
+        // Непорожній опис навмисно — щоб не зловити вже наявний фільтр isFreeUnusedOrEmpty
         // (порожнє "()" ігнорується незалежно від списку префіксів) і перевірити рівно те,
         // що тут заявлено: порожній список префіксів нічого не виключає сам по собі.
         FakeZabbixClient fake = new FakeZabbixClient();
