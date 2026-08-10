@@ -198,7 +198,7 @@ class PowerResilienceSectionTest {
     void build_nonEmptyVerdict_renderedBold() {
         PowerResilienceResult r = result().alreadyDown(2, List.of()).stillUp(0, 0, 0, 0)
                 .verdict("Усі відомі порти впали раніше за вузол — ймовірно, резервне живлення "
-                        + "протримало довше за клієнтів.")
+                        + "протримало довше за абонентів.")
                 .build();
 
         String html = section.build(List.of(r)).html();
@@ -225,7 +225,7 @@ class PowerResilienceSectionTest {
         PowerResilienceResult r = result()
                 .alreadyDown(2, List.of()).stillUp(0, 0, 0, 0)
                 .verdict("Усі відомі порти впали раніше за вузол — ймовірно, резервне живлення "
-                        + "протримало довше за клієнтів.")
+                        + "протримало довше за абонентів.")
                 .uptime(5000L, 30L)  // uptimeDecreased() == true
                 .restartDetectedAt(Instant.ofEpochSecond(1_700_000_610L))
                 .build();
@@ -383,7 +383,7 @@ class PowerResilienceSectionTest {
         PowerResilienceResult withVerdict = result()
                 .alreadyDown(2, List.of()).stillUp(0, 0, 0, 0)
                 .verdict("Усі відомі порти лишались активними (up) на момент падіння вузла — "
-                        + "якщо це був епізод зникнення живлення, ймовірно, воно протримало не довше за клієнтів.")
+                        + "якщо це був епізод зникнення живлення, ймовірно, воно протримало не довше за абонентів.")
                 .build();
         PowerResilienceResult ambiguous = result()
                 .alreadyDown(1, List.of()).stillUp(1, 1, 0, 0)
