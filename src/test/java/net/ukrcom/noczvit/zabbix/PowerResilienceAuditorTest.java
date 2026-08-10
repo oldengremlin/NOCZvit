@@ -313,7 +313,9 @@ class PowerResilienceAuditorTest {
 
         PowerResilienceResult r = auditorWith(fake).audit(List.of(hostDown("host1", 100, 200))).get(0);
 
-        assertEquals("Жоден з відомих портів не впав раніше за вузол.", r.verdict());
+        assertEquals("Усі відомі порти лишались активними (up) на момент падіння вузла — "
+                + "якщо це був епізод зникнення живлення, ймовірно, воно протримало не довше за клієнтів.",
+                r.verdict());
         // Нещодавно спрощено: жодної додаткової поради на кшталт "варто перевірити" бути не повинно.
         assertFalse(r.verdict().toLowerCase().contains("варто перевірити"));
     }

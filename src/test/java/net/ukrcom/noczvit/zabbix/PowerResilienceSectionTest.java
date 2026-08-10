@@ -382,7 +382,8 @@ class PowerResilienceSectionTest {
     void build_plainText_includesVerdictWhenPresent_orAmbiguousNote() {
         PowerResilienceResult withVerdict = result()
                 .alreadyDown(2, List.of()).stillUp(0, 0, 0, 0)
-                .verdict("Жоден з відомих портів не впав раніше за вузол.")
+                .verdict("Усі відомі порти лишались активними (up) на момент падіння вузла — "
+                        + "якщо це був епізод зникнення живлення, ймовірно, воно протримало не довше за клієнтів.")
                 .build();
         PowerResilienceResult ambiguous = result()
                 .alreadyDown(1, List.of()).stillUp(1, 1, 0, 0)
@@ -392,7 +393,7 @@ class PowerResilienceSectionTest {
         String pt1 = section.build(List.of(withVerdict)).plainText();
         String pt2 = section.build(List.of(ambiguous)).plainText();
 
-        assertTrue(pt1.contains("Висновок: Жоден з відомих портів не впав раніше за вузол."));
+        assertTrue(pt1.contains("Висновок: Усі відомі порти лишались активними (up) на момент падіння вузла"));
         assertTrue(pt2.contains("Однозначного висновку немає — вирішує інженер."));
     }
 
