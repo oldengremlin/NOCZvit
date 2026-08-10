@@ -92,7 +92,7 @@ public class PowerResilienceAuditor {
      * @param ignoredInterfacePrefixes технічні імена інтерфейсів (частина назви item до дужки з
      *                                 описом — напр. {@code "wireguard"} для
      *                                 {@code "Interface wireguard2(...)"}), які виключаються з
-     *                                 аудиту повністю, як і {@link #IGNORED_PORT}. Нижній
+     *                                 аудиту повністю, як і {@link #isFreeUnusedOrEmpty}. Нижній
      *                                 регістр, порівняння через {@code startsWith}; порожній
      *                                 список — нічого не виключається. Це евристика за іменем:
      *                                 Zabbix не бачить {@code ifType}, а MikroTik дозволяє
@@ -152,17 +152,36 @@ public class PowerResilienceAuditor {
                 .map(p -> Instant.ofEpochSecond(p.clock()));
     }
 
+    /** Дужки з описом порту — усе між {@code (} і {@code )} у {@code "Interface <ім'я>(<опис>)"}. */
+    private static final Pattern PORT_DESCRIPTION =
+            Pattern.compile("^Interface\\s+\\S+\\((.*)\\)$", Pattern.DOTALL);
+
     /**
      * Порт, який нічого не каже про резервне живлення абонентів, тож виключається з підрахунку
-     * повністю, а не лише з переліку назв: порожній опис ({@code "Interface 11()"}) або явна
-     * позначка вільного порту ({@code "(--free--)"}, {@code "(--unused--)"}).
+     * повністю, а не лише з переліку назв: порожній опис ({@code "Interface 11()"}) або опис, що
+     * ПІСЛЯ ОБРІЗАННЯ типової «людської» декорації (пробіли, лапки, беклеші — {@code \"--free--\"}
+     * трапляється в реальних даних) дорівнює саме {@code --free--} чи {@code --unused--}, а не
+     * просто містить їх десь серед іншого змістовного тексту (напр. {@code "-- unused --, чекає
+     * на міграцію"} — це НЕ вільний порт, і не повинен зникати з підрахунку лише через збіг
+     * підрядка).
      *
      * <p>Вільні порти особливо шкідливі саме тут: вони завжди DOWN, тож завжди потрапляли б у
      * «впали раніше вузла» і систематично зсували вердикт до «резервне живлення протримало
      * довше» — тобто до сприятливого висновку без жодних підстав.
      */
-    private static final Pattern IGNORED_PORT =
-            Pattern.compile("\\(\\s*(?:--\\s*(?:free|unused)\\s*--)?\\s*\\)$", Pattern.CASE_INSENSITIVE);
+    private static boolean isFreeUnusedOrEmpty(String name) {
+        Matcher m = PORT_DESCRIPTION.matcher(name);
+        if (!m.matches()) {
+            return false;
+        }
+        // Прибираємо декорацію ("людський фактор") де завгодно всередині опису, не лише на
+        // краях — стара версія (regex `--\s*(?:free|unused)\s*--`) дозволяла пробіли саме МІЖ
+        // тире й словом (напр. "( -- unused -- )"), а не лише навколо всього маркера. Точна
+        // рівність з рештою (не .contains) лишається — це і не дає збігтися з описом, де
+        // маркер лише частина змістовного тексту.
+        String desc = m.group(1).replaceAll("[\\s\"'\\\\]+", "");
+        return desc.isEmpty() || desc.equalsIgnoreCase("--free--") || desc.equalsIgnoreCase("--unused--");
+    }
 
     /** Технічне ім'я інтерфейсу — частина назви item до дужки з описом, напр. {@code "wireguard2"}
      * у {@code "Interface wireguard2(...)"}. Не знаходить збігу — не наша справа судити, чому. */
@@ -237,7 +256,7 @@ public class PowerResilienceAuditor {
             return null;
         }
         List<Client.InterfaceItem> interfaces = allInterfaces.stream()
-                .filter(i -> !IGNORED_PORT.matcher(i.name()).find())
+                .filter(i -> !isFreeUnusedOrEmpty(i.name()))
                 .filter(i -> !isIgnoredInterfaceType(i.name()))
                 .toList();
         int ignoredPorts = allInterfaces.size() - interfaces.size();
