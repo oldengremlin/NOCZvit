@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
@@ -111,7 +112,10 @@ public class EmersonTrapSection {
                     .append("</tr></thead><tbody>\n");
 
             // Текстовий блок пристрою
-            text.append("\n[").append(hostname).append(" / ").append(ip).append("]\n");
+            // forPrompt: hostname/ip приходять із листа-трапу, тобто ззовні — вони не повинні
+            // мати змоги підробити маркери ізоляції, які ця ж секція ставить навколо блоку.
+            text.append("\n[").append(SummaryClient.forPrompt(hostname))
+                    .append(" / ").append(SummaryClient.forPrompt(ip)).append("]\n");
 
             int n = 0;
             for (TrapIncident inc : devIncidents) {
@@ -144,9 +148,9 @@ public class EmersonTrapSection {
                 String endTextStr = inc.clearedAt() != null ? DateUtils.formatUa(inc.clearedAt()) : "незакрито";
                 text.append(n).append(". ").append(startTextStr)
                         .append(" – ").append(endTextStr)
-                        .append(" | ").append(inc.description());
+                        .append(" | ").append(SummaryClient.forPrompt(inc.description()));
                 if (!inc.details().isEmpty()) {
-                    text.append(" [").append(String.join("; ", inc.details())).append("]");
+                    text.append(" [").append(SummaryClient.forPrompt(String.join("; ", inc.details()))).append("]");
                 }
                 text.append("\n");
             }

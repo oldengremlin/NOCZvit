@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.imap.DateUtils;
 import org.apache.commons.text.StringEscapeUtils;
 
@@ -114,9 +115,11 @@ public class RamosTrapSection {
                     .append("</tr>\n");
 
                 if (forwardToClaude) {
+                    // forPrompt: назва датчика приходить із трапу (ще й hex-декодована), тобто
+                    // ззовні — не повинна мати змоги підробити маркери ізоляції даних у промпті.
                     plainText.append(DateUtils.formatUa(ev.timestamp()))
                              .append(" ").append(ev.state())
-                             .append(" / ").append(ev.sensorName())
+                             .append(" / ").append(SummaryClient.forPrompt(ev.sensorName()))
                              .append("\n");
                 }
             }

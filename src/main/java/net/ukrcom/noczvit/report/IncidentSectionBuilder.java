@@ -251,7 +251,11 @@ public class IncidentSectionBuilder {
                     html.append(f.get());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                } catch (ExecutionException ignored) {
+                } catch (ExecutionException e) {
+                    // Штатні помилки графіка вже логує zabbix.Client (і повертає ""), тож сюди
+                    // доходить лише несподіване — і саме його не можна ковтати мовчки: інженер
+                    // побачив би звіт без графіків без жодної підказки, чому їх немає.
+                    log.debug("Ping graph task failed: {}", e.getCause() != null ? e.getCause() : e);
                 }
             });
         }

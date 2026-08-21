@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import net.ukrcom.noczvit.claude.SummaryClient;
 import net.ukrcom.noczvit.imap.DateUtils;
 import net.ukrcom.noczvit.report.DurationFormat;
 import org.apache.commons.text.StringEscapeUtils;
@@ -125,7 +126,9 @@ public class PowerResilienceSection {
     private String buildPlainTextOne(String location, PowerResilienceResult r) {
         StringBuilder sb = new StringBuilder();
         String title = location.equals(r.host()) ? r.host() : location + " (" + r.host() + ")";
-        sb.append(title).append(": падіння ").append(DateUtils.formatUa(r.fallInstant()))
+        // forPrompt: host приходить із Zabbix, location — зі словника; обидва зрештою походять
+        // із зовнішніх даних і не повинні мати змоги підробити маркери ізоляції в промпті.
+        sb.append(SummaryClient.forPrompt(title)).append(": падіння ").append(DateUtils.formatUa(r.fallInstant()))
                 .append(" → відновлення ").append(DateUtils.formatUa(r.recoveryInstant()))
                 .append(" (").append(DurationFormat.between(r.fallInstant(), r.recoveryInstant())).append(")");
 

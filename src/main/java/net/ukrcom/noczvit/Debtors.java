@@ -146,7 +146,11 @@ public class Debtors {
             if (inSection && host != null) {
                 return new String[]{host, port};
             }
-        } catch (IOException ignored) {
+        } catch (IOException e) {
+            // Не фатально — викликач (resolveServer) відкотиться на пряме ім'я хоста. Але без
+            // цього рядка нечитабельний freetds.conf (напр. права доступу) зникав би безслідно,
+            // а з'єднання далі падало б із неочевидною помилкою резолву імені.
+            log.debug("Debtors: cannot read {}: {}", path, e.getMessage());
         }
         return null;
     }

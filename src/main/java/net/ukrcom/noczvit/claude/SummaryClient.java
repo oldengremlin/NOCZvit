@@ -244,9 +244,30 @@ public class SummaryClient {
      * @param trapPlainText       plain-text блок трапів Emerson (з маркерами ізоляції); порожній рядок, щоб опустити
      * @param resiliencePlainText plain-text блок аудиту резервного живлення; порожній рядок, щоб опустити
      */
+    /**
+     * Знешкоджує зовнішній текст перед вставкою в промпт: вирізає послідовності з трьох і більше
+     * {@code =}, з яких складаються маркери ізоляції даних
+     * ({@code === ПОЧАТОК ДАНИХ … ===}). Без цього тема листа чи назва датчика, що містить такий
+     * самий маркер, підробила б межу блоку — і подальший текст модель прочитала б як інструкцію,
+     * а не як дані.
+     *
+     * <p>Викликається на <b>листках</b> — там, де зовнішнє значення вперше потрапляє в текст для
+     * Claude (поля інциденту тут, назви хостів і датчиків у секціях трапів та аудиту живлення).
+     * Уже зібрані plain-text блоки через нього не проганяються: їхні власні маркери легітимні.
+     *
+     * @param value сирий зовнішній текст; {@code null} дає порожній рядок
+     * @return той самий текст із заміненими на {@code ---} послідовностями {@code ===}
+     */
+    public static String forPrompt(String value) {
+        return value == null ? "" : value.replaceAll("={3,}", "---");
+    }
+
     private String buildPrompt(List<Incident> incidents, LocalDateTime from, LocalDateTime to,
                                ResumeRecord previous, String trapPlainText, String resiliencePlainText) {
         StringBuilder sb = new StringBuilder();
+        // trapPlainText/resiliencePlainText навмисно НЕ проганяються через forPrompt() тут: їхні
+        // власні маркери ізоляції (EmersonTrapSection) легітимні, а зовнішні листки всередині них
+        // уже знешкоджені в самих секціях — там, де вперше потрапляють у текст.
         // Підрахунок унікальних тредів інцидентів: кожен окремий ключ inReplyTo = 1 тред; інциденти
         // без ключа рахуються по 1. Це розбиття за тим самим ключем, за яким IncidentSectionBuilder
         // групує пари, тож кількість збігається з кількістю рядків у нього — але це лише крок
@@ -270,12 +291,12 @@ public class SummaryClient {
         int n = 0;
         for (Incident inc : incidents) {
             sb.append(++n).append(". ");
-            sb.append("[").append(inc.messageDateStr()).append("] ");
-            sb.append(inc.location());
+            sb.append("[").append(forPrompt(inc.messageDateStr())).append("] ");
+            sb.append(forPrompt(inc.location()));
             if (!inc.device().isEmpty()) {
-                sb.append(" / ").append(inc.device());
+                sb.append(" / ").append(forPrompt(inc.device()));
             }
-            sb.append(" — ").append(inc.description());
+            sb.append(" — ").append(forPrompt(inc.description()));
             sb.append(" [").append(inc.source()).append(", ").append(inc.status()).append("]\n");
         }
         sb.append("=== КІНЕЦЬ ДАНИХ ПРО ІНЦИДЕНТИ ===\n");
@@ -287,7 +308,7 @@ public class SummaryClient {
 
         if (previous != null) {
             sb.append("\nРезюме попереднього звітного періоду (для порівняння та відстеження незакритих):\n")
-              .append(previous.summaryText())
+              .append(forPrompt(previous.summaryText()))
               .append("\n");
         }
 
